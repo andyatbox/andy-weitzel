@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "New Spirit";
+  src: url("/fonts/NewSpirit-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #f8f8f8;
+  color: #ffffff;
+  font-family: "New Spirit", Helvetica, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Index numerals (01, 02, …) stay on Helvetica. */
+.font-index {
+  font-family: Helvetica, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Small caps role label ("CREATIVE DIRECTOR") — bold sans, not New Spirit. */
+.font-label {
+  font-family: Arial, Helvetica, "Helvetica Neue", sans-serif;
+  font-weight: 700;
+}
+
+body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}
+
+::selection {
+  background: transparent;
+}
