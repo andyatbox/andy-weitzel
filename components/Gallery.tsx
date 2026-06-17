@@ -30,9 +30,9 @@ const MAX_RGB_SHIFT_RATIO = 0.025;
 // the twist, and the additive R/G/B channel layers (offset per-vertex) for the
 // split — so there is no ShaderMaterial and images never darken. Completely
 // disabled on touch-capable devices (see `detectTouch`).
-const MOUSE_RADIUS_RATIO = 0.45; // influence radius vs min(canvas w, h)
+const MOUSE_RADIUS_RATIO = 0.3; // influence radius vs min(canvas w, h)
 const MOUSE_TWIST = 0.85; // peak swirl angle in radians (directly under cursor)
-const MOUSE_CHROMA_RATIO = 0.013; // peak channel separation vs min(canvas w, h)
+const MOUSE_CHROMA_RATIO = 0.018; // peak channel separation vs min(canvas w, h)
 const MOUSE_EASE = 0.16; // strength lerp toward target each frame
 
 function detectTouch() {
