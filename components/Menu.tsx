@@ -431,7 +431,10 @@ export default function Menu({
         // its content block horizontally (flex), content stays left-aligned.
         // The list column's width is what makes long titles wrap.
         <div className="flex h-full w-full">
-          <div className="flex w-1/2 shrink-0 items-center justify-center px-2">
+          <div
+            className="flex w-1/2 shrink-0 items-center justify-center px-2"
+            style={{ paddingLeft: viewport.width < 450 ? 18 : undefined }}
+          >
             {brand}
           </div>
           <div className="relative h-full w-1/2 overflow-hidden">
