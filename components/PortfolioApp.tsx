@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CATEGORY, usePortfolios, type PortfolioId } from "@/lib/portfolios";
 import { ScrollEngine } from "@/lib/ScrollEngine";
 import { useViewport } from "@/lib/useViewport";
@@ -33,6 +33,15 @@ export default function PortfolioApp() {
   // stands down and the modal can scroll natively.
   const infoOpenRef = useRef(false);
   const switchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Touch devices fire mouseenter (but not mouseleave) on tap, which would
+  // latch the hover effect on. So on touch, ignore hover entirely — the
+  // psychedelic effect only shows while a modal is open.
+  const isTouch = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      ((navigator.maxTouchPoints || 0) > 0 || "ontouchstart" in window),
+    []
+  );
   const engineRef = useRef<ScrollEngine | null>(null);
   if (!engineRef.current) engineRef.current = new ScrollEngine();
   const engine = engineRef.current;
@@ -266,9 +275,9 @@ export default function PortfolioApp() {
 
   const { width, height, isLandscape } = viewport;
 
-  // Halftone post-process shows while hovering Resumé/Contact or with their
+  // Post-process shows while hovering the pills (non-touch only) or with a
   // modal open.
-  const halftone = infoHover || infoModal !== null;
+  const halftone = (!isTouch && infoHover) || infoModal !== null;
 
   // Menu docks in its corner; the layout effect slides it off via transform.
   const menuRect = isLandscape
