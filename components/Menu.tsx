@@ -21,15 +21,14 @@ interface MenuProps {
   intro: boolean;
   onSelectPortfolio: (id: PortfolioId) => void;
   onSelectItem: (index: number) => void;
+  onOpenInfo: (kind: "resume" | "contact") => void;
+  onInfoHover: (active: boolean) => void;
 }
 
 // Half-window (in item steps) used to size the row pitch and how many copies
 // of the list to render. The top/bottom dissolve is now done with static white
 // gradient overlays, not per-item opacity changes.
 const FADE_ZERO = 6;
-
-const CONTACT_HREF = "mailto:andy@box.biz";
-const RESUME_HREF = "/resume.pdf"; // TODO: drop the actual résumé PDF in /public
 
 /** Nearest-wrap placement of node `k` against continuous scroll `progress`. */
 function place(k: number, progress: number, total: number) {
@@ -43,11 +42,13 @@ function Pill({
   active,
   onClick,
   href,
+  onHoverChange,
   children,
 }: {
   active?: boolean;
   onClick?: () => void;
   href?: string;
+  onHoverChange?: (active: boolean) => void;
   children: React.ReactNode;
 }) {
   const cls = `inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors min-[992px]:text-sm ${
@@ -55,15 +56,21 @@ function Pill({
       ? "border-black bg-black text-white"
       : "border-black/30 text-black hover:border-black/70"
   }`;
+  const hover = onHoverChange
+    ? {
+        onMouseEnter: () => onHoverChange(true),
+        onMouseLeave: () => onHoverChange(false),
+      }
+    : undefined;
   if (href) {
     return (
-      <a href={href} className={cls}>
+      <a href={href} className={cls} {...hover}>
         {children}
       </a>
     );
   }
   return (
-    <button type="button" onClick={onClick} className={cls}>
+    <button type="button" onClick={onClick} className={cls} {...hover}>
       {children}
     </button>
   );
@@ -146,6 +153,8 @@ export default function Menu({
   intro,
   onSelectPortfolio,
   onSelectItem,
+  onOpenInfo,
+  onInfoHover,
 }: MenuProps) {
   const isLarge = viewport.width >= 992;
   const isMedium = viewport.width >= 768;
@@ -336,14 +345,19 @@ export default function Menu({
               key={id}
               active={portfolio === id}
               onClick={() => onSelectPortfolio(id)}
+              onHoverChange={onInfoHover}
             >
               {LABELS[id]}
             </Pill>
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Pill href={RESUME_HREF}>Resumé</Pill>
-          <Pill href={CONTACT_HREF}>Contact</Pill>
+          <Pill onClick={() => onOpenInfo("resume")} onHoverChange={onInfoHover}>
+            Resumé
+          </Pill>
+          <Pill onClick={() => onOpenInfo("contact")} onHoverChange={onInfoHover}>
+            Contact
+          </Pill>
         </div>
       </div>
     </div>
@@ -395,20 +409,24 @@ export default function Menu({
   // the old per-item opacity). pointer-events-none so list clicks pass through.
   const topMask = (
     <div
-      className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-white to-transparent"
-      style={{ height: "28%" }}
+      className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-white via-white/80 to-transparent"
+      style={{ height: "42%" }}
     />
   );
   const bottomMask = (
     <div
-      className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-white to-transparent"
-      style={{ height: "28%" }}
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-white via-white/80 to-transparent"
+      style={{ height: "42%" }}
     />
   );
   const listFade: React.CSSProperties = {
     opacity: dimmed ? 0 : intro ? 1 : 0,
     transition: intro ? "opacity 0.22s ease" : "opacity 0.55s ease 440ms",
   };
+  // Landscape: top and bottom fades share this height so the list dissolves
+  // symmetrically about its center (the brand box covers everything above the
+  // top fade). 0.42 of the region leaves a centered clear band.
+  const fadeH = Math.round(regionHeight * 0.42);
 
   return (
     <aside data-menu className="h-full w-full bg-white text-black">
@@ -420,10 +438,16 @@ export default function Menu({
           <div className="absolute inset-0" style={listFade}>
             {listStrip}
           </div>
-          {bottomMask}
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-white via-white/80 to-transparent"
+            style={{ height: fadeH }}
+          />
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
             <div ref={brandBoxRef} className="pointer-events-auto bg-white p-5 min-[992px]:p-7">{brand}</div>
-            <div className="h-10 bg-gradient-to-b from-white to-transparent" />
+            <div
+              className="bg-gradient-to-b from-white via-white/80 to-transparent"
+              style={{ height: fadeH }}
+            />
           </div>
         </div>
       ) : (

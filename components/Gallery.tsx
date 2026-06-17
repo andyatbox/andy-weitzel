@@ -61,6 +61,8 @@ interface GalleryProps {
   // live eased canvas size; `animating` is true only during a transition.
   anim: { t: number; w: number; h: number; animating: boolean };
   onIndexChange: (index: number) => void;
+  // Receives the WebGL canvas once created, so the post-process can sample it.
+  onReady?: (canvas: HTMLCanvasElement) => void;
 }
 
 export default function Gallery({
@@ -71,15 +73,19 @@ export default function Gallery({
   opened,
   anim,
   onIndexChange,
+  onReady,
 }: GalleryProps) {
   return (
     <Canvas
       orthographic
       flat
       dpr={[1, 2]}
-      gl={{ antialias: true, alpha: false }}
+      // preserveDrawingBuffer lets the post-process read this canvas as a
+      // texture (otherwise the buffer may be cleared before it can be sampled).
+      gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
       camera={{ position: [0, 0, 500], near: 0.1, far: 1000, zoom: CAMERA_ZOOM }}
       style={{ background: "#f8f8f8" }}
+      onCreated={({ gl }) => onReady?.(gl.domElement)}
     >
       {/* Canvas (gap) background. Images sit on their own black backing so the
           additive RGB-shift channels still sum correctly; see ChannelPlanes. */}

@@ -7,6 +7,8 @@ import { useViewport } from "@/lib/useViewport";
 import Menu from "./Menu";
 import Gallery from "./Gallery";
 import ProjectModal, { type ActiveProject } from "./project/ProjectModal";
+import InfoModal, { type InfoKind } from "./InfoModal";
+import PsychedelicFX from "./PsychedelicFX";
 
 const DRAG_MULTIPLIER = 1.6;
 const FLING_MULTIPLIER = 14;
@@ -19,8 +21,17 @@ export default function PortfolioApp() {
   const [switching, setSwitching] = useState(false);
   const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
   const [intro, setIntro] = useState(false);
+  // Resumé / Contact popup + the halftone trigger (hovering those buttons or
+  // having their modal open).
+  const [infoModal, setInfoModal] = useState<InfoKind | null>(null);
+  const [infoHover, setInfoHover] = useState(false);
+  // The gallery's WebGL canvas, sampled by the post-process distortion.
+  const [galleryCanvas, setGalleryCanvas] = useState<HTMLCanvasElement | null>(null);
   const introFired = useRef(false);
   const openedRef = useRef(false);
+  // True while a Resumé/Contact modal is open, so the global wheel/drag scroll
+  // stands down and the modal can scroll natively.
+  const infoOpenRef = useRef(false);
   const switchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const engineRef = useRef<ScrollEngine | null>(null);
   if (!engineRef.current) engineRef.current = new ScrollEngine();
@@ -85,6 +96,15 @@ export default function PortfolioApp() {
     setOpened(false);
   }, []);
 
+  const openInfo = useCallback((kind: InfoKind) => {
+    infoOpenRef.current = true;
+    setInfoModal(kind);
+  }, []);
+  const closeInfo = useCallback(() => {
+    infoOpenRef.current = false;
+    setInfoModal(null);
+  }, []);
+
   // Scroll driven by vertical wheel/drag on the entire window. A small
   // movement threshold (4px) ensures taps and menu clicks fire normally —
   // drag mode only engages once the pointer has actually moved. A clean tap
@@ -102,7 +122,7 @@ export default function PortfolioApp() {
     const THRESHOLD = 4;
 
     const onWheel = (e: WheelEvent) => {
-      if (openedRef.current) return;
+      if (openedRef.current || infoOpenRef.current) return;
       e.preventDefault();
       const delta =
         e.deltaMode === 1 ? e.deltaY * 16
@@ -113,7 +133,7 @@ export default function PortfolioApp() {
     };
 
     const onPointerDown = (e: PointerEvent) => {
-      if (openedRef.current) return;
+      if (openedRef.current || infoOpenRef.current) return;
       active = true;
       dragging = false;
       downOnGallery =
@@ -246,6 +266,10 @@ export default function PortfolioApp() {
 
   const { width, height, isLandscape } = viewport;
 
+  // Halftone post-process shows while hovering Resumé/Contact or with their
+  // modal open.
+  const halftone = infoHover || infoModal !== null;
+
   // Menu docks in its corner; the layout effect slides it off via transform.
   const menuRect = isLandscape
     ? { left: 0, top: 0, width: width * 0.25, height }
@@ -267,6 +291,8 @@ export default function PortfolioApp() {
           intro={intro}
           onSelectPortfolio={selectPortfolio}
           onSelectItem={selectItem}
+          onOpenInfo={openInfo}
+          onInfoHover={setInfoHover}
         />
       </div>
 
@@ -289,12 +315,22 @@ export default function PortfolioApp() {
             opened={opened}
             anim={anim}
             onIndexChange={() => {}}
+            onReady={setGalleryCanvas}
           />
         </div>
+
+        {/* Real WebGL post-process: samples the rendered gallery and warps it
+            (swirl + domain-warp displacement + chromatic aberration +
+            psychedelic recolor). Ramps in on Resumé/Contact hover or while
+            their modal is open; only runs its shader loop while active. */}
+        <PsychedelicFX active={halftone} source={galleryCanvas} />
       </div>
 
       {/* Scrollable project content overlay — below the close button (z-50). */}
       <ProjectModal project={activeProject} opened={opened} height={height} />
+
+      {/* Resumé / Contact popup — above everything (z-70). */}
+      {infoModal && <InfoModal kind={infoModal} onClose={closeInfo} />}
 
       <button
         type="button"
