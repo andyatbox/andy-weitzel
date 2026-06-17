@@ -30,7 +30,7 @@ const MAX_RGB_SHIFT_RATIO = 0.025;
 // the twist, and the additive R/G/B channel layers (offset per-vertex) for the
 // split — so there is no ShaderMaterial and images never darken. Completely
 // disabled on touch-capable devices (see `detectTouch`).
-const MOUSE_RADIUS_RATIO = 0.28; // influence radius vs min(canvas w, h)
+const MOUSE_RADIUS_RATIO = 0.45; // influence radius vs min(canvas w, h)
 const MOUSE_TWIST = 0.85; // peak swirl angle in radians (directly under cursor)
 const MOUSE_CHROMA_RATIO = 0.013; // peak channel separation vs min(canvas w, h)
 const MOUSE_EASE = 0.16; // strength lerp toward target each frame
@@ -45,8 +45,10 @@ function detectTouch() {
 // fills the canvas; lower values reveal parts of the previous/next items.
 const CAMERA_ZOOM = 0.8;
 
-// Gap between items in px, added along the scroll axis.
-const ITEM_GAP = 75;
+// Gap between items in px, added along the scroll axis. Portrait uses a
+// tighter gap than the wider landscape rail.
+const ITEM_GAP_LANDSCAPE = 75;
+const ITEM_GAP_PORTRAIT = 12;
 
 interface GalleryProps {
   items: PortfolioItem[];
@@ -106,7 +108,8 @@ function GalleryScene({
   const { size, camera, gl } = useThree();
   const planeWidth = size.width;
   const planeHeight = size.height;
-  const spacing = (isLandscape ? planeHeight : planeWidth) + ITEM_GAP;
+  const itemGap = isLandscape ? ITEM_GAP_LANDSCAPE : ITEM_GAP_PORTRAIT;
+  const spacing = (isLandscape ? planeHeight : planeWidth) + itemGap;
 
   const textures = useItemTextures(items, planeWidth / planeHeight);
   const groupRefs = useRef<(THREE.Group | null)[]>([]);
@@ -242,7 +245,7 @@ function GalleryScene({
     let spacingUsed: number;
     let currentUsed: number;
     if (t > 0.0001) {
-      spacingUsed = axis + THREE.MathUtils.lerp(ITEM_GAP, 0, t);
+      spacingUsed = axis + THREE.MathUtils.lerp(itemGap, 0, t);
       currentUsed = anchorIndex.current * spacingUsed;
     } else {
       spacingUsed = spacing;

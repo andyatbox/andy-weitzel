@@ -23,16 +23,10 @@ interface MenuProps {
   onSelectItem: (index: number) => void;
 }
 
-// Items fade out over this many steps from the centered (active) item.
+// Half-window (in item steps) used to size the row pitch and how many copies
+// of the list to render. The top/bottom dissolve is now done with static white
+// gradient overlays, not per-item opacity changes.
 const FADE_ZERO = 6;
-// Falloff shape: >1 drops briskly near the center yet eases gently into 0 at
-// the edges, so the tops/bottoms dissolve instead of cutting off abruptly.
-const FADE_GAMMA = 1.8;
-
-function fade(p: number) {
-  const d = Math.min(1, Math.abs(p) / FADE_ZERO);
-  return (1 - d) ** FADE_GAMMA;
-}
 
 const CONTACT_HREF = "mailto:andy@box.biz";
 const RESUME_HREF = "/resume.pdf"; // TODO: drop the actual résumé PDF in /public
@@ -157,6 +151,9 @@ export default function Menu({
   const isMedium = viewport.width >= 768;
   const fontSize = isLarge ? 18 : isMedium ? 16 : 14;
   const baseRow = Math.round(fontSize * 1.95);
+  // Vertical breathing space added to each row's measured (possibly wrapped)
+  // height in portrait, so multi-line items still separate cleanly.
+  const ROW_GAP = Math.round(fontSize * 0.6);
 
   // Landscape: the brand block floats over the top of the full-height list, so
   // the items' true region is the space *below* it. Measure that overlay and
@@ -212,28 +209,81 @@ export default function Menu({
   // same source the WebGL gallery reads, so menu and gallery stay locked,
   // snap together, and the active item settles dead-center. Always vertical,
   // regardless of orientation.
+  //
+  // Landscape uses a fixed row pitch (titles never wrap in the rail). Portrait
+  // lets titles wrap to multiple lines, so rows have *different* heights: we
+  // measure each unique item's rendered height and stack the strip by those
+  // cumulative heights (with infinite wrap), instead of a constant pitch.
   useEffect(() => {
     let raf = 0;
+    const N = n;
+    const heights = new Array(N).fill(baseRow); // per-item advance (px)
+    const prefix = new Array(N + 1).fill(0); // prefix sums of `heights`
+    const mod = (a: number, b: number) => ((a % b) + b) % b;
+
     const tick = () => {
       const spacing = engine.spacing || 1;
       const progress = engine.current / spacing;
-      for (let k = 0; k < total; k++) {
-        const el = rowRefs.current[k];
-        if (!el) continue;
-        const p = place(k, progress, total);
-        const opacity = fade(p);
-        el.style.transform = `translateY(calc(-50% + ${p * rowHeight}px))`;
-        el.style.opacity = String(opacity);
-        el.style.pointerEvents = opacity < 0.05 ? "none" : "auto";
-        const title = titleRefs.current[k];
-        // The centered item (|p| < 0.5) is the active one — underline it.
-        if (title) title.style.textDecoration = Math.abs(p) < 0.5 ? "underline" : "none";
+
+      if (!isLandscape && N > 0) {
+        // Measure each unique item's wrapped height. Reading offsetHeight here
+        // is cheap: only transforms/opacity changed since the last layout, and
+        // neither dirties layout, so this doesn't force a reflow.
+        let H = 0;
+        for (let i = 0; i < N; i++) {
+          const el = rowRefs.current[i];
+          const h = el ? el.offsetHeight : 0;
+          heights[i] = (h > 0 ? h : baseRow) + ROW_GAP;
+        }
+        for (let i = 0; i < N; i++) {
+          prefix[i] = H;
+          H += heights[i];
+        }
+        prefix[N] = H;
+        const ET = reps * H; // wrap period in px (matches the node strip length)
+
+        // Pixel scroll position that should sit at the viewport center. At an
+        // integer progress the active item is centered; between two items it
+        // interpolates by their half-heights so the motion stays smooth.
+        const iI = Math.floor(progress);
+        const frac = progress - iI;
+        const hI = heights[mod(iI, N)];
+        const hI1 = heights[mod(iI + 1, N)];
+        const cumCenterI = Math.floor(iI / N) * H + prefix[mod(iI, N)] + hI / 2;
+        const S = mod(cumCenterI + frac * (hI / 2 + hI1 / 2), ET);
+
+        for (let k = 0; k < total; k++) {
+          const el = rowRefs.current[k];
+          if (!el) continue;
+          // Linear center of this node, then nearest wrapped copy around S.
+          const Lk = Math.floor(k / N) * H + prefix[k % N] + heights[k % N] / 2;
+          const pPx = mod(Lk - S + ET / 2, ET) - ET / 2;
+          // Fade/underline stay keyed to item-step distance (consistent count
+          // of visible items), independent of the variable pixel spacing.
+          const stepP = place(k, progress, total);
+          el.style.transform = `translateY(calc(-50% + ${pPx}px))`;
+          el.style.pointerEvents = Math.abs(stepP) > FADE_ZERO * 0.7 ? "none" : "auto";
+          const title = titleRefs.current[k];
+          if (title)
+            title.style.textDecoration = Math.abs(stepP) < 0.5 ? "underline" : "none";
+        }
+      } else {
+        for (let k = 0; k < total; k++) {
+          const el = rowRefs.current[k];
+          if (!el) continue;
+          const p = place(k, progress, total);
+          el.style.transform = `translateY(calc(-50% + ${p * rowHeight}px))`;
+          el.style.pointerEvents = Math.abs(p) > FADE_ZERO * 0.7 ? "none" : "auto";
+          const title = titleRefs.current[k];
+          // The centered item (|p| < 0.5) is the active one — underline it.
+          if (title) title.style.textDecoration = Math.abs(p) < 0.5 ? "underline" : "none";
+        }
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [engine, total, rowHeight]);
+  }, [engine, total, rowHeight, isLandscape, n, reps, baseRow, ROW_GAP]);
 
   // Initial inline placement so the first paint is already positioned.
   const progress0 = engine.current / (engine.spacing || 1);
@@ -254,6 +304,9 @@ export default function Menu({
     transition: `opacity 0.55s ease ${delay}ms, transform 0.55s ease ${delay}ms`,
   });
 
+  // Content is always left-aligned. The portrait column (flex justify-center)
+  // centers this whole block horizontally when it's narrower than the column;
+  // nothing inside is ever center-aligned. Landscape docks it at top-left.
   const brand = (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2.5">
@@ -298,22 +351,24 @@ export default function Menu({
 
   const listStrip = nodes.map((node) => {
     const p = place(node.key, progress0, total);
-    const opacity = fade(p);
     return (
       <button
         key={node.key}
         ref={(el) => void (rowRefs.current[node.key] = el)}
         type="button"
         onClick={() => onSelectItem(node.item)}
-        className="absolute flex items-baseline gap-2.5 whitespace-nowrap text-left font-medium"
+        className={`absolute flex items-baseline gap-2.5 text-left font-medium ${
+          isLandscape ? "whitespace-nowrap" : "whitespace-normal"
+        }`}
         style={{
           top: listTop,
-          left: listPadLeft,
+          // Rows span the column width and wrap within it (portrait); text stays
+          // left-aligned, so titles fill the column instead of being padded.
+          left: isLandscape ? listPadLeft : 12,
           right: 12,
           fontSize,
           transform: `translateY(calc(-50% + ${p * rowHeight}px))`,
-          opacity,
-          willChange: "transform, opacity",
+          willChange: "transform",
         }}
       >
         <span
@@ -324,6 +379,7 @@ export default function Menu({
         </span>
         <span
           ref={(el) => void (titleRefs.current[node.key] = el)}
+          className="min-w-0 break-words"
           style={{
             textUnderlineOffset: 4,
             textDecoration: Math.abs(p) < 0.5 ? "underline" : "none",
@@ -335,42 +391,55 @@ export default function Menu({
     );
   });
 
+  // Static white gradient masks dissolve the list at the top/bottom (replacing
+  // the old per-item opacity). pointer-events-none so list clicks pass through.
+  const topMask = (
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-white to-transparent"
+      style={{ height: "28%" }}
+    />
+  );
+  const bottomMask = (
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-white to-transparent"
+      style={{ height: "28%" }}
+    />
+  );
+  const listFade: React.CSSProperties = {
+    opacity: dimmed ? 0 : intro ? 1 : 0,
+    transition: intro ? "opacity 0.22s ease" : "opacity 0.55s ease 440ms",
+  };
+
   return (
     <aside data-menu className="h-full w-full bg-white text-black">
       {isLandscape ? (
-        // Single column: list fills the whole panel and is centered; the brand
-        // block floats over the top on an opaque white backing with a gradient
-        // fade, so list items dissolve under it instead of overlapping.
+        // Single column: list fills the whole panel. The brand floats over the
+        // top on an opaque white box (masking the top), and a bottom gradient
+        // dissolves the tail.
         <div className="relative h-full w-full overflow-hidden">
-          <div
-            className="absolute inset-0"
-            style={{
-              opacity: dimmed ? 0 : (intro ? 1 : 0),
-              transition: intro ? "opacity 0.22s ease" : `opacity 0.55s ease 440ms`,
-            }}
-          >
+          <div className="absolute inset-0" style={listFade}>
             {listStrip}
           </div>
-          <div className="pointer-events-none absolute inset-x-0 top-0">
+          {bottomMask}
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
             <div ref={brandBoxRef} className="pointer-events-auto bg-white p-5 min-[992px]:p-7">{brand}</div>
             <div className="h-10 bg-gradient-to-b from-white to-transparent" />
           </div>
         </div>
       ) : (
-        // Two columns: brand on the left, list centered in the region on the
-        // right. Brand width is capped so it never crowds the list.
+        // Two equal columns: brand/links and the menu list. Each column centers
+        // its content block horizontally (flex), content stays left-aligned.
+        // The list column's width is what makes long titles wrap.
         <div className="flex h-full w-full">
-          <div className="max-w-[55%] shrink-0 self-center p-5 min-[992px]:p-7">
+          <div className="flex w-1/2 shrink-0 items-center justify-center px-2">
             {brand}
           </div>
-          <div
-            className="relative h-full flex-1 overflow-hidden"
-            style={{
-              opacity: dimmed ? 0 : (intro ? 1 : 0),
-              transition: intro ? "opacity 0.22s ease" : `opacity 0.55s ease 440ms`,
-            }}
-          >
-            {listStrip}
+          <div className="relative h-full w-1/2 overflow-hidden">
+            <div className="absolute inset-0" style={listFade}>
+              {listStrip}
+            </div>
+            {topMask}
+            {bottomMask}
           </div>
         </div>
       )}
