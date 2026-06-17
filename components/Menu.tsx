@@ -22,7 +22,6 @@ interface MenuProps {
   onSelectPortfolio: (id: PortfolioId) => void;
   onSelectItem: (index: number) => void;
   onOpenInfo: (kind: "resume" | "contact") => void;
-  onInfoHover: (active: boolean) => void;
 }
 
 // Half-window (in item steps) used to size the row pitch and how many copies
@@ -154,7 +153,6 @@ export default function Menu({
   onSelectPortfolio,
   onSelectItem,
   onOpenInfo,
-  onInfoHover,
 }: MenuProps) {
   const isLarge = viewport.width >= 992;
   const isMedium = viewport.width >= 768;
@@ -345,19 +343,14 @@ export default function Menu({
               key={id}
               active={portfolio === id}
               onClick={() => onSelectPortfolio(id)}
-              onHoverChange={onInfoHover}
             >
               {LABELS[id]}
             </Pill>
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Pill onClick={() => onOpenInfo("resume")} onHoverChange={onInfoHover}>
-            Resumé
-          </Pill>
-          <Pill onClick={() => onOpenInfo("contact")} onHoverChange={onInfoHover}>
-            Contact
-          </Pill>
+          <Pill onClick={() => onOpenInfo("resume")}>Resumé</Pill>
+          <Pill onClick={() => onOpenInfo("contact")}>Contact</Pill>
         </div>
       </div>
     </div>

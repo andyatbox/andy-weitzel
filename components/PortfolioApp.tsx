@@ -289,7 +289,13 @@ export default function PortfolioApp() {
       className="relative w-full overflow-hidden bg-[#f8f8f8] text-white"
       style={{ height }}
     >
-      <div ref={menuRef} className="absolute" style={menuRect}>
+      <div
+        ref={menuRef}
+        className="absolute"
+        style={menuRect}
+        onMouseEnter={() => setInfoHover(true)}
+        onMouseLeave={() => setInfoHover(false)}
+      >
         <Menu
           portfolio={portfolio}
           items={items}
@@ -301,7 +307,6 @@ export default function PortfolioApp() {
           onSelectPortfolio={selectPortfolio}
           onSelectItem={selectItem}
           onOpenInfo={openInfo}
-          onInfoHover={setInfoHover}
         />
       </div>
 
