@@ -190,11 +190,32 @@ export default function Menu({
     return () => ro.disconnect();
   }, [isLandscape, viewport.width, viewport.height]);
 
-  // The region starts right at the brand box bottom, so the top list items
-  // render *behind* the gradient strip and dissolve under it — rather than
-  // beginning below the gradient, which would leave an empty gap.
+  // Landscape also docks the Resumé/Contact links in a bar across the bottom;
+  // measure it the same way so the list region sits between the two.
+  const linksBoxRef = useRef<HTMLDivElement>(null);
+  const [linksH, setLinksH] = useState(0);
+  useEffect(() => {
+    if (!isLandscape) {
+      setLinksH(0);
+      return;
+    }
+    const el = linksBoxRef.current;
+    if (!el) return;
+    const measure = () => setLinksH(el.offsetHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isLandscape, viewport.width, viewport.height]);
+
+  // The region is the space between the brand box (top) and the links bar
+  // (bottom); the list centers in it and dissolves symmetrically.
   const regionTop = isLandscape ? brandH : 0;
-  const regionHeight = Math.max(baseRow * 2, viewport.height - regionTop);
+  const regionBottom = isLandscape ? linksH : 0;
+  const regionHeight = Math.max(
+    baseRow * 2,
+    viewport.height - regionTop - regionBottom
+  );
   const centerY = regionTop + regionHeight / 2;
   // Space rows so the fade-out radius (FADE_ZERO steps) lands at the region
   // edges. Portrait keeps the tight text-based spacing.
@@ -318,6 +339,19 @@ export default function Menu({
     transition: `opacity 0.55s ease ${delay}ms, transform 0.55s ease ${delay}ms`,
   });
 
+  // Resumé / Contact links. Portrait shows them inside the brand (below a
+  // divider); landscape docks them in a bar across the bottom of the rail.
+  const links = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Pill onClick={() => onOpenInfo("resume")} onHoverChange={onInfoHover}>
+        Resumé
+      </Pill>
+      <Pill onClick={() => onOpenInfo("contact")} onHoverChange={onInfoHover}>
+        Contact
+      </Pill>
+    </div>
+  );
+
   // Content is always left-aligned. The portrait column (flex justify-center)
   // centers this whole block horizontally when it's narrower than the column;
   // nothing inside is ever center-aligned. Landscape docks it at top-left.
@@ -358,14 +392,14 @@ export default function Menu({
             </Pill>
           ))}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Pill onClick={() => onOpenInfo("resume")} onHoverChange={onInfoHover}>
-            Resumé
-          </Pill>
-          <Pill onClick={() => onOpenInfo("contact")} onHoverChange={onInfoHover}>
-            Contact
-          </Pill>
-        </div>
+        {/* Portrait: links sit here under a grey divider. Landscape moves them
+            to the bottom bar (rendered separately). */}
+        {!isLandscape && (
+          <>
+            <div className="mt-1 h-px w-full bg-black/15" />
+            {links}
+          </>
+        )}
       </div>
     </div>
   );
@@ -446,8 +480,8 @@ export default function Menu({
             {listStrip}
           </div>
           <div
-            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-white via-white/80 to-transparent"
-            style={{ height: fadeH }}
+            className="pointer-events-none absolute inset-x-0 z-10 bg-gradient-to-t from-white via-white/80 to-transparent"
+            style={{ bottom: linksH, height: fadeH }}
           />
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
             <div ref={brandBoxRef} className="pointer-events-auto bg-white p-5 min-[992px]:p-7">{brand}</div>
@@ -455,6 +489,16 @@ export default function Menu({
               className="bg-gradient-to-b from-white via-white/80 to-transparent"
               style={{ height: fadeH }}
             />
+          </div>
+          {/* Resumé / Contact docked across the bottom of the rail, left-aligned. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
+            <div
+              ref={linksBoxRef}
+              className="pointer-events-auto bg-white px-5 pb-5 pt-3 min-[992px]:px-7 min-[992px]:pb-7"
+              style={introAnim(300)}
+            >
+              {links}
+            </div>
           </div>
         </div>
       ) : (

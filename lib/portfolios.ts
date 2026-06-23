@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { PortableTextBlock } from "@portabletext/react";
 import { sanity, urlFor } from "./sanity";
 
-export type PortfolioId = "interactive" | "branding";
+export type PortfolioId = "interactive" | "branding" | "richmedia";
 
 export interface PortfolioItem {
   id: string;
@@ -20,21 +20,24 @@ export interface Portfolio {
 
 export type Portfolios = Record<PortfolioId, Portfolio>;
 
-export const PORTFOLIO_IDS: PortfolioId[] = ["interactive", "branding"];
+export const PORTFOLIO_IDS: PortfolioId[] = ["interactive", "branding", "richmedia"];
 
 export const LABELS: Record<PortfolioId, string> = {
   interactive: "Interactive",
   branding: "Branding",
+  richmedia: "Rich Media",
 };
 
-// Our two app portfolios map onto the two Sanity category values.
+// Our three app portfolios map onto the three Sanity category values.
 const CATEGORY: Record<PortfolioId, string> = {
   interactive: "immersive-ux",
   branding: "branding-print",
+  richmedia: "advertising-rich-media",
 };
 const ID_BY_CATEGORY: Record<string, PortfolioId> = {
   "immersive-ux": "interactive",
   "branding-print": "branding",
+  "advertising-rich-media": "richmedia",
 };
 
 interface RawProject {
@@ -60,6 +63,7 @@ export function usePortfolios(): Portfolios | null {
       const next: Portfolios = {
         interactive: { label: LABELS.interactive, items: [] },
         branding: { label: LABELS.branding, items: [] },
+        richmedia: { label: LABELS.richmedia, items: [] },
       };
       for (const row of rows) {
         const id = ID_BY_CATEGORY[row.category];
@@ -117,6 +121,7 @@ export interface ProjectContent {
 export const CATEGORY_LABELS: Record<string, string> = {
   "branding-print": "Branding & Print",
   "immersive-ux": "Interactive Experiences",
+  "advertising-rich-media": "Advertising Rich Media",
 };
 
 const PROJECT_QUERY = `*[_type == "project" && slug.current == $slug][0]{

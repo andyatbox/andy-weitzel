@@ -138,18 +138,18 @@ export default function InfoModal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6">
-      {/* Transparent click-catcher (no tint) — closes on outside click. */}
+      {/* Full-screen dark tint + blur backdrop; closes on outside click. */}
       <button
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 cursor-default"
+        className="absolute inset-0 cursor-default bg-black/65 backdrop-blur-md"
       />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-2xl bg-black/70 text-white shadow-2xl ring-1 ring-white/15 backdrop-blur-xl ${
+        className={`relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden text-white ring-1 ring-white/80 ${
           isResume ? "max-w-2xl" : "max-w-md"
         }`}
       >
