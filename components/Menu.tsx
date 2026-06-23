@@ -22,6 +22,8 @@ interface MenuProps {
   onSelectPortfolio: (id: PortfolioId) => void;
   onSelectItem: (index: number) => void;
   onOpenInfo: (kind: "resume" | "contact") => void;
+  // Hovering the logo or the four pills toggles the post-process effect.
+  onInfoHover: (active: boolean) => void;
 }
 
 // Half-window (in item steps) used to size the row pitch and how many copies
@@ -153,7 +155,12 @@ export default function Menu({
   onSelectPortfolio,
   onSelectItem,
   onOpenInfo,
+  onInfoHover,
 }: MenuProps) {
+  const hoverFx = {
+    onMouseEnter: () => onInfoHover(true),
+    onMouseLeave: () => onInfoHover(false),
+  };
   const isLarge = viewport.width >= 992;
   const isMedium = viewport.width >= 768;
   const fontSize = isLarge ? 18 : isMedium ? 16 : 14;
@@ -318,10 +325,12 @@ export default function Menu({
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2.5">
         <div style={introAnim(0)}>
-          <LogoMark
-            className="h-auto shrink-0 text-black"
-            style={{ width: logoWidth }}
-          />
+          <span className="inline-block" {...hoverFx}>
+            <LogoMark
+              className="h-auto shrink-0 text-black"
+              style={{ width: logoWidth }}
+            />
+          </span>
         </div>
         <div className="pt-2 md:pt-5 leading-tight tracking-tighter" style={introAnim(160)}>
           <div className="font-medium" style={{ fontSize: nameSize }}>
@@ -343,14 +352,19 @@ export default function Menu({
               key={id}
               active={portfolio === id}
               onClick={() => onSelectPortfolio(id)}
+              onHoverChange={onInfoHover}
             >
               {LABELS[id]}
             </Pill>
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Pill onClick={() => onOpenInfo("resume")}>Resumé</Pill>
-          <Pill onClick={() => onOpenInfo("contact")}>Contact</Pill>
+          <Pill onClick={() => onOpenInfo("resume")} onHoverChange={onInfoHover}>
+            Resumé
+          </Pill>
+          <Pill onClick={() => onOpenInfo("contact")} onHoverChange={onInfoHover}>
+            Contact
+          </Pill>
         </div>
       </div>
     </div>
