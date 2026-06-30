@@ -1,122 +1,298 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export type InfoKind = "resume" | "contact";
 
-const CONTACT_EMAIL = "andy@box.biz";
+const RESUME_FILE = "/Andrew_Weitzel_Resume_2026.docx";
+const CONTACT_EMAIL = "andrew.john.weitzel@gmail.com";
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+// Native submission to the Google Form (no embed, no click-out). Field ids
+// were read from the form's FB_PUBLIC_LOAD_DATA_.
+const FORM_ACTION =
+  "https://docs.google.com/forms/d/e/1FAIpQLSep8EqJOnZfN7qU70TRF2F2oQWZBp8h18WuWX7Ly8GYpy9EOg/formResponse";
+const FIELD = {
+  name: "entry.608113601",
+  email: "entry.1497395854",
+  message: "entry.1322325202",
+};
+
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
-    <h3 className="mt-7 border-t border-white/15 pt-5 text-lg font-semibold text-white md:text-xl">
-      {children}
-    </h3>
+    <section className="mt-12 border-t border-white/15 pt-8">
+      <h3 className="font-label text-sm uppercase tracking-[0.18em] text-white">
+        {title}
+      </h3>
+      <div className="mt-6 space-y-5">{children}</div>
+    </section>
   );
 }
 
-/** Placeholder content — swap for the real résumé / contact details later. */
-const CONTENT: Record<InfoKind, { title: string; body: React.ReactNode }> = {
-  resume: {
-    title: "Resumé",
-    body: (
-      <>
+function Role({
+  title,
+  meta,
+  children,
+}: {
+  title: string;
+  meta: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="text-base font-medium text-white">{title}</div>
+      <div className="mt-1 text-xs tracking-wide text-white">{meta}</div>
+      {children}
+    </div>
+  );
+}
+
+function ResumeBody() {
+  return (
+    <>
+      <Section title="Profile">
         <p>
-          Creative Director and full-stack builder with 15+ years shaping
-          brands, immersive web experiences, and the systems behind them. I work
-          across strategy, art direction, and engineering — from the first
-          sketch to the shipped WebGL.
+          Creative leader and full-stack technologist with over two decades of
+          experience at the intersection of design, brand strategy, and emerging
+          technology. As co-founder and Creative Director / CCO of Box Creative,
+          has directed campaigns and digital experiences for Fortune 50 brands
+          and high-growth startups alike — spanning identity systems, integrated
+          marketing campaigns, AR/3D experiences, and custom application
+          development. Distinguished by a rare fluency across the full
+          creative-to-technical pipeline: equally comfortable art directing a
+          national campaign, writing the strategy behind it, and building the
+          application that delivers it. A recipient of the Society of
+          Illustrators Award of Merit, and a two-time Webby Award winner.
         </p>
+      </Section>
 
-        <SectionTitle>Experience</SectionTitle>
-        <ul className="space-y-4">
-          <li>
-            <div className="font-medium text-white">
-              Creative Director — Studio Placeholder
-            </div>
-            <div className="text-sm text-white/45">2019 — Present</div>
-            <p className="mt-1">
-              Lead creative across brand, product, and interactive. Built the
-              design system and the real-time graphics pipeline behind flagship
-              launches.
-            </p>
-          </li>
-          <li>
-            <div className="font-medium text-white">
-              Lead Designer — Agency Lorem
-            </div>
-            <div className="text-sm text-white/45">2014 — 2019</div>
-            <p className="mt-1">
-              Art-directed campaigns for global clients and grew the motion and
-              web practices from the ground up.
-            </p>
-          </li>
-          <li>
-            <div className="font-medium text-white">
-              Designer / Developer — Freelance
-            </div>
-            <div className="text-sm text-white/45">2009 — 2014</div>
-            <p className="mt-1">
-              Brand identities, sites, and one-off experiments for startups and
-              studios.
-            </p>
-          </li>
-        </ul>
-
-        <SectionTitle>Selected Work</SectionTitle>
-        <ul className="space-y-1.5">
-          <li>Immersive product launch — WebGL configurator</li>
-          <li>Rebrand &amp; design system — placeholder retail</li>
-          <li>Interactive annual report — data-driven scrollytelling</li>
-          <li>Generative identity — broadcast package</li>
-        </ul>
-
-        <SectionTitle>Capabilities</SectionTitle>
-        <p>
-          Brand strategy · Art direction · Identity systems · Motion · WebGL /
-          React Three Fiber · Front-end engineering · Design ops.
-        </p>
-
-        <SectionTitle>Education</SectionTitle>
-        <p>BFA, Placeholder School of Design</p>
-
-        <p className="mt-6 text-white/45">
-          This is dummy content — the downloadable résumé will live here.
-        </p>
-        <a
-          href="/resume.pdf"
-          className="mt-1 inline-flex items-center rounded-full bg-white px-5 py-2 text-sm font-medium text-black transition-opacity hover:opacity-80 md:text-base"
+      <Section title="Experience">
+        <Role
+          title="Chief Creative Officer & Co-Founder — Box Creative"
+          meta="2007 — Present  ·  Midtown, SoHo & Queens, NY  ·  www.box.biz"
         >
-          Download PDF
-        </a>
-      </>
-    ),
-  },
-  contact: {
-    title: "Contact",
-    body: (
-      <>
-        <p>Let’s talk — projects, collaborations, or just to say hello.</p>
+          <p className="mt-4">
+            Co-founded and built Box, an award-winning design firm and digital
+            studio, alongside his twin brother. Within the first year, landed
+            immersive 3D projects for Pepsi and MoMA/PS1, setting the trajectory
+            for nearly two decades of work for Fortune 50 brands and startups
+            including Adidas, Amazon, GM, LG, JP Morgan, MTV, Pepsi, and Urban
+            Decay. Operates across the full scope of agency leadership and
+            hands-on production — creative direction, UX/UI design, project
+            management, copywriting, illustration, photography, print production,
+            and social/campaign management.
+          </p>
+          <ul className="mt-4 list-disc space-y-2 pl-5 marker:text-white/50">
+            <li>
+              Direct creative vision and brand strategy across integrated
+              campaigns spanning print, digital, motion, and emerging AR/AI/3D
+              platforms
+            </li>
+            <li>
+              Lead client relationships and new business development alongside
+              agency operations and team direction
+            </li>
+            <li>
+              Architect applications and experiences, bridging the gap between
+              creative and technical execution
+            </li>
+            <li>
+              Delivered award-winning work recognized by the Society of
+              Illustrators and the Webby Awards
+            </li>
+          </ul>
+        </Role>
+
+        <Role
+          title="Senior Designer, Associate Art Director — Asphalt Jungle"
+          meta="2005 — 2007  ·  Manhattan, NY"
+        >
+          <p className="mt-4">
+            Provided design, web development, production, illustration, and
+            animation for a national client roster including Hanes, working
+            across both digital and traditional media.
+          </p>
+        </Role>
+
+        <Role
+          title="Senior Designer — Flight Design Communications"
+          meta="2004 — 2005  ·  Queens, NY"
+        >
+          <p className="mt-4">
+            Designed and produced print, packaging, and point-of-sale work for
+            major brands including Reebok, with additional contributions in web
+            design and development.
+          </p>
+        </Role>
+      </Section>
+
+      <Section title="Skills & Expertise">
         <p>
-          <a
-            href={`mailto:${CONTACT_EMAIL}`}
-            className="font-medium text-white underline underline-offset-2"
-          >
-            {CONTACT_EMAIL}
-          </a>
+          <span className="font-medium">Creative & Strategic Leadership:</span>{" "}
+          Campaign & Marketing Strategy, Brand Identity & Evolution, Application
+          Development, Video & Motion Graphics, Print/Packaging Production, Media
+          & Ad Ops, Copywriting
         </p>
-        <p className="text-white/50">
-          Based in Anywhere, USA. Dummy contact details for now.
+        <p>
+          <span className="font-medium">Design Tools:</span> Adobe Creative
+          Cloud (Illustrator, Photoshop, InDesign, Premiere Pro, After Effects,
+          Dreamweaver, Express), Figma, Blender (3D/CGI)
         </p>
-      </>
-    ),
-  },
-};
+        <p>
+          <span className="font-medium">Development Tools:</span> Agentic
+          Full-Stack Development (Claude Code, Codex), VS Code, Xcode, Google Web
+          Designer (Rich Media), Nova, Google Studio (Formerly Doubleclick, QA
+          certified)
+        </p>
+        <p>
+          <span className="font-medium">Development Languages:</span>{" "}
+          JavaScript, HTML, CSS
+        </p>
+        <p>
+          <span className="font-medium">Libraries & Frameworks:</span> React,
+          Tailwind, Bootstrap, Node.js, Three.js / React Three Fiber, jQuery,
+          Google MediaPipe, 8th Wall
+        </p>
+        <p>
+          <span className="font-medium">CMS Platforms:</span> Sanity, Drupal,
+          WordPress, Shopify
+        </p>
+        <p>
+          <span className="font-medium">Project Management:</span> Slack, Linear,
+          Asana, Google Analytics
+        </p>
+        <p>
+          <span className="font-medium">Strategy:</span> Brand Audits, Analytics
+          & Analysis, New Business Development, Marketing Strategy
+        </p>
+      </Section>
+
+      <Section title="Awards">
+        <ul className="list-disc space-y-3 pl-5 marker:text-white/50">
+          <li>
+            Society of Illustrators, Award of Merit — mixed-media illustration of
+            William S. Burroughs
+          </li>
+          <li>
+            Webby Award — E.L.F. Cosmetics “Elfnalysis,” an AI-driven skincare
+            season identifier
+          </li>
+          <li>
+            Webby Award — Burger King x MTV VMAs, an AR experience featuring the
+            King and Lil Yachty
+          </li>
+        </ul>
+      </Section>
+
+      <Section title="Education">
+        <Role
+          title="BFA, Illustration — Columbus College of Art & Design"
+          meta="1999 — 2003"
+        >
+          <p className="mt-4">
+            Illustration major, Graphic Design minor, with additional studies in
+            fine art, web development, and industrial design.
+          </p>
+        </Role>
+        <Role title="LaSalle High School" meta="Graduated 1999" />
+      </Section>
+
+      <Section title="Clients of Note">
+        <p className="leading-loose">
+          Adidas, AdventHealth, Afterpay, Amazon, BBC, BMW, Burger King,
+          Cadillac, Corona, Crocs, Crowne Plaza, Downtown Newark, Dyson, Kroger,
+          E.L.F. Cosmetics, Foot Locker, GM, JP Morgan, Invesco QQQ, Lionsgate
+          Films, LG, L’Oréal, Microsoft, McKesson, Modelo, MoMA, MTV, Nature
+          Valley, Nickelodeon, NY Islanders, NY Life, NY Yankees, Oppenheimer,
+          Oxygen, Paramount, Pepsi, Redken, Showtime, Stick With Me, Synchrony,
+          TED Talks, Timberland, Westfield, Urban Decay, Visit Philly,
+          Winston-Salem Open.
+        </p>
+      </Section>
+    </>
+  );
+}
+
+function ContactForm() {
+  const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
+
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    const body = new URLSearchParams();
+    body.append(FIELD.name, String(data.get("name") ?? ""));
+    body.append(FIELD.email, String(data.get("email") ?? ""));
+    body.append(FIELD.message, String(data.get("message") ?? ""));
+    body.append("fvv", "1");
+    body.append("pageHistory", "0");
+    setStatus("sending");
+    // no-cors: Google records the response; the opaque reply can't be read, so
+    // we treat completion as success and keep the user on-site.
+    await fetch(FORM_ACTION, { method: "POST", mode: "no-cors", body }).catch(
+      () => {}
+    );
+    form.reset();
+    setStatus("sent");
+  };
+
+  if (status === "sent") {
+    return (
+      <div className="mt-8 border-t border-white/15 pt-8">
+        <p className="text-base font-medium text-white">
+          Thanks — your message has been sent.
+        </p>
+        <button
+          type="button"
+          onClick={() => setStatus("idle")}
+          className="mt-4 inline-flex items-center rounded-full border border-white/60 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10"
+        >
+          Send another
+        </button>
+      </div>
+    );
+  }
+
+  const fieldCls =
+    "w-full border-b border-white/30 bg-transparent py-2 text-sm text-white placeholder-white/40 outline-none transition-colors focus:border-white md:text-base";
+
+  return (
+    <form onSubmit={onSubmit} className="mt-8 space-y-6 border-t border-white/15 pt-8">
+      <input name="name" required placeholder="Full name" className={fieldCls} />
+      <input
+        name="email"
+        type="email"
+        required
+        placeholder="Email"
+        className={fieldCls}
+      />
+      <textarea
+        name="message"
+        required
+        placeholder="Message"
+        rows={4}
+        className={`${fieldCls} resize-none`}
+      />
+      <button
+        type="submit"
+        disabled={status === "sending"}
+        className="inline-flex items-center rounded-full border border-white/60 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10 disabled:opacity-50"
+      >
+        {status === "sending" ? "Sending…" : "Send message"}
+      </button>
+    </form>
+  );
+}
 
 /**
- * Floating DOM popup over everything — black frosted glass, white text. No
- * tinted backdrop; the page shows through. The résumé is an enlarged,
- * scrollable panel. A transparent full-screen catcher closes it on outside
- * click; Escape too.
+ * Floating popup over the full-screen dark backdrop. The résumé is a wide,
+ * airy, all-white panel with a top download link; Contact has a native form
+ * that posts straight to the Google Form. Escape / outside-click / X close it.
  */
 export default function InfoModal({
   kind,
@@ -133,7 +309,6 @@ export default function InfoModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const { title, body } = CONTENT[kind];
   const isResume = kind === "resume";
 
   return (
@@ -148,9 +323,9 @@ export default function InfoModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-label={isResume ? "Resumé" : "Contact"}
         className={`relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden text-white ring-1 ring-white/80 ${
-          isResume ? "max-w-2xl" : "max-w-md"
+          isResume ? "max-w-4xl" : "max-w-lg"
         }`}
       >
         <button
@@ -172,11 +347,39 @@ export default function InfoModal({
             <line x1="19" y1="5" x2="5" y2="19" />
           </svg>
         </button>
-        <div className={`min-h-0 overflow-y-auto ${isResume ? "p-8 sm:p-10" : "p-7"}`}>
-          <h2 className="pr-8 text-3xl font-medium md:text-4xl">{title}</h2>
-          <div className="mt-5 space-y-4 text-base leading-relaxed text-white/70 md:text-lg">
-            {body}
-          </div>
+        <div className={`min-h-0 overflow-y-auto ${isResume ? "p-8 sm:p-12" : "p-8"}`}>
+          {isResume ? (
+            <>
+              <h2 className="pr-12 text-3xl font-medium md:text-4xl">Resumé</h2>
+              <a
+                href={RESUME_FILE}
+                download
+                className="mt-5 inline-flex items-center rounded-full border border-white/60 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10 md:text-base"
+              >
+                Download Résumé (.docx)
+              </a>
+              <div className="mt-2 text-sm leading-relaxed text-white md:text-base">
+                <ResumeBody />
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="pr-12 text-3xl font-medium md:text-4xl">Contact</h2>
+              <div className="mt-5 text-sm leading-relaxed text-white md:text-base">
+                <p>
+                  Nice to meet ya! Feel free to email me at{" "}
+                  <a
+                    href={`mailto:${CONTACT_EMAIL}`}
+                    className="font-medium text-white underline underline-offset-2"
+                  >
+                    {CONTACT_EMAIL}
+                  </a>{" "}
+                  or rock the fields below. Thanks!
+                </p>
+              </div>
+              <ContactForm />
+            </>
+          )}
         </div>
       </div>
     </div>
