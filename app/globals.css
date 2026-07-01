@@ -34,6 +34,11 @@ body {
   font-weight: 700;
 }
 
+/* Résumé body copy — sans, matching the label family at regular weight. */
+.font-sans-copy {
+  font-family: Arial, Helvetica, "Helvetica Neue", sans-serif;
+}
+
 body {
   position: fixed;
   inset: 0;

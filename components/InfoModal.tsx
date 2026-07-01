@@ -4,14 +4,14 @@ import { useEffect, useState } from "react";
 
 export type InfoKind = "resume" | "contact";
 
-const RESUME_FILE = "/Andrew_Weitzel_Resume_2026.docx";
+const RESUME_FILE = "/Andrew-Weitzel-Resume.pdf";
 
 // Contact email kept out of the source/markup as base64, decoded at runtime —
-// a light deterrent against address-scraping bots. (App is client-only, so the
-// plain address only ever exists in the live DOM after Contact is opened.)
+// a light deterrent against scraping bots. (App is client-only, so the plain
+// address only ever exists in the live DOM once Contact is opened.)
 const CONTACT_EMAIL_B64 = "YW5kcmV3LmpvaG4ud2VpdHplbEBnbWFpbC5jb20=";
-function contactEmail() {
-  return typeof window === "undefined" ? "" : window.atob(CONTACT_EMAIL_B64);
+function decode(b64: string) {
+  return typeof window === "undefined" ? "" : window.atob(b64);
 }
 
 // Native submission to the Google Form (no embed, no click-out). Field ids
@@ -24,209 +24,246 @@ const FIELD = {
   message: "entry.1322325202",
 };
 
-// Larger serif heading shared by role titles and skill-group labels.
-const HEADING = "text-xl font-medium text-white md:text-2xl";
+// Type system mirrors the résumé PDF: serif (New Spirit) for name/section/item
+// headings, sans (Arial) for body copy and uppercase labels.
+const NAME = "text-3xl font-medium md:text-4xl";
+const SECTION = "text-2xl font-medium md:text-3xl";
+const ITEM = "text-xl font-medium md:text-2xl";
+const LABEL = "font-label text-xs uppercase tracking-wide text-white";
+const BODY = "font-sans-copy text-base leading-relaxed text-white";
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-12 border-t border-white/15 pt-8">
-      <h3 className="font-label text-sm uppercase tracking-[0.18em] text-white">
-        {title}
-      </h3>
-      <div className="mt-6 space-y-5">{children}</div>
+      <h3 className={SECTION}>{title}</h3>
+      <div className="mt-6 space-y-8">{children}</div>
     </section>
   );
 }
 
-function Role({
+function Job({
   title,
+  org,
   meta,
   children,
 }: {
   title: string;
-  meta: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className={HEADING}>{title}</div>
-      <div className="mt-1 tracking-wide text-white">{meta}</div>
-      {children}
-    </div>
-  );
-}
-
-function Skill({
-  label,
-  children,
-}: {
-  label: string;
+  org: string;
+  meta?: string;
   children: React.ReactNode;
 }) {
   return (
     <div>
-      <h4 className={HEADING}>{label}</h4>
-      <p className="mt-1">{children}</p>
+      <h4 className={ITEM}>{title}</h4>
+      <p className="mt-1.5">
+        <span className={LABEL}>{org}</span>
+        {meta && <span className="ml-2 font-sans-copy text-sm text-white">{meta}</span>}
+      </p>
+      <div className={`mt-3 space-y-3 ${BODY}`}>{children}</div>
     </div>
   );
 }
 
+function Skill({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h4 className={ITEM}>{title}</h4>
+      <div className={`mt-1.5 ${BODY}`}>{children}</div>
+    </div>
+  );
+}
+
+function Award({
+  title,
+  tag,
+  children,
+}: {
+  title: string;
+  tag: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <h4 className={ITEM}>{title}</h4>
+      <p className={`mt-1 ${LABEL}`}>{tag}</p>
+      <div className={`mt-2 space-y-0.5 ${BODY}`}>{children}</div>
+    </div>
+  );
+}
+
+const CLIENTS = [
+  "Adidas", "AdventHealth", "Afterpay", "Amazon", "BBC", "BMW", "Burger King",
+  "Cadillac", "Corona", "Crocs", "Crowne Plaza", "Downtown Newark", "Dyson",
+  "Kroger", "E.L.F. Cosmetics", "Foot Locker", "GM", "JP Morgan", "Invesco QQQ",
+  "Lionsgate Films", "LG", "L’Oréal", "Microsoft", "McKesson", "Modelo", "MoMA",
+  "MTV", "Nature Valley", "Nickelodeon", "NY Islanders", "NY Life", "NY Yankees",
+  "Oppenheimer", "Oxygen", "Paramount", "Pepsi", "Redken", "Showtime",
+  "Stick With Me", "Synchrony", "TED Talks", "Timberland", "Westfield",
+  "Urban Decay", "Visit New Jersey", "Visit Philly", "Winston-Salem Open",
+];
+
 function ResumeBody() {
   return (
     <>
-      <Section title="Profile">
-        <p>
-          Creative leader and full-stack technologist with over two decades of
-          experience at the intersection of design, brand strategy, and emerging
-          technology. As co-founder and Creative Director / CCO of Box Creative,
-          has directed campaigns and digital experiences for Fortune 50 brands
-          and high-growth startups alike — spanning identity systems, integrated
-          marketing campaigns, AR/3D experiences, and custom application
-          development. Distinguished by a rare fluency across the full
-          creative-to-technical pipeline: equally comfortable art directing a
-          national campaign, writing the strategy behind it, and building the
-          application that delivers it. A recipient of the Society of
-          Illustrators Award of Merit, and a two-time Webby Award winner.
-        </p>
-      </Section>
+      <p className="mt-8 text-lg leading-relaxed text-white md:text-xl">
+        Creative leader and full-stack technologist with over two decades of
+        experience at the intersection of design, brand strategy, and emerging
+        technology. As co-founder of Box Creative and its Creative Director —
+        currently serving as CCO — has directed award-winning campaigns and
+        digital experiences for Fortune 50 brands and high-growth startups alike
+        — spanning identity systems, integrated marketing, AR/AI/3D experiences,
+        and custom application development. Defined by a rare fluency across the
+        full creative-to-technical pipeline: equally comfortable directing a
+        national campaign, crafting the strategy behind it, and engineering the
+        application that delivers it.
+      </p>
 
       <Section title="Experience">
-        <Role
-          title="Chief Creative Officer & Co-Founder — Box Creative"
-          meta="2007 — Present  ·  Midtown, SoHo & Queens, NY  ·  www.box.biz"
+        <Job
+          title="Chief Creative Officer, Creative Director & Co-founder"
+          org="Box Creative"
+          meta="2007 — Present · www.box.biz"
         >
-          <p className="mt-4">
-            Co-founded and built Box, an award-winning design firm and digital
-            studio, alongside his twin brother. Within the first year, landed
-            immersive 3D projects for Pepsi and MoMA/PS1, setting the trajectory
-            for nearly two decades of work for Fortune 50 brands and startups
-            including Adidas, Amazon, GM, LG, JP Morgan, MTV, Pepsi, and Urban
-            Decay. Operates across the full scope of agency leadership and
-            hands-on production — creative direction, UX/UI design, project
-            management, copywriting, illustration, photography, print production,
-            and social/campaign management.
+          <p>
+            Co-founded and built Box Creative, an award-winning design firm and
+            digital studio, alongside his twin brother. Within the first year,
+            landed immersive 3D projects for Pepsi and MoMA/PS1 — setting the
+            trajectory for nearly two decades of work for Fortune 50 brands and
+            startups including Adidas, Amazon, GM, LG, JP Morgan, MTV, Pepsi, and
+            Urban Decay. Operates across the full scope of agency leadership:
+            creative direction, UX/UI, project management, copywriting,
+            illustration, photography, print production, and social/campaign
+            management.
           </p>
-          <ul className="mt-4 list-disc space-y-2 pl-5 marker:text-white/50">
+          <ul className="list-disc space-y-2 pl-5 marker:text-white/50">
             <li>
               Direct creative vision and brand strategy across integrated
-              campaigns spanning print, digital, motion, and emerging AR/AI/3D
-              platforms
+              campaigns spanning print, digital, motion, AR/AI/3D, and IRL
+              activations
             </li>
             <li>
-              Lead client relationships and new business development alongside
-              agency operations and team direction
+              Lead client relationships, new business development, agency
+              operations, and team direction
             </li>
             <li>
-              Architect applications and experiences, bridging the gap between
-              creative and technical execution
-            </li>
-            <li>
-              Delivered award-winning work recognized by the Society of
-              Illustrators and the Webby Awards
+              Architect applications and experiences that bridge creative
+              concept and technical execution
             </li>
           </ul>
-        </Role>
+        </Job>
 
-        <Role
-          title="Senior Designer, Associate Art Director — Asphalt Jungle"
-          meta="2005 — 2007  ·  Manhattan, NY"
+        <Job
+          title="Senior Designer, Associate Art Director"
+          org="Asphalt Jungle"
+          meta="2005 — 2007"
         >
-          <p className="mt-4">
+          <p>
             Provided design, web development, production, illustration, and
             animation for a national client roster including Hanes, working
             across both digital and traditional media.
           </p>
-        </Role>
+        </Job>
 
-        <Role
-          title="Senior Designer — Flight Design Communications"
-          meta="2004 — 2005  ·  Queens, NY"
+        <Job
+          title="Senior Designer"
+          org="Flight Design Communications"
+          meta="2004 — 2005"
         >
-          <p className="mt-4">
+          <p>
             Designed and produced print, packaging, and point-of-sale work for
             major brands including Reebok, with additional contributions in web
             design and development.
           </p>
-        </Role>
+        </Job>
       </Section>
 
       <Section title="Skills & Expertise">
-        <Skill label="Creative & Strategic Leadership">
-          Campaign & Marketing Strategy, Brand Identity & Evolution, Application
-          Development, Video & Motion Graphics, Print/Packaging Production, Media
-          & Ad Ops, Copywriting
+        <Skill title="Creative & Strategic Leadership">
+          Visionary Strategist, Campaign & Marketing Strategy, Team Mentorship,
+          Brand Identity Guardian, Project Management, Application Development
+          Direction, Video & Social Marketing Direction, Print/Packaging QC,
+          Media & Ad Ops, Budget Steward, Copywriting
         </Skill>
-        <Skill label="Design Tools">
+        <Skill title="Design Tools">
           Adobe Creative Cloud (Illustrator, Photoshop, InDesign, Premiere Pro,
-          After Effects, Dreamweaver, Express), Figma, Blender (3D/CGI)
+          After Effects, Dreamweaver, Express), Figma, ChatGPT, Claude Design,
+          Google Gemini, Blender (3D/CGI)
         </Skill>
-        <Skill label="Development Tools">
+        <Skill title="Coding Tools">
           Agentic Full-Stack Development (Claude Code, Codex), VS Code, Xcode,
-          Google Web Designer (Rich Media), Nova, Google Studio (Formerly
-          Doubleclick, QA certified)
+          Google Web Designer (Rich Media), Nova / Coda
         </Skill>
-        <Skill label="Development Languages">JavaScript, HTML, CSS</Skill>
-        <Skill label="Libraries & Frameworks">
-          React, Tailwind, Bootstrap, Node.js, Three.js / React Three Fiber,
-          jQuery, Google MediaPipe, 8th Wall
+        <Skill title="Coding Languages">
+          <p>
+            <span className={LABEL}>Core</span> — JavaScript, HTML, CSS
+          </p>
+          <p className="mt-1.5">
+            <span className={LABEL}>Libraries & Frameworks</span> — React,
+            Tailwind, Bootstrap, Node.js, Three.js / React Three Fiber, jQuery,
+            Google MediaPipe, 8th Wall, Google Analytics, Google Studio (Fmly
+            Doubleclick, QA-certified)
+          </p>
         </Skill>
-        <Skill label="CMS Platforms">Sanity, Drupal, WordPress, Shopify</Skill>
-        <Skill label="Project Management">
-          Slack, Linear, Asana, Google Analytics
+        <Skill title="CMS Platforms">
+          Sanity (Headless CMS), Drupal, WordPress, Shopify
         </Skill>
-        <Skill label="Strategy">
-          Brand Audits, Analytics & Analysis, New Business Development, Marketing
-          Strategy
+        <Skill title="Project Management Tools">Slack, Linear, Asana</Skill>
+        <Skill title="Strategic">
+          Brand Audits, Analytics & Media Analysis, New Business Development
         </Skill>
       </Section>
 
       <Section title="Awards">
-        <ul className="list-disc space-y-3 pl-5 marker:text-white/50">
-          <li>
-            Society of Illustrators, Award of Merit — mixed-media illustration of
-            William S. Burroughs
-          </li>
-          <li>
-            Webby Award — E.L.F. Cosmetics “Elfnalysis,” an AI-driven skincare
-            season identifier
-          </li>
-          <li>
-            Webby Award — Burger King x MTV VMAs, an AR experience featuring the
-            King and Lil Yachty
-          </li>
-        </ul>
+        <Award
+          title="Webby Awards, 2026"
+          tag="Webby Winner / People’s Voice Winner / Nominee (AR)"
+        >
+          <p>Agency: Movement Strategy</p>
+          <p>
+            E.L.F. Cosmetics —{" "}
+            <a
+              href="https://www.elfnalysis.com"
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-2"
+            >
+              elfnalysis.com
+            </a>{" "}
+            · AI-driven beauty season identifier
+          </p>
+        </Award>
+        <Award title="Webby Awards, 2021" tag="Honoree">
+          <p>Agencies: Coffee Labs, Paramount</p>
+          <p>MTV VMAs AR — Burger King x Lil Yachty</p>
+        </Award>
+        <Award title="Society of Illustrators" tag="Award of Merit">
+          <p>Painting / illustration of William S. Burroughs</p>
+        </Award>
       </Section>
 
       <Section title="Education">
-        <Role
-          title="BFA — Columbus College of Art & Design"
-          meta="1999 — 2003"
-        >
-          <p className="mt-1">
-            Illustration major, Graphic Design minor, with additional studies in
-            fine art, web development, and industrial design.
+        <div>
+          <h4 className={ITEM}>BFA, Columbus College of Art & Design</h4>
+          <p className={`mt-1.5 ${LABEL}`}>1999 — 2003</p>
+          <p className={`mt-2 ${BODY}`}>
+            Major in Illustration, additional studies in Graphic Design, Fine
+            Arts, Industrial Design
           </p>
-        </Role>
-        <Role title="LaSalle High School" meta="Graduated 1999" />
+        </div>
+        <div>
+          <h4 className={ITEM}>LaSalle High School</h4>
+          <p className={`mt-1.5 ${LABEL}`}>Graduated 1999</p>
+        </div>
       </Section>
 
-      <Section title="Clients of Note">
-        <p className="leading-loose">
-          Adidas, AdventHealth, Afterpay, Amazon, BBC, BMW, Burger King,
-          Cadillac, Corona, Crocs, Crowne Plaza, Downtown Newark, Dyson, Kroger,
-          E.L.F. Cosmetics, Foot Locker, GM, JP Morgan, Invesco QQQ, Lionsgate
-          Films, LG, L’Oréal, Microsoft, McKesson, Modelo, MoMA, MTV, Nature
-          Valley, Nickelodeon, NY Islanders, NY Life, NY Yankees, Oppenheimer,
-          Oxygen, Paramount, Pepsi, Redken, Showtime, Stick With Me, Synchrony,
-          TED Talks, Timberland, Westfield, Urban Decay, Visit Philly,
-          Winston-Salem Open.
-        </p>
+      <Section title="Clients">
+        <ul className="columns-2 gap-8 text-base leading-relaxed text-white sm:columns-3">
+          {CLIENTS.map((c) => (
+            <li key={c} className="break-inside-avoid">
+              {c}
+            </li>
+          ))}
+        </ul>
       </Section>
     </>
   );
@@ -273,7 +310,7 @@ function ContactForm() {
   }
 
   const fieldCls =
-    "w-full border-b border-white/30 bg-transparent py-2 text-sm text-white placeholder-white/40 outline-none transition-colors focus:border-white md:text-base";
+    "w-full border-b border-white/30 bg-transparent py-2 font-sans-copy text-sm text-white placeholder-white/40 outline-none transition-colors focus:border-white md:text-base";
 
   return (
     <form onSubmit={onSubmit} className="mt-8 space-y-6 border-t border-white/15 pt-8">
@@ -305,8 +342,9 @@ function ContactForm() {
 
 /**
  * Floating popup over the full-screen dark backdrop. The résumé is a wide,
- * airy, all-white panel with a top download link; Contact has a native form
- * that posts straight to the Google Form. Escape / outside-click / X close it.
+ * airy, all-white panel (serif headings / sans body, matching the PDF) with a
+ * top download link; Contact has a native form that posts straight to the
+ * Google Form. Escape / outside-click / X close it.
  */
 export default function InfoModal({
   kind,
@@ -324,7 +362,7 @@ export default function InfoModal({
   }, [onClose]);
 
   const isResume = kind === "resume";
-  const email = contactEmail();
+  const email = decode(CONTACT_EMAIL_B64);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6">
@@ -365,32 +403,31 @@ export default function InfoModal({
         <div className={`min-h-0 overflow-y-auto ${isResume ? "p-8 sm:p-12" : "p-8"}`}>
           {isResume ? (
             <>
-              <h2 className="pr-12 text-3xl font-medium md:text-4xl">
-                Andrew Weitzel
-              </h2>
-              <p className="mt-1 text-base font-normal text-white md:text-lg">
-                Resumé
+              <p className="font-label text-xs uppercase tracking-[0.2em] text-white">
+                Résumé — 2026
+              </p>
+              <h2 className={`mt-2 pr-12 ${NAME}`}>Andrew Weitzel</h2>
+              <p className="mt-3 text-lg font-medium text-white md:text-xl">
+                Creative Director · Chief Creative Officer · Marketing Director
               </p>
               <a
                 href={RESUME_FILE}
                 download
-                className="mt-5 inline-flex items-center rounded-full border border-white/60 px-5 py-2 font-medium text-white transition-colors hover:bg-white/10"
+                className="mt-6 inline-flex items-center rounded-full border border-white/60 px-5 py-2 font-medium text-white transition-colors hover:bg-white/10"
               >
                 Download Resumé
               </a>
-              <div className="mt-2 text-base leading-relaxed text-white md:text-lg">
-                <ResumeBody />
-              </div>
+              <ResumeBody />
             </>
           ) : (
             <>
               <h2 className="pr-12 text-3xl font-medium md:text-4xl">Contact</h2>
-              <div className="mt-5 text-sm leading-relaxed text-white md:text-base">
+              <div className="mt-5 font-sans-copy text-sm leading-relaxed text-white md:text-base">
                 <p>
                   Nice to meet ya! Feel free to email me at{" "}
                   <a
                     href={`mailto:${email}`}
-                    className="font-medium text-white underline underline-offset-2"
+                    className="font-medium underline underline-offset-2"
                   >
                     {email}
                   </a>{" "}
