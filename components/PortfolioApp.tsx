@@ -12,6 +12,22 @@ import PsychedelicFX from "./PsychedelicFX";
 
 const DRAG_MULTIPLIER = 1.6;
 const FLING_MULTIPLIER = 14;
+// Slide-reveal timing (ms), shared by the intro and portfolio switches.
+const SLIDE_HOLD = 1700;
+const SLIDE_DUR = 950;
+// Cap on how long a switch waits for the new portfolio's images before sliding
+// in anyway (so a slow/failed image can't strand the panel off-screen).
+const SWITCH_LOAD_CAP = 3500;
+
+/** Resolves once the image is loaded (or errored) — used to warm the cache. */
+function preloadImage(url: string) {
+  return new Promise<void>((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = url;
+  });
+}
 
 export default function PortfolioApp() {
   const viewport = useViewport();
@@ -21,6 +37,11 @@ export default function PortfolioApp() {
   const [switching, setSwitching] = useState(false);
   const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
   const [intro, setIntro] = useState(false);
+  // Slide-reveal intro: the menu/gallery panel starts pushed off by the canvas
+  // size (menu parked at the window edge), a hero logo sits centered in the
+  // exposed empty area, then the panel slides home.
+  const [slideIn, setSlideIn] = useState(false);
+  const [introLogo, setIntroLogo] = useState(true);
   // Resumé / Contact popup + the halftone trigger (hovering those buttons or
   // having their modal open).
   const [infoModal, setInfoModal] = useState<InfoKind | null>(null);
@@ -33,6 +54,8 @@ export default function PortfolioApp() {
   // stands down and the modal can scroll natively.
   const infoOpenRef = useRef(false);
   const switchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const switchTimer2 = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const switchingRef = useRef(false);
   // Touch devices fire mouseenter (but not mouseleave) on tap, which would
   // latch the hover effect on. So on touch, ignore hover entirely — the
   // psychedelic effect only shows while a modal is open.
@@ -62,23 +85,53 @@ export default function PortfolioApp() {
   const portfolioRef = useRef(portfolio);
   portfolioRef.current = portfolio;
 
-  // Crossfade the switch: fade the gallery + menu list out to the gray
-  // backdrop, swap underneath, fade back in — instead of a hard remount.
+  // Switch the portfolio by replaying the slide intro: slide the panel out to
+  // the parked (pre-intro) state — exposing the logo-bg — swap the portfolio
+  // off-screen, then slide it back in. Orientation-aware via `slideTransform`.
   const selectPortfolio = useCallback(
     (id: PortfolioId) => {
-      if (openedRef.current || id === portfolio) return;
-      setSwitching(true);
+      if (openedRef.current || id === portfolio || switchingRef.current) return;
+      switchingRef.current = true;
+      setSwitching(true); // dim the list so its swap isn't seen at the edge
+      setIntroLogo(true); // re-expose the logo-bg in the cleared area
+      setSlideIn(false); // slide out to the parked state
       clearTimeout(switchTimer.current);
+      clearTimeout(switchTimer2.current);
       switchTimer.current = setTimeout(() => {
         setPortfolio(id);
         engine.reset();
-        setSwitching(false);
-      }, 220);
+        // Only slide back in once the new portfolio's images are loaded, so the
+        // full display never reveals a half-loaded gallery. A two-frame wait
+        // lets the gallery apply the (now warm-cached) textures first.
+        let slid = false;
+        const slideHome = () => {
+          if (slid) return;
+          slid = true;
+          clearTimeout(switchTimer2.current);
+          setSlideIn(true);
+          setSwitching(false);
+          switchTimer2.current = setTimeout(() => {
+            setIntroLogo(false);
+            switchingRef.current = false;
+          }, SLIDE_DUR);
+        };
+        const urls = portfolios ? portfolios[id].items.map((it) => it.image) : [];
+        void Promise.all(urls.map(preloadImage)).then(() =>
+          requestAnimationFrame(() => requestAnimationFrame(slideHome))
+        );
+        switchTimer2.current = setTimeout(slideHome, SWITCH_LOAD_CAP);
+      }, SLIDE_DUR);
     },
-    [engine, portfolio]
+    [engine, portfolio, portfolios]
   );
 
-  useEffect(() => () => clearTimeout(switchTimer.current), []);
+  useEffect(
+    () => () => {
+      clearTimeout(switchTimer.current);
+      clearTimeout(switchTimer2.current);
+    },
+    []
+  );
 
   const selectItem = useCallback(
     (index: number) => {
@@ -202,14 +255,20 @@ export default function PortfolioApp() {
 
   const ready = !!viewport && !!portfolios;
 
-  // Fire the intro animation once, the first time both viewport and portfolios
-  // are available (i.e. the first non-null render). A short delay lets the
-  // browser paint the initial frame before elements start moving.
+  // Fire the intro once, the first time both viewport and portfolios are ready.
+  // Content fades in immediately (parked at the edge beside the hero logo);
+  // after a hold the panel slides home, then the hero logo is removed.
   useEffect(() => {
     if (!ready || introFired.current) return;
     introFired.current = true;
-    const t = setTimeout(() => setIntro(true), 60);
-    return () => clearTimeout(t);
+    const t0 = setTimeout(() => setIntro(true), 60);
+    const t1 = setTimeout(() => setSlideIn(true), SLIDE_HOLD);
+    const t2 = setTimeout(() => setIntroLogo(false), SLIDE_HOLD + SLIDE_DUR);
+    return () => {
+      clearTimeout(t0);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [ready]);
 
   // Animate open/close every frame: resize the canvas DOM and slide the menu
@@ -284,55 +343,88 @@ export default function PortfolioApp() {
     ? { left: 0, top: 0, width: width * 0.25, height }
     : { left: 0, top: height * 0.6, width, height: height * 0.4 };
 
+  // Intro: push the whole panel off by the canvas size so the menu parks at the
+  // window edge; the hero logo centers in the exposed (canvas-sized) gap.
+  const slideTransform = slideIn
+    ? "none"
+    : isLandscape
+      ? `translateX(${width * 0.75}px)`
+      : `translateY(${-(height * 0.6)}px)`;
+  const heroRect: React.CSSProperties = isLandscape
+    ? { left: 0, top: 0, width: width * 0.75, height }
+    : { left: 0, top: height * 0.4, width, height: height * 0.6 };
+
   return (
     <main
       className="relative w-full overflow-hidden bg-[#f8f8f8] text-white"
       style={{ height }}
     >
-      <div ref={menuRef} className="absolute" style={menuRect}>
-        <Menu
-          portfolio={portfolio}
-          items={items}
-          isLandscape={isLandscape}
-          viewport={viewport}
-          engine={engine}
-          dimmed={switching}
-          intro={intro}
-          onSelectPortfolio={selectPortfolio}
-          onSelectItem={selectItem}
-          onOpenInfo={openInfo}
-          onInfoHover={setInfoHover}
-        />
-      </div>
-
-      {/* Static gray backdrop stays put; only the canvas inside fades, so the
-          crossfade passes through gray rather than flashing the dark page. */}
-      <div
-        ref={galleryRef}
-        className="absolute touch-none overflow-hidden bg-[#f8f8f8]"
-        style={{ opacity: intro ? 1 : 0, transition: "opacity 0.7s ease 80ms" }}
-      >
+      {/* Hero logo centered in the exposed gap during the intro; the sliding
+          panel (rendered after, so it paints on top) covers it on arrival. */}
+      {introLogo && (
         <div
-          className="h-full w-full"
-          style={{ opacity: switching ? 0 : 1, transition: "opacity 0.22s ease" }}
-        >
-          <Gallery
-            items={items}
+          aria-hidden
+          className="pointer-events-none absolute bg-center bg-no-repeat"
+          style={{
+            ...heroRect,
+            backgroundImage: "url(/logo-bg.svg)",
+            backgroundSize: "cover",
+          }}
+        />
+      )}
+
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: slideTransform,
+          transition: `transform ${SLIDE_DUR}ms cubic-bezier(0.7, 0, 0.2, 1)`,
+        }}
+      >
+        <div ref={menuRef} className="absolute" style={menuRect}>
+          <Menu
             portfolio={portfolio}
+            items={items}
             isLandscape={isLandscape}
+            viewport={viewport}
             engine={engine}
-            opened={opened}
-            anim={anim}
-            onIndexChange={() => {}}
-            onReady={setGalleryCanvas}
+            dimmed={switching}
+            intro={intro}
+            onSelectPortfolio={selectPortfolio}
+            onSelectItem={selectItem}
+            onOpenInfo={openInfo}
+            onInfoHover={setInfoHover}
           />
         </div>
 
-        {/* Real WebGL post-process: samples the rendered gallery and warps it
-            (swirl + domain-warp displacement + chromatic aberration +
-            psychedelic recolor). Ramps in on Resumé/Contact hover or while
-            their modal is open; only runs its shader loop while active. */}
-        <PsychedelicFX active={halftone} source={galleryCanvas} />
+        {/* Static gray backdrop stays put; only the canvas inside fades, so the
+            crossfade passes through gray rather than flashing the dark page. */}
+        <div
+          ref={galleryRef}
+          className="absolute touch-none overflow-hidden bg-[#f8f8f8]"
+          style={{ opacity: intro ? 1 : 0, transition: "opacity 0.7s ease 80ms" }}
+        >
+          <div
+            className="h-full w-full"
+            style={{ opacity: switching ? 0 : 1, transition: "opacity 0.22s ease" }}
+          >
+            <Gallery
+              items={items}
+              portfolio={portfolio}
+              isLandscape={isLandscape}
+              engine={engine}
+              opened={opened}
+              anim={anim}
+              onIndexChange={() => {}}
+              onReady={setGalleryCanvas}
+            />
+          </div>
+
+          {/* Real WebGL post-process: samples the rendered gallery and warps it
+              (swirl + domain-warp displacement + chromatic aberration +
+              psychedelic recolor). Ramps in on Resumé/Contact hover or while
+              their modal is open; only runs its shader loop while active. */}
+          <PsychedelicFX active={halftone} source={galleryCanvas} />
+        </div>
       </div>
 
       {/* Scrollable project content overlay — below the close button (z-50). */}

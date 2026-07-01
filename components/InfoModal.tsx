@@ -17,6 +17,9 @@ const FIELD = {
   message: "entry.1322325202",
 };
 
+// Larger serif heading shared by role titles and skill-group labels.
+const HEADING = "text-xl font-medium text-white md:text-2xl";
+
 function Section({
   title,
   children,
@@ -45,9 +48,24 @@ function Role({
 }) {
   return (
     <div>
-      <div className="text-base font-medium text-white">{title}</div>
-      <div className="mt-1 text-xs tracking-wide text-white">{meta}</div>
+      <div className={HEADING}>{title}</div>
+      <div className="mt-1 tracking-wide text-white">{meta}</div>
       {children}
+    </div>
+  );
+}
+
+function Skill({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <h4 className={HEADING}>{label}</h4>
+      <p className="mt-1">{children}</p>
     </div>
   );
 }
@@ -132,44 +150,33 @@ function ResumeBody() {
       </Section>
 
       <Section title="Skills & Expertise">
-        <p>
-          <span className="font-medium">Creative & Strategic Leadership:</span>{" "}
+        <Skill label="Creative & Strategic Leadership">
           Campaign & Marketing Strategy, Brand Identity & Evolution, Application
           Development, Video & Motion Graphics, Print/Packaging Production, Media
           & Ad Ops, Copywriting
-        </p>
-        <p>
-          <span className="font-medium">Design Tools:</span> Adobe Creative
-          Cloud (Illustrator, Photoshop, InDesign, Premiere Pro, After Effects,
-          Dreamweaver, Express), Figma, Blender (3D/CGI)
-        </p>
-        <p>
-          <span className="font-medium">Development Tools:</span> Agentic
-          Full-Stack Development (Claude Code, Codex), VS Code, Xcode, Google Web
-          Designer (Rich Media), Nova, Google Studio (Formerly Doubleclick, QA
-          certified)
-        </p>
-        <p>
-          <span className="font-medium">Development Languages:</span>{" "}
-          JavaScript, HTML, CSS
-        </p>
-        <p>
-          <span className="font-medium">Libraries & Frameworks:</span> React,
-          Tailwind, Bootstrap, Node.js, Three.js / React Three Fiber, jQuery,
-          Google MediaPipe, 8th Wall
-        </p>
-        <p>
-          <span className="font-medium">CMS Platforms:</span> Sanity, Drupal,
-          WordPress, Shopify
-        </p>
-        <p>
-          <span className="font-medium">Project Management:</span> Slack, Linear,
-          Asana, Google Analytics
-        </p>
-        <p>
-          <span className="font-medium">Strategy:</span> Brand Audits, Analytics
-          & Analysis, New Business Development, Marketing Strategy
-        </p>
+        </Skill>
+        <Skill label="Design Tools">
+          Adobe Creative Cloud (Illustrator, Photoshop, InDesign, Premiere Pro,
+          After Effects, Dreamweaver, Express), Figma, Blender (3D/CGI)
+        </Skill>
+        <Skill label="Development Tools">
+          Agentic Full-Stack Development (Claude Code, Codex), VS Code, Xcode,
+          Google Web Designer (Rich Media), Nova, Google Studio (Formerly
+          Doubleclick, QA certified)
+        </Skill>
+        <Skill label="Development Languages">JavaScript, HTML, CSS</Skill>
+        <Skill label="Libraries & Frameworks">
+          React, Tailwind, Bootstrap, Node.js, Three.js / React Three Fiber,
+          jQuery, Google MediaPipe, 8th Wall
+        </Skill>
+        <Skill label="CMS Platforms">Sanity, Drupal, WordPress, Shopify</Skill>
+        <Skill label="Project Management">
+          Slack, Linear, Asana, Google Analytics
+        </Skill>
+        <Skill label="Strategy">
+          Brand Audits, Analytics & Analysis, New Business Development, Marketing
+          Strategy
+        </Skill>
       </Section>
 
       <Section title="Awards">
@@ -191,10 +198,10 @@ function ResumeBody() {
 
       <Section title="Education">
         <Role
-          title="BFA, Illustration — Columbus College of Art & Design"
+          title="BFA — Columbus College of Art & Design"
           meta="1999 — 2003"
         >
-          <p className="mt-4">
+          <p className="mt-1">
             Illustration major, Graphic Design minor, with additional studies in
             fine art, web development, and industrial design.
           </p>
@@ -350,15 +357,20 @@ export default function InfoModal({
         <div className={`min-h-0 overflow-y-auto ${isResume ? "p-8 sm:p-12" : "p-8"}`}>
           {isResume ? (
             <>
-              <h2 className="pr-12 text-3xl font-medium md:text-4xl">Resumé</h2>
+              <h2 className="pr-12 text-3xl font-medium md:text-4xl">
+                Andrew Weitzel
+              </h2>
+              <p className="mt-1 text-base font-normal text-white md:text-lg">
+                Resumé
+              </p>
               <a
                 href={RESUME_FILE}
                 download
-                className="mt-5 inline-flex items-center rounded-full border border-white/60 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10 md:text-base"
+                className="mt-5 inline-flex items-center rounded-full border border-white/60 px-5 py-2 font-medium text-white transition-colors hover:bg-white/10"
               >
-                Download Résumé (.docx)
+                Download Resumé
               </a>
-              <div className="mt-2 text-sm leading-relaxed text-white md:text-base">
+              <div className="mt-2 text-base leading-relaxed text-white md:text-lg">
                 <ResumeBody />
               </div>
             </>
