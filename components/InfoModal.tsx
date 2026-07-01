@@ -5,7 +5,14 @@ import { useEffect, useState } from "react";
 export type InfoKind = "resume" | "contact";
 
 const RESUME_FILE = "/Andrew_Weitzel_Resume_2026.docx";
-const CONTACT_EMAIL = "andrew.john.weitzel@gmail.com";
+
+// Contact email kept out of the source/markup as base64, decoded at runtime —
+// a light deterrent against address-scraping bots. (App is client-only, so the
+// plain address only ever exists in the live DOM after Contact is opened.)
+const CONTACT_EMAIL_B64 = "YW5kcmV3LmpvaG4ud2VpdHplbEBnbWFpbC5jb20=";
+function contactEmail() {
+  return typeof window === "undefined" ? "" : window.atob(CONTACT_EMAIL_B64);
+}
 
 // Native submission to the Google Form (no embed, no click-out). Field ids
 // were read from the form's FB_PUBLIC_LOAD_DATA_.
@@ -317,6 +324,7 @@ export default function InfoModal({
   }, [onClose]);
 
   const isResume = kind === "resume";
+  const email = contactEmail();
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6">
@@ -381,10 +389,10 @@ export default function InfoModal({
                 <p>
                   Nice to meet ya! Feel free to email me at{" "}
                   <a
-                    href={`mailto:${CONTACT_EMAIL}`}
+                    href={`mailto:${email}`}
                     className="font-medium text-white underline underline-offset-2"
                   >
-                    {CONTACT_EMAIL}
+                    {email}
                   </a>{" "}
                   or rock the fields below. Thanks!
                 </p>
