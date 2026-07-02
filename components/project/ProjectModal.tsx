@@ -51,6 +51,17 @@ export default function ProjectModal({
     setRevealed(false);
   }, [opened, project, revealDelay]);
 
+  // Once revealed and loaded, auto-nudge the content up after a beat to hint
+  // there's more to scroll — unless the user has already scrolled themselves.
+  useEffect(() => {
+    if (!revealed || !content) return;
+    const t = setTimeout(() => {
+      const el = scrollRef.current;
+      if (el && el.scrollTop < 10) el.scrollTo({ top: 200, behavior: "smooth" });
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [revealed, content]);
+
   if (!project) return null;
 
   const src = content ? videoSrc(content.videoUrl) : null;
