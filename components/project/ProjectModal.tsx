@@ -52,14 +52,30 @@ export default function ProjectModal({
   }, [opened, project, revealDelay]);
 
   // Once revealed and loaded, auto-nudge the content up after a beat to hint
-  // there's more to scroll — unless the user has already scrolled themselves.
+  // there's more to scroll — unless the user has already scrolled. Custom
+  // rAF tween (slow, ease-out) rather than native smooth scroll.
   useEffect(() => {
     if (!revealed || !content) return;
-    const t = setTimeout(() => {
+    let raf = 0;
+    const timer = setTimeout(() => {
       const el = scrollRef.current;
-      if (el && el.scrollTop < 10) el.scrollTo({ top: 200, behavior: "smooth" });
+      if (!el || el.scrollTop >= 10) return;
+      const start = el.scrollTop;
+      const dist = 200 - start;
+      const duration = 1600;
+      const t0 = performance.now();
+      const easeOut = (p: number) => 1 - Math.pow(1 - p, 3);
+      const step = (now: number) => {
+        const p = Math.min(1, (now - t0) / duration);
+        el.scrollTop = start + dist * easeOut(p);
+        if (p < 1) raf = requestAnimationFrame(step);
+      };
+      raf = requestAnimationFrame(step);
     }, 2000);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(timer);
+      cancelAnimationFrame(raf);
+    };
   }, [revealed, content]);
 
   if (!project) return null;
