@@ -20,8 +20,15 @@ interface ProjectModalProps {
   revealDelay?: number;
 }
 
-function vimeoId(url?: string) {
-  return url?.match(/vimeo\.com\/(?:video\/)?(\d+)/)?.[1] ?? null;
+// videoUrl may hold a Vimeo/Gumlet URL or a full embed code (either provider).
+// Pull the id out of whichever it is and return the canonical player src.
+function videoSrc(url?: string): string | null {
+  if (!url) return null;
+  const vimeo = url.match(/vimeo\.com\/(?:video\/)?(\d+)/)?.[1];
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo}`;
+  const gumlet = url.match(/gumlet\.io\/embed\/([\w-]+)/)?.[1];
+  if (gumlet) return `https://play.gumlet.io/embed/${gumlet}`;
+  return null;
 }
 
 export default function ProjectModal({
@@ -46,7 +53,7 @@ export default function ProjectModal({
 
   if (!project) return null;
 
-  const id = content ? vimeoId(content.videoUrl) : null;
+  const src = content ? videoSrc(content.videoUrl) : null;
 
   return (
     <div
@@ -85,11 +92,11 @@ export default function ProjectModal({
           <p className="mx-auto max-w-5xl px-6 py-10 text-black/40">Loading…</p>
         ) : (
           <div className="pt-8">
-            {id && (
+            {src && (
               <div className="mx-auto mb-14 max-w-7xl px-6">
                 <div className="aspect-video overflow-hidden rounded-lg bg-black">
                   <iframe
-                    src={`https://player.vimeo.com/video/${id}`}
+                    src={src}
                     allow="autoplay; fullscreen; picture-in-picture"
                     allowFullScreen
                     className="h-full w-full"
