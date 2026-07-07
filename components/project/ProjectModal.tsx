@@ -42,8 +42,11 @@ export default function ProjectModal({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Reveal after the full-screen open transition; hide immediately on close.
+  // On prev/next navigation (project change while open) this also fades the
+  // sheet out first — the WebGL teaser slides behind it — then fades back in.
   useEffect(() => {
     if (opened && project) {
+      setRevealed(false);
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
       const t = setTimeout(() => setRevealed(true), revealDelay);
       return () => clearTimeout(t);

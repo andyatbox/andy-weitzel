@@ -84,6 +84,11 @@ export default function PortfolioApp() {
   itemsRef.current = items;
   const portfolioRef = useRef(portfolio);
   portfolioRef.current = portfolio;
+  const activeProjectRef = useRef(activeProject);
+  activeProjectRef.current = activeProject;
+  // Hover tooltip ("View … Project") element, driven imperatively so mouse
+  // tracking never re-renders React.
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   // Switch the portfolio by replaying the slide intro: slide the panel out to
   // the parked (pre-intro) state — exposing the logo-bg — swap the portfolio
@@ -158,6 +163,27 @@ export default function PortfolioApp() {
     setOpened(false);
   }, []);
 
+  // Prev/next within the open project's portfolio (wraps at the ends). The
+  // modal fades out on the project change while the engine slides the
+  // full-screen teaser behind it to the new item, then the content fades in.
+  const navigateProject = useCallback(
+    (dir: 1 | -1) => {
+      const list = itemsRef.current;
+      const cur = activeProjectRef.current;
+      if (!cur || list.length < 2) return;
+      const idx = list.findIndex((it) => it.slug === cur.slug);
+      const next = ((idx < 0 ? 0 : idx) + dir + list.length) % list.length;
+      const item = list[next];
+      setActiveProject({
+        slug: item.slug,
+        title: item.title,
+        category: CATEGORY[portfolioRef.current],
+      });
+      engine.scrollToIndex(next);
+    },
+    [engine]
+  );
+
   const openInfo = useCallback((kind: InfoKind) => {
     infoOpenRef.current = true;
     setInfoModal(kind);
@@ -173,12 +199,15 @@ export default function PortfolioApp() {
   // on the gallery (no drag) opens the active project; scrolling is suppressed
   // while a project is open.
   useEffect(() => {
+    let startX = 0;
     let startY = 0;
+    let lastX = 0;
     let lastY = 0;
     let lastTime = 0;
     let flingVelocity = 0;
     let active = false; // pointer is down
     let dragging = false; // threshold crossed — suppress clicks
+    let axis: "x" | "y" = "y"; // locked drag axis (horizontal is touch-only)
     let downOnGallery = false;
 
     const THRESHOLD = 4;
@@ -198,9 +227,12 @@ export default function PortfolioApp() {
       if (openedRef.current || infoOpenRef.current) return;
       active = true;
       dragging = false;
+      axis = "y";
       downOnGallery =
         !!galleryRef.current && galleryRef.current.contains(e.target as Node);
+      startX = e.clientX;
       startY = e.clientY;
+      lastX = e.clientX;
       lastY = e.clientY;
       lastTime = performance.now();
       flingVelocity = 0;
@@ -208,17 +240,26 @@ export default function PortfolioApp() {
 
     const onPointerMove = (e: PointerEvent) => {
       if (!active) return;
-      const dy = lastY - e.clientY;
-      if (!dragging && Math.abs(e.clientY - startY) > THRESHOLD) {
+      if (!dragging) {
+        const totalX = e.clientX - startX;
+        const totalY = e.clientY - startY;
+        // Vertical engages for any input; horizontal only on touch devices.
+        const crossedY = Math.abs(totalY) > THRESHOLD;
+        const crossedX = isTouch && Math.abs(totalX) > THRESHOLD;
+        if (!crossedX && !crossedY) return;
         dragging = true;
+        // Lock to the dominant axis on touch; non-touch is always vertical.
+        axis = isTouch && Math.abs(totalX) > Math.abs(totalY) ? "x" : "y";
         engine.setInputHeld(true);
         document.body.style.cursor = "grabbing";
       }
-      if (!dragging) return;
-      engine.target += dy * DRAG_MULTIPLIER;
+      // Drag up (y) or swipe left (x) advances; the strip follows the finger.
+      const d = axis === "x" ? lastX - e.clientX : lastY - e.clientY;
+      engine.target += d * DRAG_MULTIPLIER;
       const now = performance.now();
       const dt = Math.max(1, now - lastTime);
-      flingVelocity = (dy / dt) * 16.7;
+      flingVelocity = (d / dt) * 16.7;
+      lastX = e.clientX;
       lastY = e.clientY;
       lastTime = now;
     };
@@ -251,7 +292,61 @@ export default function PortfolioApp() {
       window.removeEventListener("pointercancel", onPointerCancel);
       document.body.style.cursor = "";
     };
-  }, [engine, openProject]);
+  }, [engine, openProject, isTouch]);
+
+  // Cursor-following "View … Project" tooltip over the gallery teasers.
+  // Non-touch only; hidden while dragging, while a project or info modal is
+  // open, and during portfolio switches. Driven imperatively (no re-renders).
+  useEffect(() => {
+    if (isTouch) return;
+    const tip = tooltipRef.current;
+    if (!tip) return;
+    let down = false;
+    const hide = () => {
+      tip.style.opacity = "0";
+    };
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      const overGallery =
+        !!galleryRef.current && galleryRef.current.contains(e.target as Node);
+      if (
+        down ||
+        !overGallery ||
+        openedRef.current ||
+        infoOpenRef.current ||
+        switchingRef.current
+      ) {
+        hide();
+        return;
+      }
+      const item = itemsRef.current[engine.activeIndex];
+      if (!item) {
+        hide();
+        return;
+      }
+      tip.textContent = `View ${item.title} Project`;
+      tip.style.transform = `translate(${e.clientX + 18}px, ${e.clientY + 20}px)`;
+      tip.style.opacity = "1";
+    };
+    const onDown = () => {
+      down = true;
+      hide();
+    };
+    const onUp = () => {
+      down = false;
+    };
+    const onLeave = () => hide();
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointerup", onUp);
+    document.documentElement.addEventListener("pointerleave", onLeave);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointerup", onUp);
+      document.documentElement.removeEventListener("pointerleave", onLeave);
+    };
+  }, [engine, isTouch]);
 
   const ready = !!viewport && !!portfolios;
 
@@ -427,8 +522,73 @@ export default function PortfolioApp() {
         </div>
       </div>
 
+      {/* Cursor-following teaser tooltip (non-touch only, z-30 — under the
+          project overlay). Positioned/filled imperatively from the pointer
+          effect above. */}
+      {!isTouch && (
+        <div
+          ref={tooltipRef}
+          aria-hidden
+          className="pointer-events-none fixed left-0 top-0 z-30 whitespace-nowrap rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-black shadow-lg"
+          style={{ opacity: 0, transition: "opacity 0.15s ease", willChange: "transform" }}
+        />
+      )}
+
       {/* Scrollable project content overlay — below the close button (z-50). */}
       <ProjectModal project={activeProject} opened={opened} height={height} />
+
+      {/* Prev/next project navigation — top-left, styled like the close X.
+          Labels collapse to icon-only circles on small screens. */}
+      <div
+        className="fixed left-5 top-5 z-50 flex items-center gap-2 transition-opacity duration-300"
+        style={{
+          opacity: opened && items.length > 1 ? 1 : 0,
+          pointerEvents: opened && items.length > 1 ? "auto" : "none",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => navigateProject(-1)}
+          aria-label="Previous project"
+          className="flex h-11 w-11 items-center justify-center gap-1.5 rounded-full bg-[#111111] text-white shadow-lg sm:w-auto sm:px-5"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#ffffff"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0"
+          >
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          <span className="hidden text-sm font-medium sm:inline">Previous</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigateProject(1)}
+          aria-label="Next project"
+          className="flex h-11 w-11 items-center justify-center gap-1.5 rounded-full bg-[#111111] text-white shadow-lg sm:w-auto sm:px-5"
+        >
+          <span className="hidden text-sm font-medium sm:inline">Next</span>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#ffffff"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0"
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+      </div>
 
       {/* Resumé / Contact popup — above everything (z-70). */}
       {infoModal && <InfoModal kind={infoModal} onClose={closeInfo} />}

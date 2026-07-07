@@ -132,10 +132,6 @@ function GalleryScene({
   // Per-plane "is currently displaced" flag, so idle planes are reset to flat
   // exactly once (instead of rewritten every frame).
   const planeDirty = useRef<boolean[]>([]);
-  // anchorIndex is the active item captured at open time, kept centered while
-  // the gap collapses.
-  const anchorIndex = useRef(0);
-  const prevOpened = useRef(false);
 
   // Pointer state (canvas-local NDC + eased strength). Untouched on touch
   // devices, where the effect is disabled outright.
@@ -203,11 +199,8 @@ function GalleryScene({
     engine.update();
 
     // --- open/close animation -------------------------------------------
-    // Freeze the active item as the anchor the moment opening begins. The
-    // progress `t` is owned by the parent and eased in lockstep with the
+    // The progress `t` is owned by the parent and eased in lockstep with the
     // canvas resize, so plane dims (from R3F size), zoom and gap stay synced.
-    if (opened && !prevOpened.current) anchorIndex.current = engine.activeIndex;
-    prevOpened.current = opened;
     const t = anim.t;
 
     // Pull-back eases to a perfect fill (zoom 1) as the project opens.
@@ -244,15 +237,17 @@ function GalleryScene({
     }
     cam.updateProjectionMatrix();
 
-    // Closed: engine-driven scroll. Opening/open: anchored on the active item
-    // with the gap collapsing to 0, so it stays centered while filling the
-    // screen. The two modes agree at t=0, so the switch is seamless.
+    // Closed: engine-driven scroll. Opening/open: the engine's continuous
+    // progress is rescaled to the collapsed spacing, so the active item stays
+    // centered while filling the screen — and prev/next navigation while open
+    // slides the full-screen planes to the new project. The two modes agree at
+    // t=0, so the switch is seamless.
     const axis = isLandscape ? (animating ? H : planeHeight) : animating ? W : planeWidth;
     let spacingUsed: number;
     let currentUsed: number;
     if (t > 0.0001) {
       spacingUsed = axis + THREE.MathUtils.lerp(itemGap, 0, t);
-      currentUsed = anchorIndex.current * spacingUsed;
+      currentUsed = (engine.current / (engine.spacing || 1)) * spacingUsed;
     } else {
       spacingUsed = spacing;
       currentUsed = engine.current;
