@@ -245,13 +245,18 @@ export default function Menu({
   // snap together, and the active item settles dead-center. Always vertical,
   // regardless of orientation.
   //
-  // Landscape uses a fixed row pitch (titles never wrap in the rail). Portrait
-  // lets titles wrap to multiple lines, so rows have *different* heights: we
-  // measure each unique item's rendered height and stack the strip by those
-  // cumulative heights (with infinite wrap), instead of a constant pitch.
+  // Titles may wrap to multiple lines in either orientation, so rows have
+  // *different* heights: we measure each unique item's rendered height and
+  // stack the strip by those cumulative heights (with infinite wrap), instead
+  // of a constant pitch. Landscape keeps its airy spread by enforcing the
+  // orientation row pitch as a minimum advance; portrait stays text-tight.
   useEffect(() => {
     let raf = 0;
     const N = n;
+    if (N === 0) return;
+    // Landscape's spread pitch is a floor, so single-line rows keep the airy
+    // rhythm while wrapped rows grow past it as needed.
+    const minAdvance = isLandscape ? rowHeight : 0;
     const heights = new Array(N).fill(baseRow); // per-item advance (px)
     const prefix = new Array(N + 1).fill(0); // prefix sums of `heights`
     const mod = (a: number, b: number) => ((a % b) + b) % b;
@@ -260,59 +265,46 @@ export default function Menu({
       const spacing = engine.spacing || 1;
       const progress = engine.current / spacing;
 
-      if (!isLandscape && N > 0) {
-        // Measure each unique item's wrapped height. Reading offsetHeight here
-        // is cheap: only transforms/opacity changed since the last layout, and
-        // neither dirties layout, so this doesn't force a reflow.
-        let H = 0;
-        for (let i = 0; i < N; i++) {
-          const el = rowRefs.current[i];
-          const h = el ? el.offsetHeight : 0;
-          heights[i] = (h > 0 ? h : baseRow) + ROW_GAP;
-        }
-        for (let i = 0; i < N; i++) {
-          prefix[i] = H;
-          H += heights[i];
-        }
-        prefix[N] = H;
-        const ET = reps * H; // wrap period in px (matches the node strip length)
+      // Measure each unique item's wrapped height. Reading offsetHeight here
+      // is cheap: only transforms/opacity changed since the last layout, and
+      // neither dirties layout, so this doesn't force a reflow.
+      let H = 0;
+      for (let i = 0; i < N; i++) {
+        const el = rowRefs.current[i];
+        const h = el ? el.offsetHeight : 0;
+        heights[i] = Math.max(minAdvance, (h > 0 ? h : baseRow) + ROW_GAP);
+      }
+      for (let i = 0; i < N; i++) {
+        prefix[i] = H;
+        H += heights[i];
+      }
+      prefix[N] = H;
+      const ET = reps * H; // wrap period in px (matches the node strip length)
 
-        // Pixel scroll position that should sit at the viewport center. At an
-        // integer progress the active item is centered; between two items it
-        // interpolates by their half-heights so the motion stays smooth.
-        const iI = Math.floor(progress);
-        const frac = progress - iI;
-        const hI = heights[mod(iI, N)];
-        const hI1 = heights[mod(iI + 1, N)];
-        const cumCenterI = Math.floor(iI / N) * H + prefix[mod(iI, N)] + hI / 2;
-        const S = mod(cumCenterI + frac * (hI / 2 + hI1 / 2), ET);
+      // Pixel scroll position that should sit at the viewport center. At an
+      // integer progress the active item is centered; between two items it
+      // interpolates by their half-heights so the motion stays smooth.
+      const iI = Math.floor(progress);
+      const frac = progress - iI;
+      const hI = heights[mod(iI, N)];
+      const hI1 = heights[mod(iI + 1, N)];
+      const cumCenterI = Math.floor(iI / N) * H + prefix[mod(iI, N)] + hI / 2;
+      const S = mod(cumCenterI + frac * (hI / 2 + hI1 / 2), ET);
 
-        for (let k = 0; k < total; k++) {
-          const el = rowRefs.current[k];
-          if (!el) continue;
-          // Linear center of this node, then nearest wrapped copy around S.
-          const Lk = Math.floor(k / N) * H + prefix[k % N] + heights[k % N] / 2;
-          const pPx = mod(Lk - S + ET / 2, ET) - ET / 2;
-          // Fade/underline stay keyed to item-step distance (consistent count
-          // of visible items), independent of the variable pixel spacing.
-          const stepP = place(k, progress, total);
-          el.style.transform = `translateY(calc(-50% + ${pPx}px))`;
-          el.style.pointerEvents = Math.abs(stepP) > FADE_ZERO * 0.7 ? "none" : "auto";
-          const title = titleRefs.current[k];
-          if (title)
-            title.style.textDecoration = Math.abs(stepP) < 0.5 ? "underline" : "none";
-        }
-      } else {
-        for (let k = 0; k < total; k++) {
-          const el = rowRefs.current[k];
-          if (!el) continue;
-          const p = place(k, progress, total);
-          el.style.transform = `translateY(calc(-50% + ${p * rowHeight}px))`;
-          el.style.pointerEvents = Math.abs(p) > FADE_ZERO * 0.7 ? "none" : "auto";
-          const title = titleRefs.current[k];
-          // The centered item (|p| < 0.5) is the active one — underline it.
-          if (title) title.style.textDecoration = Math.abs(p) < 0.5 ? "underline" : "none";
-        }
+      for (let k = 0; k < total; k++) {
+        const el = rowRefs.current[k];
+        if (!el) continue;
+        // Linear center of this node, then nearest wrapped copy around S.
+        const Lk = Math.floor(k / N) * H + prefix[k % N] + heights[k % N] / 2;
+        const pPx = mod(Lk - S + ET / 2, ET) - ET / 2;
+        // Fade/underline stay keyed to item-step distance (consistent count
+        // of visible items), independent of the variable pixel spacing.
+        const stepP = place(k, progress, total);
+        el.style.transform = `translateY(calc(-50% + ${pPx}px))`;
+        el.style.pointerEvents = Math.abs(stepP) > FADE_ZERO * 0.7 ? "none" : "auto";
+        const title = titleRefs.current[k];
+        if (title)
+          title.style.textDecoration = Math.abs(stepP) < 0.5 ? "underline" : "none";
       }
       raf = requestAnimationFrame(tick);
     };
@@ -412,9 +404,7 @@ export default function Menu({
         ref={(el) => void (rowRefs.current[node.key] = el)}
         type="button"
         onClick={() => onSelectItem(node.item)}
-        className={`absolute flex items-baseline gap-2.5 text-left font-medium ${
-          isLandscape ? "whitespace-nowrap" : "whitespace-normal"
-        }`}
+        className="absolute flex items-baseline gap-2.5 whitespace-normal text-left font-medium"
         style={{
           top: listTop,
           // Rows span the column width and wrap within it (portrait); text stays

@@ -16,6 +16,36 @@ const PLANE_SEGMENTS = 32;
 const BEND_FACTOR = 2.5;
 const MAX_BEND_RATIO = 0.3;
 
+// Multi-line titles: three's Font offsets '\n' lines by
+// (bb.yMax - bb.yMin + underlineThickness) / resolution per unit of size —
+// (1351 + 347 + 69) / 1000 for NewSpirit-Medium.typeface.json.
+const TITLE_LINE_RATIO = 1.767;
+
+// Greedy word-wrap for the WebGL titles, measured with the DOM-loaded
+// "New Spirit" face (same outlines as the typeface.json conversion), with a
+// small safety margin for conversion drift.
+let measureCtx: CanvasRenderingContext2D | null = null;
+function wrapTitle(title: string, fontSize: number, maxWidth: number): string[] {
+  if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
+  const ctx = measureCtx;
+  if (!ctx) return [title];
+  ctx.font = `500 ${fontSize}px "New Spirit", serif`;
+  const limit = maxWidth * 0.96;
+  const lines: string[] = [];
+  let line = "";
+  for (const word of title.split(/\s+/)) {
+    const test = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(test).width > limit) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 // RGB shift: like the bend, driven by scroll velocity (speed + momentum +
 // direction). The red and blue channel layers slide apart along the motion
 // axis by this much; green stays centered. Additive blending sums the three
@@ -116,6 +146,15 @@ function GalleryScene({
   const planeHeight = size.height;
   const itemGap = isLandscape ? ITEM_GAP_LANDSCAPE : ITEM_GAP_PORTRAIT;
   const spacing = (isLandscape ? planeHeight : planeWidth) + itemGap;
+
+  const fontSize = Math.min(planeWidth, planeHeight) * 0.05;
+  const padding = fontSize * 0.8;
+  // Wrapped title lines per item — responsive to the plane size, so long
+  // titles break instead of running off the plane edge.
+  const titles = useMemo(
+    () => items.map((it) => wrapTitle(it.title, fontSize, planeWidth - padding * 2)),
+    [items, fontSize, planeWidth, padding]
+  );
 
   const textures = useItemTextures(items, planeWidth / planeHeight);
   const groupRefs = useRef<(THREE.Group | null)[]>([]);
@@ -228,7 +267,14 @@ function GalleryScene({
         redRefs.current[i]?.scale.set(W, H, 1);
         greenRefs.current[i]?.scale.set(W, H, 1);
         blueRefs.current[i]?.scale.set(W, H, 1);
-        textRefs.current[i]?.position.set(-W / 2 + pad, -H / 2 + pad, 4);
+        // Multi-line titles anchor their LAST line at the bottom padding, so
+        // extra lines stack upward onto the plane instead of off its edge.
+        const lines = titles[i]?.length ?? 1;
+        textRefs.current[i]?.position.set(
+          -W / 2 + pad,
+          -H / 2 + pad + (lines - 1) * fs * TITLE_LINE_RATIO,
+          4
+        );
         // Re-crop the texture to the live aspect each frame, else the UVs stay
         // at the old aspect while the geometry scales — stretching the image.
         const tex = textures[i];
@@ -483,9 +529,6 @@ function GalleryScene({
     }
   });
 
-  const fontSize = Math.min(planeWidth, planeHeight) * 0.05;
-  const padding = fontSize * 0.8;
-
   return (
     <>
       {items.map((item, i) => (
@@ -511,9 +554,17 @@ function GalleryScene({
               curveSegments={6}
               bevelEnabled={false}
               renderOrder={1}
-              position={[-planeWidth / 2 + padding, -planeHeight / 2 + padding, 4]}
+              // Anchor the last line at the bottom padding; wrapped lines
+              // stack upward onto the plane (see TITLE_LINE_RATIO).
+              position={[
+                -planeWidth / 2 + padding,
+                -planeHeight / 2 +
+                  padding +
+                  (titles[i].length - 1) * fontSize * TITLE_LINE_RATIO,
+                4,
+              ]}
             >
-              {item.title}
+              {titles[i].join("\n")}
               <meshBasicMaterial
                 color="#ffffff"
                 toneMapped={false}
