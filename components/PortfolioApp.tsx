@@ -557,7 +557,7 @@ export default function PortfolioApp() {
           type="button"
           onClick={() => navigateProject(-1)}
           aria-label="Previous project"
-          className="flex h-11 w-11 items-center justify-center gap-1.5 rounded-full bg-[#111111] text-white shadow-lg sm:w-auto sm:px-5"
+          className="flex h-11 w-11 items-center justify-center gap-1.5 rounded-full bg-[#111111] text-white shadow-lg ring-2 ring-inset ring-white sm:w-auto sm:px-5"
         >
           <svg
             width="18"
@@ -578,7 +578,7 @@ export default function PortfolioApp() {
           type="button"
           onClick={() => navigateProject(1)}
           aria-label="Next project"
-          className="flex h-11 w-11 items-center justify-center gap-1.5 rounded-full bg-[#111111] text-white shadow-lg sm:w-auto sm:px-5"
+          className="flex h-11 w-11 items-center justify-center gap-1.5 rounded-full bg-[#111111] text-white shadow-lg ring-2 ring-inset ring-white sm:w-auto sm:px-5"
         >
           <span className="hidden text-sm font-medium sm:inline">Next</span>
           <svg
@@ -604,7 +604,7 @@ export default function PortfolioApp() {
         type="button"
         onClick={closeProject}
         aria-label="Close project"
-        className="fixed right-5 top-5 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-[#111111] shadow-lg transition-opacity duration-300"
+        className="fixed right-5 top-5 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-[#111111] shadow-lg ring-2 ring-inset ring-white transition-opacity duration-300"
         style={{
           opacity: opened ? 1 : 0,
           pointerEvents: opened ? "auto" : "none",

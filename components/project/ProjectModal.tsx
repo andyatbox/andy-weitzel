@@ -108,7 +108,7 @@ export default function ProjectModal({
           A chevron hints that there's content to scroll into. */}
       <div className="relative w-full" style={{ height }}>
         <div
-          className="absolute bottom-8 left-1/2 flex h-14 w-14 -translate-x-1/2 animate-bounce items-center justify-center rounded-full bg-black/30 backdrop-blur-md"
+          className="absolute bottom-8 left-1/2 flex h-14 w-14 -translate-x-1/2 animate-bounce items-center justify-center rounded-full bg-black/30 ring-2 ring-inset ring-white backdrop-blur-md"
           style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.6s ease" }}
         >
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
