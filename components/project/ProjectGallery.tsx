@@ -1,22 +1,87 @@
 "use client";
 
-import { useRef, useState } from "react";
-import type { SanityImage } from "@/lib/portfolios";
+import { useEffect, useRef, useState } from "react";
+import type { GallerySlide } from "@/lib/portfolios";
 import { urlFor } from "@/lib/sanity";
+import {
+  getVideoEmbedSrc,
+  isVideoEndedMessage,
+  isVideoReadyMessage,
+  subscribeVideoEnded,
+} from "@/lib/videoEmbed";
 
-export default function ProjectGallery({ images }: { images?: SanityImage[] }) {
+export default function ProjectGallery({ images }: { images?: GallerySlide[] }) {
   const [current, setCurrent] = useState(0);
   const [dragOffset, setDragOffset] = useState(0);
+  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  // Per-slide reload counters: bumped when that video finishes, remounting its
+  // iframe so the player rewinds and shows its cover again (with the play
+  // button back on top).
+  const [reloadTicks, setReloadTicks] = useState<Record<number, number>>({});
   const startX = useRef<number | null>(null);
   const deltaX = useRef(0);
   const dragging = useRef(false);
+  // Magnitude of the last completed drag, so the video overlay can tell a
+  // tap (toggle playback) apart from the tail end of a swipe.
+  const lastDragAbs = useRef(0);
+  const iframeRefs = useRef<Record<number, HTMLIFrameElement | null>>({});
+
+  // Watch every mounted player (iframes stay mounted across slides so swiping
+  // never drops to a black frame): subscribe to each one's "ended" event when
+  // it reports ready, and reset that slide to its cover when playback ends.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const entry = Object.entries(iframeRefs.current).find(
+        ([, frame]) => frame && frame.contentWindow === e.source
+      );
+      if (!entry) return;
+      const [key, frame] = entry;
+      const i = Number(key);
+      const win = frame!.contentWindow!;
+      if (isVideoReadyMessage(e.data)) subscribeVideoEnded(win, frame!.src);
+      if (isVideoEndedMessage(e.data)) {
+        setPlayingIndex((p) => (p === i ? null : p));
+        setReloadTicks((m) => ({ ...m, [i]: (m[i] ?? 0) + 1 }));
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   if (!images?.length) return null;
   const count = images.length;
 
+  // Send play/pause to a player iframe — Vimeo's player protocol or Gumlet's
+  // player.js protocol.
+  const postCommand = (i: number, method: "play" | "pause") => {
+    const frame = iframeRefs.current[i];
+    const win = frame?.contentWindow;
+    if (!frame || !win) return;
+    if (frame.src.includes("vimeo")) {
+      win.postMessage(JSON.stringify({ method }), "*");
+    } else {
+      win.postMessage(
+        JSON.stringify({ context: "player.js", version: "0.0.11", method }),
+        "*"
+      );
+    }
+  };
+
   const goTo = (index: number) => {
+    // Players stay mounted across slides, so pause the one that was playing
+    // instead of letting it run (or unmounting it to black, as before).
+    if (playingIndex !== null) postCommand(playingIndex, "pause");
     setCurrent((index + count) % count);
     setDragOffset(0);
+    setPlayingIndex(null);
+  };
+
+  // The iframe sits under a transparent overlay so swipes reach the slider
+  // (drag works on touch); taps control the player through its postMessage
+  // API instead.
+  const toggleVideo = (i: number) => {
+    postCommand(i, playingIndex === i ? "pause" : "play");
+    setPlayingIndex(playingIndex === i ? null : i);
   };
 
   const dragStart = (x: number) => {
@@ -31,6 +96,7 @@ export default function ProjectGallery({ images }: { images?: SanityImage[] }) {
   };
   const dragEnd = () => {
     if (!dragging.current) return;
+    lastDragAbs.current = Math.abs(deltaX.current);
     if (Math.abs(deltaX.current) > 50) goTo(current + (deltaX.current < 0 ? 1 : -1));
     else setDragOffset(0);
     dragging.current = false;
@@ -57,21 +123,75 @@ export default function ProjectGallery({ images }: { images?: SanityImage[] }) {
             transition: dragging.current ? "none" : "transform 0.4s ease",
           }}
         >
-          {images.map((image, i) => (
-            <div
-              key={i}
-              className="relative h-full flex-shrink-0"
-              style={{ width: `${100 / count}%` }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={urlFor(image).width(1200).height(675).fit("crop").auto("format").url()}
-                alt={image.alt || `Slide ${i + 1}`}
-                className="h-full w-full object-cover"
-                draggable={false}
-              />
-            </div>
-          ))}
+          {images.map((item, i) => {
+            const base =
+              item._type === "videoSlide" ? getVideoEmbedSrc(item.videoUrl) : null;
+            // Gumlet: hide the player's own controls (its purple play button
+            // would ring around ours); our overlay drives play/pause anyway.
+            const videoSrc = base
+              ? base.includes("vimeo")
+                ? base
+                : `${base}?disable_player_controls=true`
+              : null;
+            return (
+              <div
+                key={i}
+                className="relative h-full flex-shrink-0"
+                style={{ width: `${100 / count}%` }}
+              >
+                {item._type === "videoSlide" ? (
+                  videoSrc ? (
+                    <>
+                      <iframe
+                        key={reloadTicks[i] ?? 0}
+                        ref={(el) => void (iframeRefs.current[i] = el)}
+                        src={videoSrc}
+                        allow="autoplay; fullscreen; picture-in-picture"
+                        allowFullScreen
+                        className="pointer-events-none h-full w-full bg-black"
+                      />
+                      <div
+                        role="button"
+                        aria-label={playingIndex === i ? "Pause video" : "Play video"}
+                        className="absolute inset-0 flex cursor-pointer items-center justify-center outline-none"
+                        onClick={() => {
+                          if (lastDragAbs.current > 10) return;
+                          toggleVideo(i);
+                        }}
+                      >
+                        {playingIndex !== i && (
+                          <span
+                            className="flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-lg"
+                            style={{ animation: "play-invert 1.4s infinite" }}
+                          >
+                            <svg
+                              width="24"
+                              height="24"
+                              viewBox="0 0 24 24"
+                              fill="#000000"
+                              className="ml-1"
+                            >
+                              <polygon points="6 4 20 12 6 20" />
+                            </svg>
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="h-full w-full bg-black" />
+                  )
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={urlFor(item).width(1200).height(675).fit("crop").auto("format").url()}
+                    alt={item.alt || `Slide ${i + 1}`}
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

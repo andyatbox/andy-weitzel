@@ -101,6 +101,15 @@ export interface SanityImage {
   asset?: { url?: string };
 }
 
+// A gallery slide is either an image or a video embed (Vimeo/Gumlet URL or
+// full embed code), matching the CMS's videoSlide object.
+export interface VideoSlide {
+  _type: "videoSlide";
+  videoUrl: string;
+}
+
+export type GallerySlide = SanityImage | VideoSlide;
+
 export interface ColumnsGroup {
   columns: "2" | "3";
   column1?: PortableTextBlock[];
@@ -113,7 +122,7 @@ export interface ProjectContent {
   title: string;
   category: string;
   videoUrl?: string;
-  gallery?: SanityImage[];
+  gallery?: GallerySlide[];
   body?: PortableTextBlock[];
   columnsContent?: ColumnsGroup[];
 }
@@ -126,7 +135,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
 
 const PROJECT_QUERY = `*[_type == "project" && slug.current == $slug][0]{
   _id, title, category, videoUrl,
-  gallery[]{ ..., asset-> },
+  gallery[]{ ..., _type == "image" => { ..., asset-> } },
   body[]{ ..., _type == "image" => { ..., asset-> } },
   columnsContent[]{
     columns,

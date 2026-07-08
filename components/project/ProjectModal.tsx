@@ -2,6 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CATEGORY_LABELS, useProject } from "@/lib/portfolios";
+import {
+  getVideoEmbedSrc,
+  isVideoEndedMessage,
+  isVideoReadyMessage,
+  subscribeVideoEnded,
+} from "@/lib/videoEmbed";
 import ProjectPortableText from "./ProjectPortableText";
 import ProjectColumns from "./ProjectColumns";
 import ProjectGallery from "./ProjectGallery";
@@ -20,17 +26,6 @@ interface ProjectModalProps {
   revealDelay?: number;
 }
 
-// videoUrl may hold a Vimeo/Gumlet URL or a full embed code (either provider).
-// Pull the id out of whichever it is and return the canonical player src.
-function videoSrc(url?: string): string | null {
-  if (!url) return null;
-  const vimeo = url.match(/vimeo\.com\/(?:video\/)?(\d+)/)?.[1];
-  if (vimeo) return `https://player.vimeo.com/video/${vimeo}`;
-  const gumlet = url.match(/gumlet\.io\/embed\/([\w-]+)/)?.[1];
-  if (gumlet) return `https://play.gumlet.io/embed/${gumlet}`;
-  return null;
-}
-
 export default function ProjectModal({
   project,
   opened,
@@ -44,11 +39,28 @@ export default function ProjectModal({
   // reload is user-gesture initiated and the iframe delegates autoplay).
   const [playing, setPlaying] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLIFrameElement>(null);
 
   // New project or a fresh open → show the play overlay again.
   useEffect(() => {
     setPlaying(false);
   }, [project?.slug, opened]);
+
+  // When the video finishes, drop back to the cover: setPlaying(false) reverts
+  // the iframe to its non-autoplay src, reloading the poster with the play
+  // button on top. Ended events arrive via the player's postMessage API.
+  useEffect(() => {
+    if (!playing) return;
+    const onMessage = (e: MessageEvent) => {
+      const frame = videoRef.current;
+      const win = frame?.contentWindow;
+      if (!win || e.source !== win) return;
+      if (isVideoReadyMessage(e.data)) subscribeVideoEnded(win, frame!.src);
+      if (isVideoEndedMessage(e.data)) setPlaying(false);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [playing]);
 
   // Reveal after the full-screen open transition; hide immediately on close.
   // On prev/next navigation (project change while open) this also fades the
@@ -92,7 +104,7 @@ export default function ProjectModal({
 
   if (!project) return null;
 
-  const src = content ? videoSrc(content.videoUrl) : null;
+  const src = content ? getVideoEmbedSrc(content.videoUrl) : null;
 
   return (
     <div
@@ -135,10 +147,18 @@ export default function ProjectModal({
               <div className="mx-auto mb-14 max-w-7xl px-6">
                 <div className="relative aspect-video overflow-hidden rounded-lg bg-black">
                   <iframe
+                    ref={videoRef}
+                    // Cover state hides Gumlet's own centered play button (its
+                    // purple ring shows around ours otherwise); playing state
+                    // re-enables controls with autoplay.
                     src={
-                      playing
-                        ? `${src}?${src.includes("vimeo") ? "autoplay=1" : "autoplay=true"}`
-                        : src
+                      src.includes("vimeo")
+                        ? playing
+                          ? `${src}?autoplay=1`
+                          : src
+                        : playing
+                          ? `${src}?autoplay=true`
+                          : `${src}?disable_player_controls=true`
                     }
                     allow="autoplay; fullscreen; picture-in-picture"
                     allowFullScreen
@@ -152,7 +172,7 @@ export default function ProjectModal({
                       type="button"
                       onClick={() => setPlaying(true)}
                       aria-label="Play video"
-                      className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-lg md:h-20 md:w-20"
+                      className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-lg outline-none md:h-20 md:w-20"
                       style={{ animation: "play-invert 1.4s infinite" }}
                     >
                       <svg
