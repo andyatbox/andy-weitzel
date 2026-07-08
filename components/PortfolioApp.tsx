@@ -294,11 +294,17 @@ export default function PortfolioApp() {
     };
   }, [engine, openProject, isTouch]);
 
+  const ready = !!viewport && !!portfolios;
+
   // Cursor-following "View … Project" tooltip over the gallery teasers.
   // Non-touch only; hidden while dragging, while a project or info modal is
   // open, and during portfolio switches. Driven imperatively (no re-renders).
+  // Depends on `ready`: the component returns null (no DOM at all, including
+  // the tooltip div) until viewport + portfolios load, so this effect must
+  // re-run once that flips true — otherwise it captures a null ref from a
+  // loading-phase render and never attaches its listeners.
   useEffect(() => {
-    if (isTouch) return;
+    if (isTouch || !ready) return;
     const tip = tooltipRef.current;
     if (!tip) return;
     let down = false;
@@ -325,7 +331,10 @@ export default function PortfolioApp() {
         return;
       }
       tip.textContent = `View ${item.title} Project`;
-      tip.style.transform = `translate(${e.clientX + 18}px, ${e.clientY + 20}px)`;
+      // Vertically centered on the cursor (the -50% resolves against the
+      // pill's own height); horizontally, the -100% (against its own width)
+      // pulls it fully to the left, with a 16px gap before the cursor.
+      tip.style.transform = `translate(calc(${e.clientX}px - 100% - 16px), calc(${e.clientY}px - 50%))`;
       tip.style.opacity = "1";
     };
     const onDown = () => {
@@ -346,9 +355,7 @@ export default function PortfolioApp() {
       window.removeEventListener("pointerup", onUp);
       document.documentElement.removeEventListener("pointerleave", onLeave);
     };
-  }, [engine, isTouch]);
-
-  const ready = !!viewport && !!portfolios;
+  }, [engine, isTouch, ready]);
 
   // Fire the intro once, the first time both viewport and portfolios are ready.
   // Content fades in immediately (parked at the edge beside the hero logo);
@@ -529,7 +536,7 @@ export default function PortfolioApp() {
         <div
           ref={tooltipRef}
           aria-hidden
-          className="pointer-events-none fixed left-0 top-0 z-30 whitespace-nowrap rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-black shadow-lg"
+          className="pointer-events-none fixed left-0 top-0 z-30 whitespace-nowrap rounded-full bg-white/80 px-3.5 py-1.5 text-sm font-medium text-black shadow-lg backdrop-blur-md"
           style={{ opacity: 0, transition: "opacity 0.15s ease", willChange: "transform" }}
         />
       )}

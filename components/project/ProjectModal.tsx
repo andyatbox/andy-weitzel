@@ -39,7 +39,16 @@ export default function ProjectModal({
 }: ProjectModalProps) {
   const content = useProject(project?.slug ?? null);
   const [revealed, setRevealed] = useState(false);
+  // Whether the visitor has hit play — the overlay button hides and the
+  // embed reloads with the provider's autoplay param (allowed because the
+  // reload is user-gesture initiated and the iframe delegates autoplay).
+  const [playing, setPlaying] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // New project or a fresh open → show the play overlay again.
+  useEffect(() => {
+    setPlaying(false);
+  }, [project?.slug, opened]);
 
   // Reveal after the full-screen open transition; hide immediately on close.
   // On prev/next navigation (project change while open) this also fades the
@@ -124,13 +133,39 @@ export default function ProjectModal({
           <div className="pt-8">
             {src && (
               <div className="mx-auto mb-14 max-w-7xl px-6">
-                <div className="aspect-video overflow-hidden rounded-lg bg-black">
+                <div className="relative aspect-video overflow-hidden rounded-lg bg-black">
                   <iframe
-                    src={src}
+                    src={
+                      playing
+                        ? `${src}?${src.includes("vimeo") ? "autoplay=1" : "autoplay=true"}`
+                        : src
+                    }
                     allow="autoplay; fullscreen; picture-in-picture"
                     allowFullScreen
                     className="h-full w-full"
                   />
+                  {/* Animated play button: blinking invert loop (see
+                      play-invert keyframes). Sits over the provider's own
+                      chrome; clicking starts playback and removes it. */}
+                  {!playing && (
+                    <button
+                      type="button"
+                      onClick={() => setPlaying(true)}
+                      aria-label="Play video"
+                      className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-lg md:h-20 md:w-20"
+                      style={{ animation: "play-invert 1.4s infinite" }}
+                    >
+                      <svg
+                        width="26"
+                        height="26"
+                        viewBox="0 0 24 24"
+                        fill="#000000"
+                        className="ml-1"
+                      >
+                        <polygon points="6 4 20 12 6 20" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
             )}

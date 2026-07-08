@@ -45,6 +45,21 @@ body {
   width: 100%;
 }
 
+/* Video play button: hard invert flips (white↔black) with tight ramps — a
+   techy blink that snaps rather than fades. The filter also inverts the
+   drop shadow into a brief white glow on each flip. */
+@keyframes play-invert {
+  0%, 42% {
+    filter: invert(0);
+  }
+  46%, 88% {
+    filter: invert(1);
+  }
+  92%, 100% {
+    filter: invert(0);
+  }
+}
+
 ::selection {
   background: transparent;
 }
