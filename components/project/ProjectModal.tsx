@@ -63,7 +63,7 @@ export default function ProjectModal({
         if (p < 1) raf = requestAnimationFrame(step);
       };
       raf = requestAnimationFrame(step);
-    }, 2000);
+    }, 1000);
     return () => {
       clearTimeout(timer);
       cancelAnimationFrame(raf);

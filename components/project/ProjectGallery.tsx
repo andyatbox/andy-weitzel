@@ -131,9 +131,14 @@ export default function ProjectGallery({ images }: { images?: GallerySlide[] }) 
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-6">
+    // Full-bleed strip: slides travel to the window edges, but each slide's
+    // media keeps the previous boxed dimensions (16:9 at the old max-w-7xl
+    // content width), centered and vh-capped — the strip's height matches
+    // that media box, so nothing scales up to "cover" the wider strip.
+    <div>
       <div
-        className="relative aspect-video cursor-grab touch-none select-none overflow-hidden border border-black bg-neutral-100 active:cursor-grabbing"
+        className="relative cursor-grab touch-none select-none overflow-hidden border-y border-black bg-neutral-100 active:cursor-grabbing"
+        style={{ height: "min(calc((min(100vw, 80rem) - 3rem) * 9 / 16), 80vh)" }}
         onTouchStart={(e) => dragStart(e.touches[0].clientX)}
         onTouchMove={(e) => dragMove(e.touches[0].clientX)}
         onTouchEnd={dragEnd}
@@ -163,12 +168,15 @@ export default function ProjectGallery({ images }: { images?: GallerySlide[] }) 
             return (
               <div
                 key={i}
-                className="relative h-full flex-shrink-0"
+                className="h-full flex-shrink-0"
                 style={{ width: `${100 / count}%` }}
               >
+                {/* Centered, contained media box: 16:9 at the strip height,
+                    i.e. the same dimensions the boxed slider had. */}
+                <div className="relative mx-auto aspect-video h-full max-w-full">
                 {item._type === "videoSlide" ? (
                   videoSrc ? (
-                    <div className="absolute inset-0 border border-black">
+                    <div className="absolute inset-0">
                       <iframe
                         key={reloadTicks[i] ?? 0}
                         ref={(el) => void (iframeRefs.current[i] = el)}
@@ -228,10 +236,11 @@ export default function ProjectGallery({ images }: { images?: GallerySlide[] }) 
                   <img
                     src={urlFor(item).width(1200).height(675).fit("crop").auto("format").url()}
                     alt={item.alt || `Slide ${i + 1}`}
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-contain"
                     draggable={false}
                   />
                 )}
+                </div>
               </div>
             );
           })}
