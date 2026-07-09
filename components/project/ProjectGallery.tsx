@@ -18,6 +18,11 @@ export default function ProjectGallery({ images }: { images?: GallerySlide[] }) 
   // iframe so the player rewinds and shows its cover again (with the play
   // button back on top).
   const [reloadTicks, setReloadTicks] = useState<Record<number, number>>({});
+  // Poster image per video slide, resolved via /api/video-poster. Shown as our
+  // own cover over the iframe: restores the poster while fully hiding the
+  // provider's built-in center play button (Gumlet's is purple and can't be
+  // disabled via embed params).
+  const [posters, setPosters] = useState<Record<number, string>>({});
   const startX = useRef<number | null>(null);
   const deltaX = useRef(0);
   const dragging = useRef(false);
@@ -47,6 +52,28 @@ export default function ProjectGallery({ images }: { images?: GallerySlide[] }) 
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, []);
+
+  // Resolve poster images for the video slides.
+  useEffect(() => {
+    if (!images?.length) return;
+    let alive = true;
+    images.forEach((item, i) => {
+      if (item._type !== "videoSlide") return;
+      const src = getVideoEmbedSrc(item.videoUrl);
+      if (!src) return;
+      fetch(`/api/video-poster?src=${encodeURIComponent(src)}`)
+        .then((r) => r.json())
+        .then((data: { poster?: string | null }) => {
+          if (alive && data?.poster) {
+            setPosters((m) => ({ ...m, [i]: data.poster! }));
+          }
+        })
+        .catch(() => {});
+    });
+    return () => {
+      alive = false;
+    };
+  }, [images]);
 
   if (!images?.length) return null;
   const count = images.length;
@@ -106,7 +133,7 @@ export default function ProjectGallery({ images }: { images?: GallerySlide[] }) 
   return (
     <div className="mx-auto max-w-7xl px-6">
       <div
-        className="relative aspect-video cursor-grab touch-none select-none overflow-hidden rounded-lg bg-neutral-100 active:cursor-grabbing"
+        className="relative aspect-video cursor-grab touch-none select-none overflow-hidden border border-black bg-neutral-100 active:cursor-grabbing"
         onTouchStart={(e) => dragStart(e.touches[0].clientX)}
         onTouchMove={(e) => dragMove(e.touches[0].clientX)}
         onTouchEnd={dragEnd}
@@ -141,7 +168,7 @@ export default function ProjectGallery({ images }: { images?: GallerySlide[] }) 
               >
                 {item._type === "videoSlide" ? (
                   videoSrc ? (
-                    <>
+                    <div className="absolute inset-0 border border-black">
                       <iframe
                         key={reloadTicks[i] ?? 0}
                         ref={(el) => void (iframeRefs.current[i] = el)}
@@ -153,15 +180,31 @@ export default function ProjectGallery({ images }: { images?: GallerySlide[] }) 
                       <div
                         role="button"
                         aria-label={playingIndex === i ? "Pause video" : "Play video"}
-                        className="absolute inset-0 flex cursor-pointer items-center justify-center outline-none"
+                        className={`absolute inset-0 flex cursor-pointer items-center justify-center outline-none ${
+                          playingIndex === i ? "" : "bg-black"
+                        }`}
                         onClick={() => {
                           if (lastDragAbs.current > 10) return;
                           toggleVideo(i);
                         }}
                       >
+                        {/* Our own cover until playback starts: the video's
+                            poster (fetched via /api/video-poster) over an
+                            opaque black backing. Covering the iframe hides the
+                            provider's built-in play button (Gumlet's purple
+                            circle) while keeping the poster visible. */}
+                        {playingIndex !== i && posters[i] && (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={posters[i]}
+                            alt=""
+                            draggable={false}
+                            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                          />
+                        )}
                         {playingIndex !== i && (
                           <span
-                            className="flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-lg"
+                            className="relative z-10 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-lg"
                             style={{ animation: "play-invert 1.4s infinite" }}
                           >
                             <svg
@@ -176,7 +219,7 @@ export default function ProjectGallery({ images }: { images?: GallerySlide[] }) 
                           </span>
                         )}
                       </div>
-                    </>
+                    </div>
                   ) : (
                     <div className="h-full w-full bg-black" />
                   )
@@ -196,39 +239,41 @@ export default function ProjectGallery({ images }: { images?: GallerySlide[] }) 
       </div>
 
       {count > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-4">
-          <button
-            type="button"
-            onClick={() => goTo(current - 1)}
-            className="flex h-10 w-10 items-center justify-center text-black transition-opacity hover:opacity-50"
-            aria-label="Previous slide"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
-          <div className="flex gap-3">
-            {images.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => goTo(i)}
-                className="h-3 w-3 rounded-full border-2 border-black transition-colors"
-                style={{ backgroundColor: i === current ? "black" : "transparent" }}
-                aria-label={`Go to slide ${i + 1}`}
-              />
-            ))}
+        <div className="mt-4 flex items-center justify-center">
+          <div className="flex items-center gap-4 rounded-full border-2 border-black px-4 py-2">
+            <button
+              type="button"
+              onClick={() => goTo(current - 1)}
+              className="flex h-6 w-6 items-center justify-center text-black transition-opacity hover:opacity-50"
+              aria-label="Previous slide"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+            <div className="flex gap-3">
+              {images.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => goTo(i)}
+                  className="h-3 w-3 rounded-full border-2 border-black transition-colors"
+                  style={{ backgroundColor: i === current ? "black" : "transparent" }}
+                  aria-label={`Go to slide ${i + 1}`}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => goTo(current + 1)}
+              className="flex h-6 w-6 items-center justify-center text-black transition-opacity hover:opacity-50"
+              aria-label="Next slide"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => goTo(current + 1)}
-            className="flex h-10 w-10 items-center justify-center text-black transition-opacity hover:opacity-50"
-            aria-label="Next slide"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
         </div>
       )}
     </div>

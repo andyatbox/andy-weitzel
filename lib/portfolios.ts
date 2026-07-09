@@ -121,7 +121,6 @@ export interface ProjectContent {
   _id: string;
   title: string;
   category: string;
-  videoUrl?: string;
   gallery?: GallerySlide[];
   body?: PortableTextBlock[];
   columnsContent?: ColumnsGroup[];
@@ -134,7 +133,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const PROJECT_QUERY = `*[_type == "project" && slug.current == $slug][0]{
-  _id, title, category, videoUrl,
+  _id, title, category,
   gallery[]{ ..., _type == "image" => { ..., asset-> } },
   body[]{ ..., _type == "image" => { ..., asset-> } },
   columnsContent[]{
