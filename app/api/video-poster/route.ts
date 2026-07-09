@@ -23,14 +23,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ poster: data.thumbnail_url ?? null }, { headers });
     }
     if (gumletId) {
+      // Short revalidate: this HTML is Gumlet's live page, and its embedded
+      // ?v=<timestamp> is how a re-uploaded poster busts the CDN cache. A
+      // long-lived cache here would keep serving a pre-upload snapshot for
+      // hours after the asset actually changed.
       const r = await fetch(`https://play.gumlet.io/embed/${gumletId}`, {
-        next: { revalidate: 86400 },
+        next: { revalidate: 300 },
       });
       const html = await r.text();
-      const poster =
-        html.match(
-          /https:\/\/video\.gumlet\.io\/[\w-]+\/[\w-]+\/thumbnail-[\w.-]+\.(?:png|jpe?g|webp)/
-        )?.[0] ?? null;
+      // The og:image meta tag is the single canonical poster URL (matches
+      // twitter:image, JSON-LD thumbnailUrl, and the player's slot="poster").
+      // The <img slot="poster"> element also lists a responsive srcSet with
+      // several sizes — don't match against that, or a random small variant
+      // wins depending on ordering. HTML-entity-decode &amp; -> & so the
+      // query string (which carries ?v=) parses correctly.
+      const raw = html.match(/<meta property="og:image" content="([^"]+)"/)?.[1];
+      const poster = raw ? raw.replace(/&amp;/g, "&") : null;
       return NextResponse.json({ poster }, { headers });
     }
   } catch {
