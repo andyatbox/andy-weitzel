@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-const SITE_URL = "https://andyweitzel.com";
+// Apex redirects to www (Vercel's recommended setup), so www is the domain
+// that actually serves content — canonical/OG URLs should point there.
+const SITE_URL = "https://www.andyweitzel.com";
 const TITLE = "Andy Weitzel — Creative Director";
 const DESCRIPTION =
   "Creative director and full-stack technologist with two decades of award-winning work — brand identities, integrated campaigns, and AR/AI/3D experiences for Fortune 50 brands and startups. Co-founder & CCO of Box Creative; two-time Webby Award winner.";
