@@ -59,7 +59,10 @@ export const metadata: Metadata = {
     apple: "/meta/apple-touch-icon.png",
   },
   manifest: "/meta/site.webmanifest",
-  robots: { index: true, follow: true },
+  // TEMPORARY: site is still being built out — keep search engines out until
+  // content is ready. Flip both this and public/robots.txt back to allow
+  // indexing before announcing the site publicly.
+  robots: { index: false, follow: false, nocache: true },
 };
 
 export const viewport: Viewport = {

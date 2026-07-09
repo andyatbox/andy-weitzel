@@ -1,0 +1,4 @@
+# TEMPORARY — site under construction, not ready for public indexing.
+# Remove this Disallow (or delete the file) once content is finished.
+User-agent: *
+Disallow: /
