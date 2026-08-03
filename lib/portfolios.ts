@@ -24,8 +24,8 @@ export const PORTFOLIO_IDS: PortfolioId[] = ["interactive", "branding", "richmed
 
 export const LABELS: Record<PortfolioId, string> = {
   interactive: "Interactive",
-  branding: "Branding",
-  richmedia: "Rich Media",
+  branding: "Branding/Print",
+  richmedia: "Digital Ads",
 };
 
 // Our three app portfolios map onto the three Sanity category values.

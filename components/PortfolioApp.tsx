@@ -630,7 +630,7 @@ export default function PortfolioApp() {
           type="button"
           onClick={() => navigateProject(-1)}
           aria-label="Previous project"
-          className="group flex h-11 w-11 items-center overflow-hidden whitespace-nowrap rounded-full bg-white pl-[13px] text-black shadow-lg ring-2 ring-inset ring-black transition-[width] duration-300 ease-out hover:w-[150px]"
+          className="group flex h-11 w-11 items-center overflow-hidden whitespace-nowrap rounded-full bg-white pl-[13px] text-black shadow-lg ring-2 ring-inset ring-black transition-[width] duration-300 ease-out hover:w-[185px]"
         >
           <svg
             width="18"
@@ -646,14 +646,14 @@ export default function PortfolioApp() {
             <polyline points="18 15 12 9 6 15" />
           </svg>
           <span className="ml-2 text-sm font-medium opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            Previous
+            Previous Project
           </span>
         </button>
         <button
           type="button"
           onClick={() => navigateProject(1)}
           aria-label="Next project"
-          className="group flex h-11 w-11 items-center overflow-hidden whitespace-nowrap rounded-full bg-white pl-[13px] text-black shadow-lg ring-2 ring-inset ring-black transition-[width] duration-300 ease-out hover:w-[150px]"
+          className="group flex h-11 w-11 items-center overflow-hidden whitespace-nowrap rounded-full bg-white pl-[13px] text-black shadow-lg ring-2 ring-inset ring-black transition-[width] duration-300 ease-out hover:w-[185px]"
         >
           <svg
             width="18"
@@ -669,7 +669,7 @@ export default function PortfolioApp() {
             <polyline points="6 9 12 15 18 9" />
           </svg>
           <span className="ml-2 text-sm font-medium opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            Next
+            Next Project
           </span>
         </button>
       </div>
