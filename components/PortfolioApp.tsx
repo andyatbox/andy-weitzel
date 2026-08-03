@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CATEGORY, usePortfolios, type PortfolioId } from "@/lib/portfolios";
+import { CATEGORY, LABELS, PORTFOLIO_IDS, usePortfolios, type PortfolioId } from "@/lib/portfolios";
 import { ScrollEngine } from "@/lib/ScrollEngine";
 import { useViewport } from "@/lib/useViewport";
 import Menu from "./Menu";
@@ -18,6 +18,13 @@ const SLIDE_DUR = 950;
 // Cap on how long a switch waits for the new portfolio's images before sliding
 // in anyway (so a slow/failed image can't strand the panel off-screen).
 const SWITCH_LOAD_CAP = 3500;
+// How long the open-project close transition (gallery shrink + modal fade)
+// takes to visually settle. The portfolio-switch slide-out below assumes the
+// gallery is already at its closed (75%-width) size — sliding it off-screen
+// while it's still full-screen undershoots, leaving a sliver of it hanging
+// over the hero-logo reveal. Switching from an open project waits this long
+// before starting the switch, so it starts from an already-closed gallery.
+const PROJECT_CLOSE_MS = 750;
 
 /** Resolves once the image is loaded (or errored) — used to warm the cache. */
 function preloadImage(url: string) {
@@ -55,6 +62,7 @@ export default function PortfolioApp() {
   const infoOpenRef = useRef(false);
   const switchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const switchTimer2 = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const closeThenSwitchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const switchingRef = useRef(false);
   // Touch devices fire mouseenter (but not mouseleave) on tap, which would
   // latch the hover effect on. So on touch, ignore hover entirely — the
@@ -134,6 +142,7 @@ export default function PortfolioApp() {
     () => () => {
       clearTimeout(switchTimer.current);
       clearTimeout(switchTimer2.current);
+      clearTimeout(closeThenSwitchTimer.current);
     },
     []
   );
@@ -162,6 +171,18 @@ export default function PortfolioApp() {
     openedRef.current = false;
     setOpened(false);
   }, []);
+
+  // Portfolio pills in the open-project nav: close the project back to the
+  // gallery, then — once that close has visually settled — replay the normal
+  // portfolio-switch slide. See PROJECT_CLOSE_MS for why this waits.
+  const switchPortfolioFromProject = useCallback(
+    (id: PortfolioId) => {
+      closeProject();
+      clearTimeout(closeThenSwitchTimer.current);
+      closeThenSwitchTimer.current = setTimeout(() => selectPortfolio(id), PROJECT_CLOSE_MS);
+    },
+    [closeProject, selectPortfolio]
+  );
 
   // Prev/next within the open project's portfolio (wraps at the ends). The
   // modal fades out on the project change while the engine slides the
@@ -544,10 +565,62 @@ export default function PortfolioApp() {
       {/* Scrollable project content overlay — below the close button (z-50). */}
       <ProjectModal project={activeProject} opened={opened} height={height} />
 
-      {/* Prev/next project navigation — top-left, styled like the close X.
-          Labels collapse to icon-only circles on small screens. */}
+      {/* Back + portfolio-switch nav — top-left. Inverted from the old close
+          X: white buttons, black stroke, black text. The back arrow closes
+          the project; the pills below switch portfolios (closing first). */}
       <div
-        className="fixed left-5 top-5 z-50 flex items-center gap-2 transition-opacity duration-300"
+        className="fixed left-5 top-5 z-50 flex flex-col items-start gap-2 transition-opacity duration-300"
+        style={{
+          opacity: opened ? 1 : 0,
+          pointerEvents: opened ? "auto" : "none",
+        }}
+      >
+        <button
+          type="button"
+          onClick={closeProject}
+          aria-label="Back to gallery"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black shadow-lg ring-2 ring-inset ring-black transition-colors hover:!bg-black hover:!text-white hover:!ring-white"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+        </button>
+        {PORTFOLIO_IDS.map((id) => {
+          const active = id === portfolio;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => switchPortfolioFromProject(id)}
+              aria-label={`Switch to ${LABELS[id]}`}
+              className={`rounded-full px-4 py-2 text-sm font-medium shadow-lg ring-2 ring-inset transition-colors ${
+                active
+                  ? "pointer-events-none bg-black text-white ring-white"
+                  : "bg-white text-black ring-black hover:!bg-black hover:!text-white hover:!ring-white"
+              }`}
+            >
+              {LABELS[id]}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Prev/next project navigation — top-right. Previous points up, Next
+          points down; each expands circle-to-pill on hover to reveal its
+          label after the chevron. Unlike the other nav buttons these don't
+          invert color on hover — only the shape animates. */}
+      <div
+        className="fixed right-5 top-5 z-50 flex flex-col items-end gap-2 transition-opacity duration-300"
         style={{
           opacity: opened && items.length > 1 ? 1 : 0,
           pointerEvents: opened && items.length > 1 ? "auto" : "none",
@@ -557,72 +630,52 @@ export default function PortfolioApp() {
           type="button"
           onClick={() => navigateProject(-1)}
           aria-label="Previous project"
-          className="flex h-11 w-11 items-center justify-center gap-1.5 rounded-full bg-[#111111] text-white shadow-lg ring-2 ring-inset ring-white sm:w-auto sm:px-5"
+          className="group flex h-11 w-11 items-center overflow-hidden whitespace-nowrap rounded-full bg-white pl-[13px] text-black shadow-lg ring-2 ring-inset ring-black transition-[width] duration-300 ease-out hover:w-[150px]"
         >
           <svg
             width="18"
             height="18"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#ffffff"
+            stroke="#000000"
             strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
             className="shrink-0"
           >
-            <polyline points="15 18 9 12 15 6" />
+            <polyline points="18 15 12 9 6 15" />
           </svg>
-          <span className="hidden text-sm font-medium sm:inline">Previous</span>
+          <span className="ml-2 text-sm font-medium opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            Previous
+          </span>
         </button>
         <button
           type="button"
           onClick={() => navigateProject(1)}
           aria-label="Next project"
-          className="flex h-11 w-11 items-center justify-center gap-1.5 rounded-full bg-[#111111] text-white shadow-lg ring-2 ring-inset ring-white sm:w-auto sm:px-5"
+          className="group flex h-11 w-11 items-center overflow-hidden whitespace-nowrap rounded-full bg-white pl-[13px] text-black shadow-lg ring-2 ring-inset ring-black transition-[width] duration-300 ease-out hover:w-[150px]"
         >
-          <span className="hidden text-sm font-medium sm:inline">Next</span>
           <svg
             width="18"
             height="18"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#ffffff"
+            stroke="#000000"
             strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
             className="shrink-0"
           >
-            <polyline points="9 18 15 12 9 6" />
+            <polyline points="6 9 12 15 18 9" />
           </svg>
+          <span className="ml-2 text-sm font-medium opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            Next
+          </span>
         </button>
       </div>
 
       {/* Resumé / Contact popup — above everything (z-70). */}
       {infoModal && <InfoModal kind={infoModal} onClose={closeInfo} />}
-
-      <button
-        type="button"
-        onClick={closeProject}
-        aria-label="Close project"
-        className="fixed right-5 top-5 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-[#111111] shadow-lg ring-2 ring-inset ring-white transition-opacity duration-300"
-        style={{
-          opacity: opened ? 1 : 0,
-          pointerEvents: opened ? "auto" : "none",
-        }}
-      >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="#ffffff"
-          strokeWidth={2}
-          strokeLinecap="round"
-        >
-          <line x1="5" y1="5" x2="19" y2="19" />
-          <line x1="19" y1="5" x2="5" y2="19" />
-        </svg>
-      </button>
     </main>
   );
 }

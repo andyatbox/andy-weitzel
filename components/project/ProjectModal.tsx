@@ -43,33 +43,6 @@ export default function ProjectModal({
     setRevealed(false);
   }, [opened, project, revealDelay]);
 
-  // Once revealed and loaded, auto-nudge the content up after a beat to hint
-  // there's more to scroll — unless the user has already scrolled. Custom
-  // rAF tween (slow, ease-out) rather than native smooth scroll.
-  useEffect(() => {
-    if (!revealed || !content) return;
-    let raf = 0;
-    const timer = setTimeout(() => {
-      const el = scrollRef.current;
-      if (!el || el.scrollTop >= 10) return;
-      const start = el.scrollTop;
-      const dist = 200 - start;
-      const duration = 1600;
-      const t0 = performance.now();
-      const easeOut = (p: number) => 1 - Math.pow(1 - p, 3);
-      const step = (now: number) => {
-        const p = Math.min(1, (now - t0) / duration);
-        el.scrollTop = start + dist * easeOut(p);
-        if (p < 1) raf = requestAnimationFrame(step);
-      };
-      raf = requestAnimationFrame(step);
-    }, 1000);
-    return () => {
-      clearTimeout(timer);
-      cancelAnimationFrame(raf);
-    };
-  }, [revealed, content]);
-
   if (!project) return null;
 
   return (
@@ -86,7 +59,7 @@ export default function ProjectModal({
           A chevron hints that there's content to scroll into. */}
       <div className="relative w-full" style={{ height }}>
         <div
-          className="absolute bottom-8 left-1/2 flex h-14 w-14 -translate-x-1/2 animate-bounce items-center justify-center rounded-full bg-black/30 ring-2 ring-inset ring-white backdrop-blur-md"
+          className="absolute bottom-12 left-1/2 flex h-14 w-14 -translate-x-1/2 animate-bounce items-center justify-center rounded-full bg-black/30 ring-2 ring-inset ring-white backdrop-blur-md"
           style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.6s ease" }}
         >
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
