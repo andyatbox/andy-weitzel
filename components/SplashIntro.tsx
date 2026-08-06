@@ -13,9 +13,13 @@ const TICKER =
 // readable from the top before it moves.
 const TICKER_START_DELAY = 2000;
 
-// Shared by the wordmark and the logo, so the logo is exactly as tall as the
-// name's line box (the h1 is leading-none, so its box equals the font size).
 const NAME_SIZE = "clamp(34px, 6vw, 86px)";
+// New Spirit Medium's cap height as a fraction of font size, measured from the
+// rendered face (canvas actualBoundingBoxAscent of "A" ÷ font size). The logo
+// is an all-caps monogram, so sizing it to cap height — and baseline-aligning
+// it — makes it read as the same size as the wordmark's capitals.
+const CAP_RATIO = 0.717;
+const LOGO_SIZE = `calc(${NAME_SIZE} * ${CAP_RATIO})`;
 // Body copy size, used for the ticker and everything under the divider.
 const COPY_SIZE = "clamp(15px, 1.5vw, 20px)";
 
@@ -59,12 +63,14 @@ export default function SplashIntro({
         transition: "opacity 0.6s ease",
       }}
     >
-      {/* Wordmark with the logo beside it at matching height; stacks (logo on
-          top) below the sm breakpoint. */}
-      <div className="flex flex-col items-start gap-4 px-6 sm:flex-row sm:items-center sm:gap-6 sm:px-10">
+      {/* Wordmark left, logo pushed to the page's right gutter and sitting on
+          the wordmark's baseline. Stacks (logo on top, left-aligned) below the
+          sm breakpoint. Baseline alignment works because an SVG is a replaced
+          element, so its baseline is its bottom edge. */}
+      <div className="flex flex-col items-start gap-4 px-6 sm:flex-row sm:items-baseline sm:gap-6 sm:px-10">
         <LogoMark
-          className="shrink-0 text-black sm:order-last"
-          style={{ height: NAME_SIZE, width: "auto" }}
+          className="shrink-0 text-black sm:order-last sm:ml-auto"
+          style={{ height: LOGO_SIZE, width: "auto" }}
         />
         <h1
           className="font-medium leading-none tracking-tighter"
@@ -74,9 +80,9 @@ export default function SplashIntro({
         </h1>
       </div>
 
-      {/* Full-bleed single-line ticker — no side padding, so it runs edge to
-          edge while everything else stays on the left margin. */}
-      <div className="mt-5 w-full overflow-hidden" aria-label={TICKER}>
+      {/* Single-line ticker, inset to the same gutter as everything else so it
+          starts on the shared left margin (the divider below stays full-bleed). */}
+      <div className="mt-5 w-full overflow-hidden px-6 sm:px-10" aria-label={TICKER}>
         <h3
           aria-hidden
           className="inline-flex whitespace-nowrap text-black"
