@@ -60,6 +60,18 @@ body {
   }
 }
 
+/* Splash ticker: one line scrolling left forever. The track holds exactly two
+   copies of the sentence, so translating it by -50% lands the second copy
+   where the first started — the reset is invisible. */
+@keyframes marquee-x {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 ::selection {
   background: transparent;
 }

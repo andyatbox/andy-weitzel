@@ -25,16 +25,18 @@ const FIELD = {
 };
 
 // Type system mirrors the résumé PDF: serif (New Spirit) for name/section/item
-// headings, sans (Arial) for body copy and uppercase labels.
+// headings, sans (Arial) for body copy and uppercase labels. The résumé panel
+// is inverted relative to Contact — white sheet, black type — so these
+// résumé-only tokens are black (Contact keeps its own white styling).
 const NAME = "text-3xl font-medium md:text-4xl";
 const SECTION = "text-2xl font-medium md:text-3xl";
 const ITEM = "text-xl font-medium md:text-2xl";
-const LABEL = "font-label text-xs uppercase tracking-wide text-white";
-const BODY = "font-sans-copy text-base leading-relaxed text-white";
+const LABEL = "font-label text-xs uppercase tracking-wide text-black";
+const BODY = "font-sans-copy text-base leading-relaxed text-black";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mt-12 border-t border-white/15 pt-8">
+    <section className="mt-12 border-t border-black/15 pt-8">
       <h3 className={SECTION}>{title}</h3>
       <div className="mt-6 space-y-8">{children}</div>
     </section>
@@ -57,7 +59,7 @@ function Job({
       <h4 className={ITEM}>{title}</h4>
       <p className="mt-1.5">
         <span className={LABEL}>{org}</span>
-        {meta && <span className="ml-2 font-sans-copy text-sm text-white">{meta}</span>}
+        {meta && <span className="ml-2 font-sans-copy text-sm text-black">{meta}</span>}
       </p>
       <div className={`mt-3 space-y-3 ${BODY}`}>{children}</div>
     </div>
@@ -105,7 +107,7 @@ const CLIENTS = [
 function ResumeBody() {
   return (
     <>
-      <p className="mt-8 text-lg leading-relaxed text-white md:text-xl">
+      <p className="mt-8 text-lg leading-relaxed text-black md:text-xl">
         Creative leader and full-stack technologist with over two decades of
         experience at the intersection of design, brand strategy, and emerging
         technology. As co-founder of Box Creative and its Creative Director —
@@ -135,7 +137,7 @@ function ResumeBody() {
             illustration, photography, print production, and social/campaign
             management.
           </p>
-          <ul className="list-disc space-y-2 pl-5 marker:text-white/50">
+          <ul className="list-disc space-y-2 pl-5 marker:text-black/50">
             <li>
               Direct creative vision and brand strategy across integrated
               campaigns spanning print, digital, motion, AR/AI/3D, and IRL
@@ -257,7 +259,7 @@ function ResumeBody() {
       </Section>
 
       <Section title="Clients">
-        <ul className="columns-2 gap-8 text-base leading-relaxed text-white sm:columns-3">
+        <ul className="columns-2 gap-8 text-base leading-relaxed text-black sm:columns-3">
           {CLIENTS.map((c) => (
             <li key={c} className="break-inside-avoid">
               {c}
@@ -377,15 +379,19 @@ export default function InfoModal({
         role="dialog"
         aria-modal="true"
         aria-label={isResume ? "Resumé" : "Contact"}
-        className={`relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden text-white ring-1 ring-white/80 ${
-          isResume ? "max-w-4xl" : "max-w-lg"
+        className={`relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden ring-1 ${
+          isResume
+            ? "max-w-4xl bg-white text-black ring-black"
+            : "max-w-lg text-white ring-white/80"
         }`}
       >
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full text-white transition-colors hover:bg-white/10"
+          className={`absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
+            isResume ? "text-black hover:bg-black/10" : "text-white hover:bg-white/10"
+          }`}
         >
           <svg
             width="18"
@@ -403,17 +409,17 @@ export default function InfoModal({
         <div className={`min-h-0 overflow-y-auto ${isResume ? "p-8 sm:p-12" : "p-8"}`}>
           {isResume ? (
             <>
-              <p className="font-label text-xs uppercase tracking-[0.2em] text-white">
+              <p className="font-label text-xs uppercase tracking-[0.2em] text-black">
                 Résumé — 2026
               </p>
               <h2 className={`mt-2 pr-12 ${NAME}`}>Andrew Weitzel</h2>
-              <p className="mt-3 text-lg font-medium text-white md:text-xl">
+              <p className="mt-3 text-lg font-medium text-black md:text-xl">
                 Creative Director · Chief Creative Officer · Marketing Director
               </p>
               <a
                 href={RESUME_FILE}
                 download
-                className="mt-6 inline-flex items-center rounded-full border border-white/60 px-5 py-2 font-medium text-white transition-colors hover:bg-white/10"
+                className="mt-6 inline-flex items-center rounded-full border border-black px-5 py-2 font-medium text-black transition-colors hover:bg-black hover:text-white"
               >
                 Download Resumé
               </a>

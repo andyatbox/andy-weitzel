@@ -9,6 +9,7 @@ import Gallery from "./Gallery";
 import ProjectModal, { type ActiveProject } from "./project/ProjectModal";
 import InfoModal, { type InfoKind } from "./InfoModal";
 import PsychedelicFX from "./PsychedelicFX";
+import SplashIntro from "./SplashIntro";
 
 const DRAG_MULTIPLIER = 1.6;
 const FLING_MULTIPLIER = 14;
@@ -25,6 +26,9 @@ const SWITCH_LOAD_CAP = 3500;
 // over the hero-logo reveal. Switching from an open project waits this long
 // before starting the switch, so it starts from an already-closed gallery.
 const PROJECT_CLOSE_MS = 750;
+// Splash fade-out (must match the transition duration in SplashIntro). The
+// gallery intro only starts once this has finished.
+const SPLASH_FADE = 600;
 
 /** Resolves once the image is loaded (or errored) — used to warm the cache. */
 function preloadImage(url: string) {
@@ -49,6 +53,11 @@ export default function PortfolioApp() {
   // exposed empty area, then the panel slides home.
   const [slideIn, setSlideIn] = useState(false);
   const [introLogo, setIntroLogo] = useState(true);
+  // Splash gate: a full-page white overlay asks which portfolio to open in.
+  // `started` flips once the choice has been made and the splash has faded,
+  // which is what releases the gallery intro below.
+  const [started, setStarted] = useState(false);
+  const [splashHiding, setSplashHiding] = useState(false);
   // Resumé / Contact popup + the halftone trigger (hovering those buttons or
   // having their modal open).
   const [infoModal, setInfoModal] = useState<InfoKind | null>(null);
@@ -63,6 +72,10 @@ export default function PortfolioApp() {
   const switchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const switchTimer2 = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const closeThenSwitchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const splashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // True until the splash is dismissed, so window-level scroll/drag and the
+  // hover tooltip stand down while the gate is up.
+  const splashOpenRef = useRef(true);
   const switchingRef = useRef(false);
   // Touch devices fire mouseenter (but not mouseleave) on tap, which would
   // latch the hover effect on. So on touch, ignore hover entirely — the
@@ -143,8 +156,25 @@ export default function PortfolioApp() {
       clearTimeout(switchTimer.current);
       clearTimeout(switchTimer2.current);
       clearTimeout(closeThenSwitchTimer.current);
+      clearTimeout(splashTimer.current);
     },
     []
+  );
+
+  // Splash choice: set the portfolio the gallery will open in, fade the
+  // overlay out, and only then release the intro (which holds on the hero
+  // logo before sliding the gallery home).
+  const chooseStart = useCallback(
+    (id: PortfolioId) => {
+      if (splashHiding) return;
+      setPortfolio(id);
+      engine.reset();
+      splashOpenRef.current = false;
+      setSplashHiding(true);
+      clearTimeout(splashTimer.current);
+      splashTimer.current = setTimeout(() => setStarted(true), SPLASH_FADE);
+    },
+    [engine, splashHiding]
   );
 
   const selectItem = useCallback(
@@ -234,7 +264,7 @@ export default function PortfolioApp() {
     const THRESHOLD = 4;
 
     const onWheel = (e: WheelEvent) => {
-      if (openedRef.current || infoOpenRef.current) return;
+      if (openedRef.current || infoOpenRef.current || splashOpenRef.current) return;
       e.preventDefault();
       const delta =
         e.deltaMode === 1 ? e.deltaY * 16
@@ -245,7 +275,7 @@ export default function PortfolioApp() {
     };
 
     const onPointerDown = (e: PointerEvent) => {
-      if (openedRef.current || infoOpenRef.current) return;
+      if (openedRef.current || infoOpenRef.current || splashOpenRef.current) return;
       active = true;
       dragging = false;
       axis = "y";
@@ -341,6 +371,7 @@ export default function PortfolioApp() {
         !overGallery ||
         openedRef.current ||
         infoOpenRef.current ||
+        splashOpenRef.current ||
         switchingRef.current
       ) {
         hide();
@@ -378,11 +409,12 @@ export default function PortfolioApp() {
     };
   }, [engine, isTouch, ready]);
 
-  // Fire the intro once, the first time both viewport and portfolios are ready.
-  // Content fades in immediately (parked at the edge beside the hero logo);
-  // after a hold the panel slides home, then the hero logo is removed.
+  // Fire the intro once — after the splash has been dismissed and both
+  // viewport and portfolios are ready. Content fades in immediately (parked
+  // at the edge beside the hero logo); after a hold the panel slides home,
+  // then the hero logo is removed.
   useEffect(() => {
-    if (!ready || introFired.current) return;
+    if (!ready || !started || introFired.current) return;
     introFired.current = true;
     const t0 = setTimeout(() => setIntro(true), 60);
     const t1 = setTimeout(() => setSlideIn(true), SLIDE_HOLD);
@@ -392,7 +424,9 @@ export default function PortfolioApp() {
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [ready]);
+    // `started` must be here: it flips long after `ready` does, and without it
+    // this effect never re-runs, so the reveal never fires.
+  }, [ready, started]);
 
   // Animate open/close every frame: resize the canvas DOM and slide the menu
   // imperatively, easing the shared `anim.t`. Resizing the canvas per frame
@@ -676,6 +710,12 @@ export default function PortfolioApp() {
 
       {/* Resumé / Contact popup — above everything (z-70). */}
       {infoModal && <InfoModal kind={infoModal} onClose={closeInfo} />}
+
+      {/* Opening gate (z-80, above the popups): pick a portfolio, then the
+          intro reveal runs with that one already loaded. */}
+      {!started && (
+        <SplashIntro onChoose={chooseStart} hiding={splashHiding} height={height} />
+      )}
     </main>
   );
 }
