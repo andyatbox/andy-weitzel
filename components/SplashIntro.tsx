@@ -55,7 +55,7 @@ export default function SplashIntro({
   return (
     <div
       data-splash
-      className="fixed inset-x-0 top-0 z-[80] flex w-full flex-col justify-center overflow-hidden bg-white text-black"
+      className="fixed inset-x-0 top-0 isolate z-[80] flex w-full flex-col justify-center overflow-hidden bg-white text-black"
       style={{
         height,
         opacity: hiding ? 0 : 1,
@@ -118,6 +118,26 @@ export default function SplashIntro({
             <p className="text-sm text-black min-[992px]:text-base">{BLURBS[id]}</p>
           </div>
         ))}
+      </div>
+
+      {/* White triangle covering the top-right half, blended with `difference`
+          so that diagonal corner renders inverted — white ground turns black,
+          black type turns white. preserveAspectRatio="none" lets it stretch to
+          any window shape, so the split always runs corner to corner. The
+          splash root is `isolate`, which keeps the blend from reaching the
+          gallery behind it. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{ mixBlendMode: "difference" }}
+      >
+        <svg
+          className="h-full w-full"
+          viewBox="0 0 612.9 612.9"
+          preserveAspectRatio="none"
+        >
+          <polygon fill="#ffffff" points="0,0 612.9,612.9 612.9,0" />
+        </svg>
       </div>
     </div>
   );
