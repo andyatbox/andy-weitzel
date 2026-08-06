@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { LABELS, PORTFOLIO_IDS, type PortfolioId } from "@/lib/portfolios";
 import LogoMark from "./LogoMark";
 
@@ -7,6 +8,16 @@ import LogoMark from "./LogoMark";
 // wraps seamlessly (see the marquee-x keyframes in globals.css).
 const TICKER =
   "Andy is a Creative Director / CCO, Marketing Director, illustrator, visual artist, and full-stack technologist with over two decades of experience at the intersection of design, brand-building, and emerging technology.";
+
+// The line holds still on arrival, then starts crawling — so the sentence is
+// readable from the top before it moves.
+const TICKER_START_DELAY = 2000;
+
+// Shared by the wordmark and the logo, so the logo is exactly as tall as the
+// name's line box (the h1 is leading-none, so its box equals the font size).
+const NAME_SIZE = "clamp(34px, 6vw, 86px)";
+// Body copy size, used for the ticker and everything under the divider.
+const COPY_SIZE = "clamp(15px, 1.5vw, 20px)";
 
 // What each portfolio actually covers, shown beside its button.
 const BLURBS: Record<PortfolioId, string> = {
@@ -31,6 +42,12 @@ export default function SplashIntro({
   // Real pixel height (never 100vh — mobile browser chrome makes that wrong).
   height: number;
 }) {
+  const [ticking, setTicking] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setTicking(true), TICKER_START_DELAY);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <div
       data-splash
@@ -42,27 +59,31 @@ export default function SplashIntro({
         transition: "opacity 0.6s ease",
       }}
     >
-      <LogoMark
-        className="h-auto shrink-0 px-6 text-black sm:px-10"
-        style={{ width: "clamp(96px, 12vw, 190px)" }}
-      />
-
-      <h1
-        className="mt-6 px-6 font-medium leading-none tracking-tighter sm:px-10"
-        style={{ fontSize: "clamp(34px, 6vw, 86px)" }}
-      >
-        Andy Weitzel
-      </h1>
+      {/* Wordmark with the logo beside it at matching height; stacks (logo on
+          top) below the sm breakpoint. */}
+      <div className="flex flex-col items-start gap-4 px-6 sm:flex-row sm:items-center sm:gap-6 sm:px-10">
+        <LogoMark
+          className="shrink-0 text-black sm:order-last"
+          style={{ height: NAME_SIZE, width: "auto" }}
+        />
+        <h1
+          className="font-medium leading-none tracking-tighter"
+          style={{ fontSize: NAME_SIZE }}
+        >
+          Andy Weitzel
+        </h1>
+      </div>
 
       {/* Full-bleed single-line ticker — no side padding, so it runs edge to
           edge while everything else stays on the left margin. */}
       <div className="mt-5 w-full overflow-hidden" aria-label={TICKER}>
         <h3
           aria-hidden
-          className="inline-flex whitespace-nowrap text-black/60"
+          className="inline-flex whitespace-nowrap text-black"
           style={{
-            fontSize: "clamp(14px, 1.7vw, 24px)",
-            animation: "marquee-x 44s linear infinite",
+            fontSize: COPY_SIZE,
+            animation: "marquee-x 38s linear infinite",
+            animationPlayState: ticking ? "running" : "paused",
             willChange: "transform",
           }}
         >
@@ -71,10 +92,10 @@ export default function SplashIntro({
         </h3>
       </div>
 
-      <p
-        className="mt-12 px-6 font-medium sm:px-10"
-        style={{ fontSize: "clamp(15px, 1.5vw, 20px)" }}
-      >
+      {/* Full-bleed rule dividing the branding block from the portfolio picker. */}
+      <div className="mt-4 h-px w-full bg-black" />
+
+      <p className="mt-8 px-6 font-medium sm:px-10" style={{ fontSize: COPY_SIZE }}>
         Which portfolio would you like to start with?
       </p>
 
@@ -88,7 +109,7 @@ export default function SplashIntro({
             >
               {LABELS[id]}
             </button>
-            <p className="text-sm text-black/60 min-[992px]:text-base">{BLURBS[id]}</p>
+            <p className="text-sm text-black min-[992px]:text-base">{BLURBS[id]}</p>
           </div>
         ))}
       </div>
