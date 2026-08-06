@@ -350,6 +350,12 @@ export default function PortfolioApp() {
   // Cursor-following "View … Project" tooltip over the gallery teasers.
   // Non-touch only; hidden while dragging, while a project or info modal is
   // open, and during portfolio switches. Driven imperatively (no re-renders).
+  //
+  // The label is refreshed on a frame loop rather than only on pointermove:
+  // scrolling changes which teaser sits under a stationary cursor, and a
+  // move-only update left the tooltip naming the previous project until the
+  // mouse happened to twitch. Position still tracks pointermove alone.
+  //
   // Depends on `ready`: the component returns null (no DOM at all, including
   // the tooltip div) until viewport + portfolios load, so this effect must
   // re-run once that flips true — otherwise it captures a null ref from a
@@ -359,21 +365,23 @@ export default function PortfolioApp() {
     const tip = tooltipRef.current;
     if (!tip) return;
     let down = false;
+    let overGallery = false;
+    let raf = 0;
+
     const hide = () => {
       tip.style.opacity = "0";
     };
-    const onMove = (e: PointerEvent) => {
-      if (e.pointerType === "touch") return;
-      const overGallery =
-        !!galleryRef.current && galleryRef.current.contains(e.target as Node);
-      if (
-        down ||
-        !overGallery ||
-        openedRef.current ||
-        infoOpenRef.current ||
-        splashOpenRef.current ||
-        switchingRef.current
-      ) {
+    // Everything that suppresses the tooltip, checked fresh each frame.
+    const suppressed = () =>
+      down ||
+      !overGallery ||
+      openedRef.current ||
+      infoOpenRef.current ||
+      splashOpenRef.current ||
+      switchingRef.current;
+
+    const paint = () => {
+      if (suppressed()) {
         hide();
         return;
       }
@@ -382,12 +390,27 @@ export default function PortfolioApp() {
         hide();
         return;
       }
-      tip.textContent = `View ${item.title} Project`;
+      // Compare the rendered string, so this also catches a portfolio swap
+      // that happens to land on the same index.
+      const label = `View ${item.title} Project`;
+      if (tip.textContent !== label) tip.textContent = label;
+      tip.style.opacity = "1";
+    };
+
+    const tick = () => {
+      paint();
+      raf = requestAnimationFrame(tick);
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      overGallery =
+        !!galleryRef.current && galleryRef.current.contains(e.target as Node);
       // Vertically centered on the cursor (the -50% resolves against the
       // pill's own height); horizontally, the -100% (against its own width)
       // pulls it fully to the left, with a 16px gap before the cursor.
       tip.style.transform = `translate(calc(${e.clientX}px - 100% - 16px), calc(${e.clientY}px - 50%))`;
-      tip.style.opacity = "1";
+      paint();
     };
     const onDown = () => {
       down = true;
@@ -396,12 +419,18 @@ export default function PortfolioApp() {
     const onUp = () => {
       down = false;
     };
-    const onLeave = () => hide();
+    const onLeave = () => {
+      overGallery = false;
+      hide();
+    };
+
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerdown", onDown);
     window.addEventListener("pointerup", onUp);
     document.documentElement.addEventListener("pointerleave", onLeave);
+    raf = requestAnimationFrame(tick);
     return () => {
+      cancelAnimationFrame(raf);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointerup", onUp);
