@@ -9,9 +9,16 @@ import LogoMark from "./LogoMark";
 const TICKER =
   "Andy is a Creative Director / CCO, Marketing Director, illustrator, visual artist, and full-stack technologist with over two decades of experience at the intersection of design, brand-building, and emerging technology.";
 
-// The line holds still on arrival, then starts crawling — so the sentence is
-// readable from the top before it moves.
-const TICKER_START_DELAY = 2000;
+// Staggered reveal: each element slides up and fades in, one after the next.
+const REVEAL_STEP = 120; // ms between elements
+const REVEAL_DUR = 550; // ms per element
+const REVEAL_STEPS = 7; // lockup, ticker, rule, question, 3 portfolio rows
+// The ticker holds still until the reveal has finished and settled, so the
+// sentence is readable from its start before it begins crawling.
+const TICKER_START_DELAY = 3000;
+const REVEAL_TOTAL = (REVEAL_STEPS - 1) * REVEAL_STEP + REVEAL_DUR;
+// Don't wait on webfonts forever if they fail or stall — reveal regardless.
+const FONT_WAIT_CAP = 2000;
 
 const NAME_SIZE = "clamp(34px, 6vw, 86px)";
 // New Spirit Medium's cap height as a fraction of font size, measured from the
@@ -25,9 +32,9 @@ const COPY_SIZE = "clamp(15px, 1.5vw, 20px)";
 
 // What each portfolio actually covers, shown beside its button.
 const BLURBS: Record<PortfolioId, string> = {
-  interactive: "UX design and dev",
-  branding: "Logo + print design",
-  richmedia: "Rich media ad design and dev",
+  interactive: "App/web Design & Dev’t",
+  branding: "Logo & Print Design",
+  richmedia: "Rich Media Advertising",
 };
 
 /**
@@ -46,11 +53,39 @@ export default function SplashIntro({
   // Real pixel height (never 100vh — mobile browser chrome makes that wrong).
   height: number;
 }) {
+  const [revealed, setRevealed] = useState(false);
   const [ticking, setTicking] = useState(false);
+
+  // Hold everything hidden until the webfonts have settled, then run the
+  // stagger. Revealing earlier means watching the copy reflow from the
+  // fallback face into New Spirit, which is the ugly part.
   useEffect(() => {
-    const t = setTimeout(() => setTicking(true), TICKER_START_DELAY);
-    return () => clearTimeout(t);
+    let alive = true;
+    let tickerTimer: ReturnType<typeof setTimeout>;
+    const start = () => {
+      if (!alive) return;
+      setRevealed(true);
+      tickerTimer = setTimeout(() => {
+        if (alive) setTicking(true);
+      }, REVEAL_TOTAL + TICKER_START_DELAY);
+    };
+    const fonts = document.fonts?.ready ?? Promise.resolve();
+    void Promise.race([
+      fonts,
+      new Promise((res) => setTimeout(res, FONT_WAIT_CAP)),
+    ]).then(start);
+    return () => {
+      alive = false;
+      clearTimeout(tickerTimer);
+    };
   }, []);
+
+  // Slide-fade for the nth element in the sequence.
+  const step = (i: number): React.CSSProperties => ({
+    opacity: revealed ? 1 : 0,
+    transform: revealed ? "none" : "translateY(14px)",
+    transition: `opacity ${REVEAL_DUR}ms ease ${i * REVEAL_STEP}ms, transform ${REVEAL_DUR}ms ease ${i * REVEAL_STEP}ms`,
+  });
 
   return (
     <div
@@ -67,7 +102,10 @@ export default function SplashIntro({
           the wordmark's baseline. Stacks (logo on top, left-aligned) below the
           sm breakpoint. Baseline alignment works because an SVG is a replaced
           element, so its baseline is its bottom edge. */}
-      <div className="flex flex-col items-start gap-4 px-6 sm:flex-row sm:items-baseline sm:gap-6 sm:px-10">
+      <div
+        className="flex flex-col items-start gap-4 px-6 sm:flex-row sm:items-baseline sm:gap-6 sm:px-10"
+        style={step(0)}
+      >
         <LogoMark
           className="shrink-0 text-black sm:order-last sm:ml-auto"
           style={{ height: LOGO_SIZE, width: "auto" }}
@@ -82,7 +120,11 @@ export default function SplashIntro({
 
       {/* Single-line ticker, inset to the same gutter as everything else so it
           starts on the shared left margin (the divider below stays full-bleed). */}
-      <div className="mt-5 w-full overflow-hidden px-6 sm:px-10" aria-label={TICKER}>
+      <div
+        className="mt-5 w-full overflow-hidden px-6 sm:px-10"
+        aria-label={TICKER}
+        style={step(1)}
+      >
         <h3
           aria-hidden
           className="inline-flex whitespace-nowrap text-black"
@@ -99,15 +141,22 @@ export default function SplashIntro({
       </div>
 
       {/* Full-bleed rule dividing the branding block from the portfolio picker. */}
-      <div className="mt-4 h-px w-full bg-black" />
+      <div className="mt-4 h-px w-full bg-black" style={step(2)} />
 
-      <p className="mt-8 px-6 font-medium sm:px-10" style={{ fontSize: COPY_SIZE }}>
+      <p
+        className="mt-8 px-6 font-medium sm:px-10"
+        style={{ fontSize: COPY_SIZE, ...step(3) }}
+      >
         Which portfolio would you like to start with?
       </p>
 
       <div className="mt-5 flex flex-col items-start gap-3 px-6 sm:px-10">
-        {PORTFOLIO_IDS.map((id) => (
-          <div key={id} className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        {PORTFOLIO_IDS.map((id, i) => (
+          <div
+            key={id}
+            className="flex flex-wrap items-center gap-x-4 gap-y-1"
+            style={step(4 + i)}
+          >
             <button
               type="button"
               onClick={() => onChoose(id)}
