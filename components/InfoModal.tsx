@@ -367,7 +367,8 @@ export default function InfoModal({
   const email = decode(CONTACT_EMAIL_B64);
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6">
+    // z-90 keeps this above the splash gate (z-80), which repeats these links.
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 sm:p-6">
       {/* Full-screen dark tint + blur backdrop; closes on outside click. */}
       <button
         type="button"

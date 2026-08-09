@@ -12,7 +12,7 @@ const TICKER =
 // Staggered reveal: each element slides up and fades in, one after the next.
 const REVEAL_STEP = 120; // ms between elements
 const REVEAL_DUR = 550; // ms per element
-const REVEAL_STEPS = 7; // lockup, ticker, rule, question, 3 portfolio rows
+const REVEAL_STEPS = 7; // lockup, ticker, rule, question, pills, rule, links
 // The ticker holds still until the reveal has finished and settled, so the
 // sentence is readable from its start before it begins crawling.
 const TICKER_START_DELAY = 3000;
@@ -30,24 +30,32 @@ const LOGO_SIZE = `calc(${NAME_SIZE} * ${CAP_RATIO})`;
 // Body copy size, used for the ticker and everything under the divider.
 const COPY_SIZE = "clamp(15px, 1.5vw, 20px)";
 
-// What each portfolio actually covers, shown beside its button.
-const BLURBS: Record<PortfolioId, string> = {
-  interactive: "App/web Design & Dev’t",
-  branding: "Logo & Print Design",
-  richmedia: "Rich Media Advertising",
+// Shared pill: portfolio picker and the Resumé / Contact links.
+const PILL =
+  "inline-flex shrink-0 items-center rounded-full border border-black px-5 py-2 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white min-[992px]:text-base";
+
+// Splash-only labels. With the descriptions gone the button alone has to say
+// what the portfolio is, so Interactive gets its full name here; the menu and
+// the project nav keep the short label, where pill width is tight.
+const SPLASH_LABELS: Record<PortfolioId, string> = {
+  ...LABELS,
+  interactive: "Interactive Experiences",
 };
 
 /**
  * Full-page white gate shown before the gallery intro. The visitor picks
  * which portfolio to start in; the parent sets that portfolio, fades this
- * out, and only then runs the slide-in reveal.
+ * out, and only then runs the slide-in reveal. Resumé/Contact are repeated
+ * here so they're reachable before the gallery exists.
  */
 export default function SplashIntro({
   onChoose,
+  onOpenInfo,
   hiding,
   height,
 }: {
   onChoose: (id: PortfolioId) => void;
+  onOpenInfo: (kind: "resume" | "contact") => void;
   // Parent flips this to fade the overlay out before unmounting it.
   hiding: boolean;
   // Real pixel height (never 100vh — mobile browser chrome makes that wrong).
@@ -150,23 +158,36 @@ export default function SplashIntro({
         Which portfolio would you like to start with?
       </p>
 
-      <div className="mt-5 flex flex-col items-start gap-3 px-6 sm:px-10">
-        {PORTFOLIO_IDS.map((id, i) => (
-          <div
+      <div
+        className="mt-5 flex flex-wrap items-center gap-3 px-6 sm:px-10"
+        style={step(4)}
+      >
+        {PORTFOLIO_IDS.map((id) => (
+          <button
             key={id}
-            className="flex flex-wrap items-center gap-x-4 gap-y-1"
-            style={step(4 + i)}
+            type="button"
+            onClick={() => onChoose(id)}
+            className={PILL}
           >
-            <button
-              type="button"
-              onClick={() => onChoose(id)}
-              className="inline-flex shrink-0 items-center rounded-full border border-black px-5 py-2 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white min-[992px]:text-base"
-            >
-              {LABELS[id]}
-            </button>
-            <p className="text-sm text-black min-[992px]:text-base">{BLURBS[id]}</p>
-          </div>
+            {SPLASH_LABELS[id]}
+          </button>
         ))}
+      </div>
+
+      {/* Second full-bleed rule, separating the picker from the repeated
+          Resumé / Contact links. */}
+      <div className="mt-8 h-px w-full bg-black" style={step(5)} />
+
+      <div
+        className="mt-5 flex flex-wrap items-center gap-3 px-6 sm:px-10"
+        style={step(6)}
+      >
+        <button type="button" onClick={() => onOpenInfo("resume")} className={PILL}>
+          Resumé
+        </button>
+        <button type="button" onClick={() => onOpenInfo("contact")} className={PILL}>
+          Contact
+        </button>
       </div>
 
       {/* White triangle covering the top-right half, blended with `difference`

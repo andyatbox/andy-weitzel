@@ -737,14 +737,20 @@ export default function PortfolioApp() {
         </button>
       </div>
 
-      {/* Resumé / Contact popup — above everything (z-70). */}
-      {infoModal && <InfoModal kind={infoModal} onClose={closeInfo} />}
-
-      {/* Opening gate (z-80, above the popups): pick a portfolio, then the
-          intro reveal runs with that one already loaded. */}
+      {/* Opening gate (z-80): pick a portfolio, then the intro reveal runs
+          with that one already loaded. It also repeats the Resumé/Contact
+          links, so the popup sits above it at z-90. */}
       {!started && (
-        <SplashIntro onChoose={chooseStart} hiding={splashHiding} height={height} />
+        <SplashIntro
+          onChoose={chooseStart}
+          onOpenInfo={openInfo}
+          hiding={splashHiding}
+          height={height}
+        />
       )}
+
+      {/* Resumé / Contact popup — above everything, including the splash. */}
+      {infoModal && <InfoModal kind={infoModal} onClose={closeInfo} />}
     </main>
   );
 }
