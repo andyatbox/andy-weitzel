@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Text3D } from "@react-three/drei";
 import * as THREE from "three";
@@ -21,29 +21,119 @@ const MAX_BEND_RATIO = 0.3;
 // (1351 + 347 + 69) / 1000 for NewSpirit-Medium.typeface.json.
 const TITLE_LINE_RATIO = 1.767;
 
-// Greedy word-wrap for the WebGL titles, measured with the DOM-loaded
-// "New Spirit" face (same outlines as the typeface.json conversion), with a
-// small safety margin for conversion drift.
-let measureCtx: CanvasRenderingContext2D | null = null;
-function wrapTitle(title: string, fontSize: number, maxWidth: number): string[] {
-  if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
-  const ctx = measureCtx;
-  if (!ctx) return [title];
-  ctx.font = `500 ${fontSize}px "New Spirit", serif`;
-  const limit = maxWidth * 0.96;
+// Wrapping was measured against the DOM-loaded "New Spirit" face, on the
+// assumption it matched the typeface.json conversion. It doesn't: the JSON's
+// glyph advances run ~40% wider than the OTF at the same size, so lines the
+// DOM said fit rendered far past the plane edge and collided with the next
+// item — worst in portrait, where the plane is narrowest.
+//
+// Measure with the metrics three itself lays out with instead. TextGeometry
+// advances the pen by `glyph.ha * size / resolution` per character and applies
+// no kerning, so summing `ha` reproduces the rendered width exactly rather
+// than approximately.
+interface FontMetrics {
+  glyphs: Record<string, { ha: number }>;
+  resolution: number;
+}
+let metricsPromise: Promise<FontMetrics | null> | null = null;
+function loadFontMetrics(): Promise<FontMetrics | null> {
+  if (!metricsPromise) {
+    metricsPromise = fetch(FONT_URL)
+      .then((r) => r.json())
+      .then((data) => ({
+        glyphs: data.glyphs ?? {},
+        resolution: data.resolution || 1000,
+      }))
+      .catch(() => null);
+  }
+  return metricsPromise;
+}
+
+type Measure = (text: string, size: number) => number;
+
+function makeMeasure(metrics: FontMetrics | null): Measure {
+  if (metrics) {
+    // Fallback advance for characters the face lacks, so an exotic glyph
+    // can't silently measure as zero-width.
+    const fallback = metrics.glyphs["n"]?.ha ?? metrics.resolution * 0.5;
+    return (text, size) => {
+      let ha = 0;
+      for (const ch of text) ha += metrics.glyphs[ch]?.ha ?? fallback;
+      return (ha * size) / metrics.resolution;
+    };
+  }
+  // Metrics unavailable (fetch failed): fall back to the DOM measurement.
+  // Inexact, but no worse than before.
+  const ctx = document.createElement("canvas").getContext("2d");
+  return (text, size) => {
+    if (!ctx) return 0;
+    ctx.font = `500 ${size}px "New Spirit", serif`;
+    return ctx.measureText(text).width;
+  };
+}
+
+// Titles wrap to at most this many lines; past that the type shrinks instead
+// of stacking further up over the image.
+const MAX_TITLE_LINES = 3;
+const MIN_TITLE_SCALE = 0.6;
+
+/** Greedy word wrap, hard-breaking any single word too wide for the line. */
+function wrapLines(
+  measure: Measure,
+  title: string,
+  size: number,
+  maxWidth: number
+): string[] {
   const lines: string[] = [];
   let line = "";
-  for (const word of title.split(/\s+/)) {
+  const flush = () => {
+    if (line) lines.push(line);
+    line = "";
+  };
+  for (let word of title.split(/\s+/).filter(Boolean)) {
+    // A word wider than the whole line will never fit by wrapping — split it.
+    while (measure(word, size) > maxWidth && word.length > 1) {
+      let cut = word.length - 1;
+      while (cut > 1 && measure(word.slice(0, cut), size) > maxWidth) cut--;
+      flush();
+      lines.push(word.slice(0, cut));
+      word = word.slice(cut);
+    }
     const test = line ? `${line} ${word}` : word;
-    if (line && ctx.measureText(test).width > limit) {
-      lines.push(line);
+    if (line && measure(test, size) > maxWidth) {
+      flush();
       line = word;
     } else {
       line = test;
     }
   }
-  if (line) lines.push(line);
-  return lines;
+  flush();
+  return lines.length ? lines : [title];
+}
+
+export interface TitleLayout {
+  lines: string[];
+  size: number;
+  /** size ÷ base size, so the frame loop can track it while the plane grows. */
+  scale: number;
+}
+
+/** Wraps a title, shrinking the type until it fits within MAX_TITLE_LINES. */
+function layoutTitle(
+  measure: Measure,
+  title: string,
+  baseSize: number,
+  maxWidth: number
+): TitleLayout {
+  let size = baseSize;
+  let lines = wrapLines(measure, title, size, maxWidth);
+  const floor = baseSize * MIN_TITLE_SCALE;
+  // Smaller type fits more words per line, so this converges on fewer lines.
+  while (lines.length > MAX_TITLE_LINES && size > floor) {
+    size = Math.max(floor, size * 0.9);
+    lines = wrapLines(measure, title, size, maxWidth);
+  }
+  return { lines, size, scale: size / baseSize };
 }
 
 // RGB shift: like the bend, driven by scroll velocity (speed + momentum +
@@ -149,11 +239,31 @@ function GalleryScene({
 
   const fontSize = Math.min(planeWidth, planeHeight) * 0.05;
   const padding = fontSize * 0.8;
-  // Wrapped title lines per item — responsive to the plane size, so long
-  // titles break instead of running off the plane edge.
+
+  // Glyph metrics for wrapping. Titles live inside <Suspense> and don't paint
+  // until Text3D has loaded the same file, so there's no visible re-wrap when
+  // this resolves.
+  const [metrics, setMetrics] = useState<FontMetrics | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void loadFontMetrics().then((m) => {
+      if (alive) setMetrics(m);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const measure = useMemo(() => makeMeasure(metrics), [metrics]);
+
+  // Wrapped lines + fitted type size per item, responsive to the plane size,
+  // so long titles break (and shrink if needed) instead of running off the
+  // plane edge and over the neighbouring item.
   const titles = useMemo(
-    () => items.map((it) => wrapTitle(it.title, fontSize, planeWidth - padding * 2)),
-    [items, fontSize, planeWidth, padding]
+    () =>
+      items.map((it) =>
+        layoutTitle(measure, it.title, fontSize, planeWidth - padding * 2)
+      ),
+    [items, measure, fontSize, planeWidth, padding]
   );
 
   const textures = useItemTextures(items, planeWidth / planeHeight);
@@ -269,10 +379,13 @@ function GalleryScene({
         blueRefs.current[i]?.scale.set(W, H, 1);
         // Multi-line titles anchor their LAST line at the bottom padding, so
         // extra lines stack upward onto the plane instead of off its edge.
-        const lines = titles[i]?.length ?? 1;
+        // Shrunk titles keep their own line spacing via `scale`.
+        const layout = titles[i];
+        const lines = layout?.lines.length ?? 1;
+        const fsi = fs * (layout?.scale ?? 1);
         textRefs.current[i]?.position.set(
           -W / 2 + pad,
-          -H / 2 + pad + (lines - 1) * fs * TITLE_LINE_RATIO,
+          -H / 2 + pad + (lines - 1) * fsi * TITLE_LINE_RATIO,
           4
         );
         // Re-crop the texture to the live aspect each frame, else the UVs stay
@@ -549,8 +662,8 @@ function GalleryScene({
             <Text3D
               ref={(el) => void (textRefs.current[i] = el)}
               font={FONT_URL}
-              size={fontSize}
-              height={fontSize * 0.08}
+              size={titles[i].size}
+              height={titles[i].size * 0.08}
               curveSegments={6}
               bevelEnabled={false}
               renderOrder={1}
@@ -560,11 +673,11 @@ function GalleryScene({
                 -planeWidth / 2 + padding,
                 -planeHeight / 2 +
                   padding +
-                  (titles[i].length - 1) * fontSize * TITLE_LINE_RATIO,
+                  (titles[i].lines.length - 1) * titles[i].size * TITLE_LINE_RATIO,
                 4,
               ]}
             >
-              {titles[i].join("\n")}
+              {titles[i].lines.join("\n")}
               <meshBasicMaterial
                 color="#ffffff"
                 toneMapped={false}
