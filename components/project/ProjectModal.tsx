@@ -20,6 +20,15 @@ interface ProjectModalProps {
   revealDelay?: number;
 }
 
+// The hero spacer opens at full height so the WebGL teaser reads as full
+// screen, then gives a quarter of it back — pulling the content sheet into
+// view by shortening the spacer above it rather than by moving scrollTop.
+// Driving scrollTop (as this used to) fights the browser's own scrolling the
+// moment the visitor touches the wheel.
+const HERO_SHRINK_DELAY = 1000;
+const HERO_SHRINK_MS = 900;
+const HERO_SHRUNK = 0.75;
+
 export default function ProjectModal({
   project,
   opened,
@@ -28,6 +37,7 @@ export default function ProjectModal({
 }: ProjectModalProps) {
   const content = useProject(project?.slug ?? null);
   const [revealed, setRevealed] = useState(false);
+  const [heroShrunk, setHeroShrunk] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Reveal after the full-screen open transition; hide immediately on close.
@@ -43,6 +53,22 @@ export default function ProjectModal({
     setRevealed(false);
   }, [opened, project, revealDelay]);
 
+  // Once the page has been showing for a beat, shorten the hero so the sheet
+  // below rises into view. Skipped if the visitor already started scrolling —
+  // shrinking the spacer under them would shift the content they're reading.
+  useEffect(() => {
+    if (!revealed) {
+      setHeroShrunk(false);
+      return;
+    }
+    const t = setTimeout(() => {
+      const el = scrollRef.current;
+      if (el && el.scrollTop > 10) return;
+      setHeroShrunk(true);
+    }, HERO_SHRINK_DELAY);
+    return () => clearTimeout(t);
+  }, [revealed]);
+
   if (!project) return null;
 
   return (
@@ -56,8 +82,15 @@ export default function ProjectModal({
       }}
     >
       {/* Transparent hero spacer — the full-screen WebGL teaser shows through.
-          A chevron hints that there's content to scroll into. */}
-      <div className="relative w-full" style={{ height }}>
+          A chevron hints that there's content to scroll into. Shrinks to
+          HERO_SHRUNK shortly after reveal (see above). */}
+      <div
+        className="relative w-full"
+        style={{
+          height: heroShrunk ? height * HERO_SHRUNK : height,
+          transition: `height ${HERO_SHRINK_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`,
+        }}
+      >
         <div
           className="absolute bottom-12 left-1/2 flex h-14 w-14 -translate-x-1/2 animate-bounce items-center justify-center rounded-full bg-black/30 ring-2 ring-inset ring-white backdrop-blur-md"
           style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.6s ease" }}
