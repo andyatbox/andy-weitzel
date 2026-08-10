@@ -380,7 +380,13 @@ export default function InfoModal({
         role="dialog"
         aria-modal="true"
         aria-label={isResume ? "Resumé" : "Contact"}
-        className={`relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden ring-1 ${
+        // No overflow-hidden here on purpose. The scroller below already clips
+        // both axes on its own (overflow-y:auto forces overflow-x to auto), so
+        // a clip here bought nothing — but it made this panel an ancestor clip
+        // wrapping a composited scrolling child, which browsers apply on the
+        // main thread. During a fling the clip lagged the scroll and content
+        // painted outside the panel until scrolling stopped.
+        className={`relative z-10 flex max-h-[88vh] w-full flex-col ring-1 ${
           isResume
             ? "max-w-4xl bg-white text-black ring-black"
             : "max-w-lg text-white ring-white/80"
