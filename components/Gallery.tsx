@@ -167,8 +167,8 @@ const CAMERA_ZOOM = 0.8;
 
 // Gap between items in px, added along the scroll axis. Portrait uses a
 // tighter gap than the wider landscape rail.
-const ITEM_GAP_LANDSCAPE = 75;
-const ITEM_GAP_PORTRAIT = 12;
+const ITEM_GAP_LANDSCAPE = 36;
+const ITEM_GAP_PORTRAIT = 6;
 
 interface GalleryProps {
   items: PortfolioItem[];
