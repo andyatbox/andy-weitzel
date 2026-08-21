@@ -351,9 +351,12 @@ function ContactForm() {
 export default function InfoModal({
   kind,
   onClose,
+  height,
 }: {
   kind: InfoKind;
   onClose: () => void;
+  /** Measured window height. Never size this panel in vh — see below. */
+  height: number;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -380,13 +383,18 @@ export default function InfoModal({
         role="dialog"
         aria-modal="true"
         aria-label={isResume ? "Resumé" : "Contact"}
-        // No overflow-hidden here on purpose. The scroller below already clips
-        // both axes on its own (overflow-y:auto forces overflow-x to auto), so
-        // a clip here bought nothing — but it made this panel an ancestor clip
-        // wrapping a composited scrolling child, which browsers apply on the
-        // main thread. During a fling the clip lagged the scroll and content
-        // painted outside the panel until scrolling stopped.
-        className={`relative z-10 flex max-h-[88vh] w-full flex-col ring-1 ${
+        // Height comes from the measured window, never vh. A vh-sized panel is
+        // laid out against the *large* viewport, so on mobile Safari — where
+        // the chrome collapses and expands as you scroll — the panel's height
+        // and the visible area disagree mid-scroll, and the scroller paints
+        // short until things settle.
+        //
+        // No overflow-hidden here on purpose either: the scroller below
+        // already clips both axes (overflow-y:auto forces overflow-x to auto),
+        // so a clip here bought nothing while making this panel an ancestor
+        // clip wrapping a composited scrolling child.
+        style={{ maxHeight: Math.round(height * 0.88) }}
+        className={`relative z-10 flex w-full flex-col ring-1 ${
           isResume
             ? "max-w-4xl bg-white text-black ring-black"
             : "max-w-lg text-white ring-white/80"

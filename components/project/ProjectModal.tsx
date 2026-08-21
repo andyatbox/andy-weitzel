@@ -102,8 +102,13 @@ export default function ProjectModal({
       </div>
 
       {/* White content sheet. Base copy steps up at >=768px (headings keep
-          their own explicit sizes). */}
-      <div className="min-h-screen bg-white pb-24 text-black text-base md:text-lg">
+          their own explicit sizes). Its floor is the measured window height,
+          not min-h-screen — that resolves to 100vh, which is the large
+          viewport and so overshoots whenever mobile chrome is showing. */}
+      <div
+        className="bg-white pb-24 text-black text-base md:text-lg"
+        style={{ minHeight: height }}
+      >
         <header className="mx-auto max-w-5xl px-6 pt-16 pb-4">
           <p className="text-sm text-black/50">
             {CATEGORY_LABELS[project.category] || project.category}
@@ -117,7 +122,7 @@ export default function ProjectModal({
           <div className="pt-8">
             {content.gallery?.length ? (
               <div className="mb-14">
-                <ProjectGallery images={content.gallery} />
+                <ProjectGallery images={content.gallery} height={height} />
               </div>
             ) : null}
 

@@ -16,12 +16,16 @@ export class ScrollEngine {
   private inputHeld = false;
   private lastInputTime = -Infinity;
 
-  private static readonly EASE = 0.08;
+  // Both of these are per-frame exponential coefficients, so the settle time
+  // scales as roughly 1/k — doubling them halves the tail. Measured: a
+  // one-item snap took ~1.7s at 0.08/0.1, which read as a long drift after the
+  // motion had visually stopped.
+  private static readonly EASE = 0.16;
   // Snap blending: while input is idle, the target itself glides toward the
   // nearest item center each frame. Because `current` is still easing toward
   // that (moving) target, the slow-down and the snap fuse into one motion
   // instead of a stop followed by a second animation.
-  private static readonly SNAP_EASE = 0.1;
+  private static readonly SNAP_EASE = 0.2;
   private static readonly SNAP_IDLE_MS = 80;
 
   setLayout(spacing: number, count: number) {
@@ -64,6 +68,19 @@ export class ScrollEngine {
     const next = this.current + (this.target - this.current) * ScrollEngine.EASE;
     this.velocity = next - this.current;
     this.current = next;
+  }
+
+  /**
+   * True once the strip has genuinely stopped on an item centre — not merely
+   * slowed down. Gates teaser video, which must never share a frame with the
+   * scroll animation. The tolerances are deliberately tight: at landscape
+   * spacing the old 0.02 allowed ~19px of drift and 0.5 allowed a visible
+   * 30px/s creep, so video could run through the whole tail of a fling.
+   */
+  get settled() {
+    if (this.spacing <= 0) return false;
+    const p = this.current / this.spacing;
+    return Math.abs(p - Math.round(p)) < 0.004 && Math.abs(this.velocity) < 0.08;
   }
 
   get activeIndex() {

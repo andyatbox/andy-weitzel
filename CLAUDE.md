@@ -14,9 +14,12 @@ content is being finished — remove both before public launch.
   window-level scroll/drag input, the hover tooltip, and mounts everything
   else.
 - **`components/Gallery.tsx`** — the R3F `<Canvas>` scene: infinite-scrolling
-  image/title planes with bend distortion, additive-blended RGB shift, and a
-  cursor swirl/chroma effect (desktop only). Titles are WebGL `Text3D`, word
-  wrapped to the plane width.
+  image planes with bend distortion, additive-blended RGB shift, and a cursor
+  swirl/chroma effect (desktop only). Teasers show the project thumbnail; the
+  active one swaps in a looping video (`lib/teaserVideo.ts`) or cycles the
+  project's first gallery stills (`lib/teaserSlides.ts`), but only while the
+  gallery is fully at rest. There are no titles in the canvas — project names
+  live only in the DOM menu.
 - **`components/Menu.tsx`** — the DOM nav/menu panel (logo, name, role
   ticker, portfolio pills, infinite scrolling item list). Landscape and
   portrait are materially different layouts, not just a CSS breakpoint.
@@ -70,10 +73,16 @@ content is being finished — remove both before public launch.
 
 ## Known gotchas worth remembering
 
-- **`NewSpirit-Medium.typeface.json`** (used for WebGL `Text3D`) has a winding
-  bug from its OTF→JSON conversion — counters in e/d/o render as solid blobs.
-  Current file is winding-repaired via `scripts/fix-typeface.cjs`. Fallback
-  is `/fonts/helvetiker_regular.typeface.json` if it ever regresses.
+- **Teaser video is HLS-only.** Gumlet publishes no usable MP4 (every variant
+  401/403s), so playback needs `hls.js` — except on WebKit, which renders an
+  MSE blob as a black frame through WebGL and must use native HLS instead.
+  Chrome answers `"maybe"` to the HLS mime type despite being unable to play
+  it, so `canPlayType` can never be the first branch in that decision.
+- **Swapping a map between an image and a `VideoTexture` needs the material
+  rebuilt.** three picks the sRGB decode with a shader define
+  (`DECODE_VIDEO_TEXTURE`) baked in at program-compile time; changing `map` on
+  a live material doesn't recompile it, and video silently renders with lifted
+  blacks. `ChannelPlanes` keys its materials on the source kind for this.
 - **Gumlet embeds**: `disable_player_controls=true` hides the scrubber/chrome
   but *not* the built-in center play button (which is purple and can't be
   removed via embed params). The only fix is covering the iframe entirely

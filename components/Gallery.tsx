@@ -1,140 +1,17 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Text3D } from "@react-three/drei";
 import * as THREE from "three";
 import type { PortfolioId, PortfolioItem } from "@/lib/portfolios";
 import type { ScrollEngine } from "@/lib/ScrollEngine";
 import { applyCover, useItemTextures } from "@/lib/textures";
+import { driveTeaserPlayback, useTeaserVideo } from "@/lib/teaserVideo";
+import { useTeaserSlides } from "@/lib/teaserSlides";
 
-// Winding-repaired via scripts/fix-typeface.cjs — the raw conversion
-// ("New Spirit_Medium.json") renders counters (e, d, o…) as solid blobs.
-// Fallback if needed: "/fonts/helvetiker_regular.typeface.json".
-const FONT_URL = "/fonts/NewSpirit-Medium.typeface.json";
 const PLANE_SEGMENTS = 32;
 const BEND_FACTOR = 2.5;
 const MAX_BEND_RATIO = 0.3;
-
-// Multi-line titles: three's Font offsets '\n' lines by
-// (bb.yMax - bb.yMin + underlineThickness) / resolution per unit of size —
-// (1351 + 347 + 69) / 1000 for NewSpirit-Medium.typeface.json.
-const TITLE_LINE_RATIO = 1.767;
-
-// Wrapping was measured against the DOM-loaded "New Spirit" face, on the
-// assumption it matched the typeface.json conversion. It doesn't: the JSON's
-// glyph advances run ~40% wider than the OTF at the same size, so lines the
-// DOM said fit rendered far past the plane edge and collided with the next
-// item — worst in portrait, where the plane is narrowest.
-//
-// Measure with the metrics three itself lays out with instead. TextGeometry
-// advances the pen by `glyph.ha * size / resolution` per character and applies
-// no kerning, so summing `ha` reproduces the rendered width exactly rather
-// than approximately.
-interface FontMetrics {
-  glyphs: Record<string, { ha: number }>;
-  resolution: number;
-}
-let metricsPromise: Promise<FontMetrics | null> | null = null;
-function loadFontMetrics(): Promise<FontMetrics | null> {
-  if (!metricsPromise) {
-    metricsPromise = fetch(FONT_URL)
-      .then((r) => r.json())
-      .then((data) => ({
-        glyphs: data.glyphs ?? {},
-        resolution: data.resolution || 1000,
-      }))
-      .catch(() => null);
-  }
-  return metricsPromise;
-}
-
-type Measure = (text: string, size: number) => number;
-
-function makeMeasure(metrics: FontMetrics | null): Measure {
-  if (metrics) {
-    // Fallback advance for characters the face lacks, so an exotic glyph
-    // can't silently measure as zero-width.
-    const fallback = metrics.glyphs["n"]?.ha ?? metrics.resolution * 0.5;
-    return (text, size) => {
-      let ha = 0;
-      for (const ch of text) ha += metrics.glyphs[ch]?.ha ?? fallback;
-      return (ha * size) / metrics.resolution;
-    };
-  }
-  // Metrics unavailable (fetch failed): fall back to the DOM measurement.
-  // Inexact, but no worse than before.
-  const ctx = document.createElement("canvas").getContext("2d");
-  return (text, size) => {
-    if (!ctx) return 0;
-    ctx.font = `500 ${size}px "New Spirit", serif`;
-    return ctx.measureText(text).width;
-  };
-}
-
-// Titles wrap to at most this many lines; past that the type shrinks instead
-// of stacking further up over the image.
-const MAX_TITLE_LINES = 3;
-const MIN_TITLE_SCALE = 0.6;
-
-/** Greedy word wrap, hard-breaking any single word too wide for the line. */
-function wrapLines(
-  measure: Measure,
-  title: string,
-  size: number,
-  maxWidth: number
-): string[] {
-  const lines: string[] = [];
-  let line = "";
-  const flush = () => {
-    if (line) lines.push(line);
-    line = "";
-  };
-  for (let word of title.split(/\s+/).filter(Boolean)) {
-    // A word wider than the whole line will never fit by wrapping — split it.
-    while (measure(word, size) > maxWidth && word.length > 1) {
-      let cut = word.length - 1;
-      while (cut > 1 && measure(word.slice(0, cut), size) > maxWidth) cut--;
-      flush();
-      lines.push(word.slice(0, cut));
-      word = word.slice(cut);
-    }
-    const test = line ? `${line} ${word}` : word;
-    if (line && measure(test, size) > maxWidth) {
-      flush();
-      line = word;
-    } else {
-      line = test;
-    }
-  }
-  flush();
-  return lines.length ? lines : [title];
-}
-
-export interface TitleLayout {
-  lines: string[];
-  size: number;
-  /** size ÷ base size, so the frame loop can track it while the plane grows. */
-  scale: number;
-}
-
-/** Wraps a title, shrinking the type until it fits within MAX_TITLE_LINES. */
-function layoutTitle(
-  measure: Measure,
-  title: string,
-  baseSize: number,
-  maxWidth: number
-): TitleLayout {
-  let size = baseSize;
-  let lines = wrapLines(measure, title, size, maxWidth);
-  const floor = baseSize * MIN_TITLE_SCALE;
-  // Smaller type fits more words per line, so this converges on fewer lines.
-  while (lines.length > MAX_TITLE_LINES && size > floor) {
-    size = Math.max(floor, size * 0.9);
-    lines = wrapLines(measure, title, size, maxWidth);
-  }
-  return { lines, size, scale: size / baseSize };
-}
 
 // RGB shift: like the bend, driven by scroll velocity (speed + momentum +
 // direction). The red and blue channel layers slide apart along the motion
@@ -165,6 +42,11 @@ function detectTouch() {
 // fills the canvas; lower values reveal parts of the previous/next items.
 const CAMERA_ZOOM = 0.8;
 
+// How long everything must be still before a teaser video is shown and played.
+// Motion stops it instantly; starting waits, so a brief pause mid-fling or the
+// moment between two snaps never flickers a video in and out.
+const VIDEO_STILL_MS = 220;
+
 // Gap between items in px, added along the scroll axis. Portrait uses a
 // tighter gap than the wider landscape rail.
 const ITEM_GAP_LANDSCAPE = 36;
@@ -180,6 +62,10 @@ interface GalleryProps {
   // the canvas resize. `t` is progress (0=closed, 1=open); `w`/`h` are the
   // live eased canvas size; `animating` is true only during a transition.
   anim: { t: number; w: number; h: number; animating: boolean };
+  // False while the gallery is off-screen (splash still up, or mid portfolio
+  // switch). Teaser video stays dormant until it's actually visible, so
+  // nothing streams behind a cover.
+  visible: boolean;
   onIndexChange: (index: number) => void;
   // Receives the WebGL canvas once created, so the post-process can sample it.
   onReady?: (canvas: HTMLCanvasElement) => void;
@@ -192,6 +78,7 @@ export default function Gallery({
   engine,
   opened,
   anim,
+  visible,
   onIndexChange,
   onReady,
 }: GalleryProps) {
@@ -217,6 +104,7 @@ export default function Gallery({
         engine={engine}
         opened={opened}
         anim={anim}
+        visible={visible}
         onIndexChange={onIndexChange}
       />
     </Canvas>
@@ -229,6 +117,7 @@ function GalleryScene({
   engine,
   opened,
   anim,
+  visible,
   onIndexChange,
 }: Omit<GalleryProps, "portfolio">) {
   const { size, camera, gl } = useThree();
@@ -237,38 +126,47 @@ function GalleryScene({
   const itemGap = isLandscape ? ITEM_GAP_LANDSCAPE : ITEM_GAP_PORTRAIT;
   const spacing = (isLandscape ? planeHeight : planeWidth) + itemGap;
 
-  const fontSize = Math.min(planeWidth, planeHeight) * 0.05;
-  const padding = fontSize * 0.8;
-
-  // Glyph metrics for wrapping. Titles live inside <Suspense> and don't paint
-  // until Text3D has loaded the same file, so there's no visible re-wrap when
-  // this resolves.
-  const [metrics, setMetrics] = useState<FontMetrics | null>(null);
-  useEffect(() => {
-    let alive = true;
-    void loadFontMetrics().then((m) => {
-      if (alive) setMetrics(m);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  const measure = useMemo(() => makeMeasure(metrics), [metrics]);
-
-  // Wrapped lines + fitted type size per item, responsive to the plane size,
-  // so long titles break (and shrink if needed) instead of running off the
-  // plane edge and over the neighbouring item.
-  const titles = useMemo(
-    () =>
-      items.map((it) =>
-        layoutTitle(measure, it.title, fontSize, planeWidth - padding * 2)
-      ),
-    [items, measure, fontSize, planeWidth, padding]
-  );
-
   const textures = useItemTextures(items, planeWidth / planeHeight);
+
+  // Teaser video. Only one item streams at a time — whichever the gallery is
+  // currently settled on — so a portfolio can carry any number of videos
+  // without the cost growing. `videoIndexRef` mirrors the state so the frame
+  // loop can read it without waiting for a re-render.
+  const [videoIndex, setVideoIndex] = useState<number | null>(null);
+  const videoIndexRef = useRef<number | null>(null);
+  const videoItem = videoIndex !== null ? items[videoIndex] : undefined;
+  const teaser = useTeaserVideo(videoItem?.video, videoIndex !== null);
+  // Owning the video element and *showing* it are separate: the element is
+  // kept alive while its item stays active (re-fetching HLS on every snap
+  // would be far worse), but the texture is only swapped in — and played —
+  // once nothing is moving. Anything less means decoding a video through the
+  // same frames that are already busy animating.
+  const [videoLive, setVideoLive] = useState(false);
+  const videoLiveRef = useRef(false);
+  const stillSince = useRef(0);
+  // Projects with no video but with gallery stills cycle through them instead.
+  const [slideIndex, setSlideIndex] = useState<number | null>(null);
+  const slideIndexRef = useRef<number | null>(null);
+  const slideItem = slideIndex !== null ? items[slideIndex] : undefined;
+  const slides = useTeaserSlides(slideItem?.slides, slideIndex !== null);
+
+  // The video stands in for that item's image only while it's live; otherwise
+  // a cycled still if this item has them; otherwise the thumbnail, which is
+  // also what shows during any motion.
+  const texAt = (i: number) => {
+    if (teaser.texture && videoLive && i === videoIndex) return teaser.texture;
+    if (slides.texture && i === slideIndex) return slides.texture;
+    return textures[i];
+  };
+
+  // Crop the video the same way as the stills (it's 16:9 like the thumbnails).
+  useEffect(() => {
+    if (teaser.texture) applyCover(teaser.texture, planeWidth / planeHeight);
+  }, [teaser.texture, planeWidth, planeHeight]);
+  useEffect(() => {
+    if (slides.texture) applyCover(slides.texture, planeWidth / planeHeight);
+  }, [slides.texture, planeWidth, planeHeight]);
   const groupRefs = useRef<(THREE.Group | null)[]>([]);
-  const textRefs = useRef<(THREE.Mesh | null)[]>([]);
   const redRefs = useRef<(THREE.Mesh | null)[]>([]);
   const blueRefs = useRef<(THREE.Mesh | null)[]>([]);
   // Backing + green layers too, so every plane mesh can be scaled imperatively
@@ -369,28 +267,17 @@ function GalleryScene({
       cam.top = H / 2;
       cam.bottom = -H / 2;
       gl.setSize(W, H);
-      const fs = Math.min(W, H) * 0.05;
-      const pad = fs * 0.8;
       const aspect = W / H;
       for (let i = 0; i < items.length; i++) {
         backingRefs.current[i]?.scale.set(W, H, 1);
         redRefs.current[i]?.scale.set(W, H, 1);
         greenRefs.current[i]?.scale.set(W, H, 1);
         blueRefs.current[i]?.scale.set(W, H, 1);
-        // Multi-line titles anchor their LAST line at the bottom padding, so
-        // extra lines stack upward onto the plane instead of off its edge.
-        // Shrunk titles keep their own line spacing via `scale`.
-        const layout = titles[i];
-        const lines = layout?.lines.length ?? 1;
-        const fsi = fs * (layout?.scale ?? 1);
-        textRefs.current[i]?.position.set(
-          -W / 2 + pad,
-          -H / 2 + pad + (lines - 1) * fsi * TITLE_LINE_RATIO,
-          4
-        );
+        // Titles are centred on the plane's own origin, so they need no
+        // repositioning as it grows — the corner-anchored version did.
         // Re-crop the texture to the live aspect each frame, else the UVs stay
         // at the old aspect while the geometry scales — stretching the image.
-        const tex = textures[i];
+        const tex = texAt(i);
         if (tex) applyCover(tex, aspect);
       }
     }
@@ -442,65 +329,6 @@ function GalleryScene({
     const mouseWorldY = mouseOn
       ? pointer.current.ndcY * (planeHeight / (2 * cam.zoom))
       : 0;
-
-    // Per-vertex updater for a title mesh: same bend it always had, plus the
-    // pointer swirl (in px, since text geometry is already in px).
-    const updateText = (i: number, gx: number, gy: number, planeMouse: boolean) => {
-      const mesh = textRefs.current[i];
-      if (!mesh) return;
-      const geo = mesh.geometry;
-      const tp = geo.attributes.position as THREE.BufferAttribute;
-      if (!tp) return;
-      let base = geo.userData.basePositions as Float32Array | undefined;
-      if (!base) {
-        base = Float32Array.from(tp.array);
-        geo.userData.basePositions = base;
-      }
-      const ox = mesh.position.x;
-      const oy = mesh.position.y;
-      for (let v = 0; v < tp.count; v++) {
-        const bx = base[v * 3];
-        const by = base[v * 3 + 1];
-        let x = bx;
-        let y = by;
-        if (bendActive) {
-          if (isLandscape) {
-            const nx = (ox + bx) / planeWidth;
-            const fo = Math.max(0, 1 - (2 * nx) ** 2);
-            y = by - bendTarget * fo;
-          } else {
-            const ny = (oy + by) / planeHeight;
-            const fo = Math.max(0, 1 - (2 * ny) ** 2);
-            x = bx + bendTarget * fo;
-          }
-        }
-        if (planeMouse) {
-          const dxPx = gx + ox + bx - mouseWorldX;
-          const dyPx = gy + oy + by - mouseWorldY;
-          const dist = Math.sqrt(dxPx * dxPx + dyPx * dyPx);
-          let f = 1 - dist / RPx;
-          if (f > 0) {
-            f = f * f * (3 - 2 * f) * mStrength;
-            const ang = MOUSE_TWIST * f;
-            const cs = Math.cos(ang);
-            const sn = Math.sin(ang);
-            x += dxPx * cs - dyPx * sn - dxPx;
-            y += dxPx * sn + dyPx * cs - dyPx;
-          }
-        }
-        tp.setXY(v, x, y);
-      }
-      tp.needsUpdate = true;
-    };
-    const resetText = (i: number) => {
-      const mesh = textRefs.current[i];
-      if (!mesh) return;
-      const tp = mesh.geometry.attributes.position as THREE.BufferAttribute;
-      const base = mesh.geometry.userData.basePositions as Float32Array | undefined;
-      if (!tp || !base) return;
-      for (let v = 0; v < tp.count; v++) tp.setXY(v, base[v * 3], base[v * 3 + 1]);
-      tp.needsUpdate = true;
-    };
 
     // Infinite wrap + per-plane displacement. Each item is placed at its
     // nearest wrapped copy, then its geometries are rewritten with bend +
@@ -590,7 +418,6 @@ function GalleryScene({
         pr.needsUpdate = true;
         pb.needsUpdate = true;
         planeDirty.current[i] = true;
-        updateText(i, gx, gy, planeMouse);
       } else if (planeDirty.current[i]) {
         // Nothing affects this plane now — flatten it back to base once.
         for (let v = 0; v < count; v++) {
@@ -603,7 +430,6 @@ function GalleryScene({
         pm.needsUpdate = true;
         pr.needsUpdate = true;
         pb.needsUpdate = true;
-        resetText(i);
         planeDirty.current[i] = false;
       }
     }
@@ -640,6 +466,63 @@ function GalleryScene({
       lastIndex.current = index;
       onIndexChange(index);
     }
+
+    // --- teaser video lifecycle -------------------------------------------
+    // "At rest" means the strip has stopped AND the open/close transition is
+    // done. The engine doesn't move during that transition, so `settled` alone
+    // reads true right through it — the most expensive animation in the app.
+    const now = performance.now();
+    const atRest = engine.settled && !anim.animating;
+    if (atRest) {
+      if (!stillSince.current) stillSince.current = now;
+    } else {
+      stillSince.current = 0;
+    }
+    const restStable =
+      stillSince.current !== 0 && now - stillSince.current >= VIDEO_STILL_MS;
+
+    // Adopt a video only once things are at rest, so flicking past never spins
+    // one up; hold it while it stays the active item; drop it the moment the
+    // active item changes (the playhead is remembered).
+    let want = videoIndexRef.current;
+    if (want !== null && (want !== index || !visible)) want = null;
+    if (want === null && visible && restStable && items[index]?.video) want = index;
+    if (want !== videoIndexRef.current) {
+      videoIndexRef.current = want;
+      setVideoIndex(want);
+    }
+
+    // Show and play only at rest. Motion drops straight back to the thumbnail,
+    // so no video frame is decoded or uploaded while anything is animating.
+    const live = want !== null && restStable;
+    if (live !== videoLiveRef.current) {
+      videoLiveRef.current = live;
+      setVideoLive(live);
+    }
+    driveTeaserPlayback(teaser.el.current, live);
+
+    // Still-cycling teasers: same adoption rule, but only for items with no
+    // video, and it stops the moment the project is opened — an open project
+    // shows its thumbnail behind the sheet rather than shuffling underneath.
+    const item = items[index];
+    let wantSlides = slideIndexRef.current;
+    if (wantSlides !== null && (wantSlides !== index || !visible || opened)) {
+      wantSlides = null;
+    }
+    if (
+      wantSlides === null &&
+      visible &&
+      !opened &&
+      restStable &&
+      !item?.video &&
+      item?.slides?.length
+    ) {
+      wantSlides = index;
+    }
+    if (wantSlides !== slideIndexRef.current) {
+      slideIndexRef.current = wantSlides;
+      setSlideIndex(wantSlides);
+    }
   });
 
   return (
@@ -650,7 +533,7 @@ function GalleryScene({
             geomMain={geoms.mains[i]}
             geomRed={geoms.reds[i]}
             geomBlue={geoms.blues[i]}
-            texture={textures[i]}
+            texture={texAt(i)}
             width={planeWidth}
             height={planeHeight}
             backingRef={(el) => void (backingRefs.current[i] = el)}
@@ -658,34 +541,6 @@ function GalleryScene({
             greenRef={(el) => void (greenRefs.current[i] = el)}
             blueRef={(el) => void (blueRefs.current[i] = el)}
           />
-          <Suspense fallback={null}>
-            <Text3D
-              ref={(el) => void (textRefs.current[i] = el)}
-              font={FONT_URL}
-              size={titles[i].size}
-              height={titles[i].size * 0.08}
-              curveSegments={6}
-              bevelEnabled={false}
-              renderOrder={1}
-              // Anchor the last line at the bottom padding; wrapped lines
-              // stack upward onto the plane (see TITLE_LINE_RATIO).
-              position={[
-                -planeWidth / 2 + padding,
-                -planeHeight / 2 +
-                  padding +
-                  (titles[i].lines.length - 1) * titles[i].size * TITLE_LINE_RATIO,
-                4,
-              ]}
-            >
-              {titles[i].lines.join("\n")}
-              <meshBasicMaterial
-                color="#ffffff"
-                toneMapped={false}
-                transparent
-                depthTest={false}
-              />
-            </Text3D>
-          </Suspense>
         </group>
       ))}
     </>
@@ -734,11 +589,23 @@ function ChannelPlanes({
     );
   }
 
+  // three decides whether to sRGB-decode a map with a *shader define*
+  // (DECODE_VIDEO_TEXTURE), chosen when the program is compiled. Swapping the
+  // map from an image to a VideoTexture on a live material doesn't recompile
+  // it, so the decode silently never runs and video renders with lifted
+  // blacks — measurably ~2.2x on the darks. Keying the material on the source
+  // kind rebuilds it, so each gets the program it needs.
+  const kind = (texture as THREE.Texture & { isVideoTexture?: boolean })
+    ?.isVideoTexture
+    ? "video"
+    : "image";
+
   // depthTest off so all three coincident layers draw and sum (equal-depth
   // testing would otherwise let only the first win); renderOrder keeps them
   // behind the title text, which draws afterward at a higher order.
   const channel = (color: string) => (
     <meshBasicMaterial
+      key={kind}
       map={texture}
       color={color}
       toneMapped={false}

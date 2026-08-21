@@ -10,7 +10,14 @@ import {
   subscribeVideoEnded,
 } from "@/lib/videoEmbed";
 
-export default function ProjectGallery({ images }: { images?: GallerySlide[] }) {
+export default function ProjectGallery({
+  images,
+  height,
+}: {
+  images?: GallerySlide[];
+  /** Measured window height — never size this in vh (mobile chrome). */
+  height: number;
+}) {
   const [current, setCurrent] = useState(0);
   const [dragOffset, setDragOffset] = useState(0);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
@@ -138,7 +145,14 @@ export default function ProjectGallery({ images }: { images?: GallerySlide[] }) 
     <div>
       <div
         className="relative cursor-grab touch-none select-none overflow-hidden border-y border-black bg-neutral-100 active:cursor-grabbing"
-        style={{ height: "min(calc((min(100vw, 80rem) - 3rem) * 9 / 16), 80vh)" }}
+        // Capped against the measured window height rather than 80vh: vh is
+        // resolved against the large viewport, so on mobile Safari the cap is
+        // wrong by exactly the height of the collapsing browser chrome.
+        style={{
+          height: `min(calc((min(100vw, 80rem) - 3rem) * 9 / 16), ${Math.round(
+            height * 0.8
+          )}px)`,
+        }}
         onTouchStart={(e) => dragStart(e.touches[0].clientX)}
         onTouchMove={(e) => dragMove(e.touches[0].clientX)}
         onTouchEnd={dragEnd}

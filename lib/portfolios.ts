@@ -11,6 +11,10 @@ export interface PortfolioItem {
   title: string;
   image: string;
   slug: string;
+  /** Raw embed markup/URL of the project's single video, when it has one. */
+  video?: string;
+  /** Up to 3 gallery stills, cycled on the teaser when there's no video. */
+  slides?: string[];
 }
 
 export interface Portfolio {
@@ -24,7 +28,7 @@ export const PORTFOLIO_IDS: PortfolioId[] = ["interactive", "branding", "richmed
 
 export const LABELS: Record<PortfolioId, string> = {
   interactive: "Interactive",
-  branding: "Branding/Print",
+  branding: "Branding",
   richmedia: "Digital Ads",
 };
 
@@ -46,10 +50,18 @@ interface RawProject {
   slug: string;
   category: string;
   thumbnail: Parameters<typeof urlFor>[0];
+  video?: string;
+  slides?: Parameters<typeof urlFor>[0][];
 }
 
+// `video` is the project's single video slide, if it has one — the teaser
+// plays it in place of the thumbnail. Projects carry at most one. `slides` is
+// the first few gallery stills, which the teaser cycles through instead when
+// there's no video.
 const LIST_QUERY = `*[_type == "project" && defined(thumbnail)] | order(orderRank) {
-  _id, title, "slug": slug.current, category, thumbnail
+  _id, title, "slug": slug.current, category, thumbnail,
+  "video": gallery[_type == "videoSlide"][0].videoUrl,
+  "slides": gallery[_type == "image"][0...3]
 }`;
 
 /** Fetches both portfolios' teasers (title + 16:9 thumbnail + slug) from Sanity. */
@@ -72,6 +84,12 @@ export function usePortfolios(): Portfolios | null {
           id: row._id,
           title: row.title,
           slug: row.slug,
+          video: row.video,
+          // Same 16:9 crop as the thumbnail, so cycling between them never
+          // shifts the framing.
+          slides: (row.slides ?? []).map((img) =>
+            urlFor(img).width(1600).height(900).fit("crop").auto("format").url()
+          ),
           // Force a 16:9 crop (respecting the hotspot) so the WebGL cover logic
           // and procedural fallback stay consistent.
           image: urlFor(row.thumbnail)

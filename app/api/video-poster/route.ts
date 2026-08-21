@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Resolves a player embed src to its poster/thumbnail image URL.
-// Needed server-side: Gumlet's poster lives at
-// video.gumlet.io/{collectionId}/{assetId}/thumbnail-1-0.png, and the
-// collection id only appears in the embed page HTML, which browsers can't
-// fetch cross-origin. Vimeo posters come from its public oEmbed endpoint.
+// Resolves a player embed src to the media it exposes: a poster image, and
+// for Gumlet an HLS manifest the gallery can pull into a WebGL VideoTexture.
+// Needed server-side: both live under
+// video.gumlet.io/{collectionId}/{assetId}/, and the collection id only
+// appears in the embed page HTML, which browsers can't fetch cross-origin.
+// (The media itself is served with Access-Control-Allow-Origin: *, so the
+// video can be textured without tainting the canvas.) Vimeo exposes only a
+// poster, via its public oEmbed endpoint — it publishes no usable stream.
 export async function GET(req: NextRequest) {
   const src = req.nextUrl.searchParams.get("src") ?? "";
   const vimeoId = src.match(/player\.vimeo\.com\/video\/(\d+)/)?.[1];
@@ -20,7 +23,10 @@ export async function GET(req: NextRequest) {
         { next: { revalidate: 86400 } }
       );
       const data = (await r.json()) as { thumbnail_url?: string };
-      return NextResponse.json({ poster: data.thumbnail_url ?? null }, { headers });
+      return NextResponse.json(
+        { poster: data.thumbnail_url ?? null, hls: null },
+        { headers }
+      );
     }
     if (gumletId) {
       // Short revalidate: this HTML is Gumlet's live page, and its embedded
@@ -39,10 +45,16 @@ export async function GET(req: NextRequest) {
       // query string (which carries ?v=) parses correctly.
       const raw = html.match(/<meta property="og:image" content="([^"]+)"/)?.[1];
       const poster = raw ? raw.replace(/&amp;/g, "&") : null;
-      return NextResponse.json({ poster }, { headers });
+      // The master playlist is linked in the same page. Gumlet publishes no
+      // usable MP4 (every variant 401/403s), so HLS is the only option.
+      const hls =
+        html.match(
+          /https:\/\/video\.gumlet\.io\/[a-f0-9]+\/[a-f0-9]+\/main\.m3u8/
+        )?.[0] ?? null;
+      return NextResponse.json({ poster, hls }, { headers });
     }
   } catch {
     // fall through to null
   }
-  return NextResponse.json({ poster: null }, { headers });
+  return NextResponse.json({ poster: null, hls: null }, { headers });
 }

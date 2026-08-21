@@ -600,6 +600,9 @@ export default function PortfolioApp() {
               engine={engine}
               opened={opened}
               anim={anim}
+              // Dormant behind the splash and during a portfolio swap, so no
+              // teaser video streams while the gallery is covered.
+              visible={started && !switching}
               onIndexChange={() => {}}
               onReady={setGalleryCanvas}
             />
@@ -750,7 +753,9 @@ export default function PortfolioApp() {
       )}
 
       {/* Resumé / Contact popup — above everything, including the splash. */}
-      {infoModal && <InfoModal kind={infoModal} onClose={closeInfo} />}
+      {infoModal && (
+        <InfoModal kind={infoModal} onClose={closeInfo} height={height} />
+      )}
     </main>
   );
 }
