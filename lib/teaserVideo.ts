@@ -43,8 +43,7 @@ function resolveHls(embedSrc: string): Promise<string | null> {
 }
 
 // Where each video was when it went inactive, so returning to an item picks up
-// in place rather than restarting. Only one video element exists at a time, so
-// this is what makes "pauses in place" survive the teardown.
+// in place rather than restarting.
 const resumeAt = new Map<string, number>();
 
 /**
@@ -83,6 +82,23 @@ function throttleUploads(tex: THREE.VideoTexture, fps: number) {
   });
 }
 
+// If play() is refused, retrying on a timer never helps — only a call made
+// from inside a real user gesture will be granted. Queue one retry against the
+// next interaction rather than hammering it every frame.
+let gestureRetryArmed = false;
+function retryOnNextGesture(video: HTMLVideoElement) {
+  if (gestureRetryArmed || typeof window === "undefined") return;
+  gestureRetryArmed = true;
+  const go = () => {
+    gestureRetryArmed = false;
+    window.removeEventListener("pointerup", go, true);
+    window.removeEventListener("touchend", go, true);
+    void video.play().catch(() => {});
+  };
+  window.addEventListener("pointerup", go, true);
+  window.addEventListener("touchend", go, true);
+}
+
 export interface TeaserVideo {
   texture: THREE.VideoTexture | null;
   /** Live element, for per-frame play/pause without re-rendering React. */
@@ -90,10 +106,15 @@ export interface TeaserVideo {
 }
 
 /**
- * Builds a VideoTexture for one item's video, and only while `enabled`.
- * Exactly one video element is alive at a time: when the gallery moves on,
- * this tears down (remembering the playhead) so memory and decode cost stay
- * flat no matter how many projects carry video.
+ * Streams one item's video into a VideoTexture, while `enabled`.
+ *
+ * The <video> element and its texture are created once and then *reused* for
+ * every project — only the source is swapped. That matters on iOS: an element
+ * that has played once following a user gesture stays unlocked for later
+ * programmatic play(), but a freshly created element does not inherit that, so
+ * building a new one per project meant the first teaser played (unlocked by
+ * the splash tap) and every one after it was silently refused. Reuse also
+ * keeps element and decoder churn out of the scroll path.
  */
 export function useTeaserVideo(
   videoUrl: string | undefined,
@@ -101,106 +122,152 @@ export function useTeaserVideo(
 ): TeaserVideo {
   const [texture, setTexture] = useState<THREE.VideoTexture | null>(null);
   const el = useRef<HTMLVideoElement | null>(null);
+  // Persistent across source changes; torn down only when the scene unmounts.
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const texRef = useRef<THREE.VideoTexture | null>(null);
+  const hlsRef = useRef<{ destroy: () => void } | null>(null);
+
+  // Build the element + texture once, on first use.
+  const ensure = () => {
+    if (videoRef.current) return videoRef.current;
+    const video = document.createElement("video");
+    // CORS is open on Gumlet's media (ACAO: *); this keeps the WebGL canvas
+    // untainted, which PsychedelicFX depends on to read it back.
+    video.crossOrigin = "anonymous";
+    video.muted = true;
+    video.defaultMuted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.setAttribute("playsinline", "");
+    video.setAttribute("muted", "");
+    video.preload = "auto";
+    // load() resets playbackRate to defaultPlaybackRate, and every source swap
+    // triggers that — so set both or the rate silently drops back to 1x.
+    video.defaultPlaybackRate = PLAYBACK_RATE;
+    video.playbackRate = PLAYBACK_RATE;
+    // WebKit will not reliably decode a detached media element, so keep it in
+    // the document — parked off-screen at 1px, never display:none, which would
+    // stop decoding altogether.
+    video.setAttribute("aria-hidden", "true");
+    video.style.cssText =
+      "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;" +
+      "pointer-events:none;z-index:-1;";
+    document.body.appendChild(video);
+
+    const tex = new THREE.VideoTexture(video);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    throttleUploads(tex, MAX_TEXTURE_FPS);
+
+    videoRef.current = video;
+    texRef.current = tex;
+    return video;
+  };
+
+  // Tear the shared element down only when the gallery scene goes away.
+  useEffect(
+    () => () => {
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+      texRef.current?.dispose();
+      texRef.current = null;
+      const video = videoRef.current;
+      if (video) {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+        video.remove();
+      }
+      videoRef.current = null;
+      el.current = null;
+    },
+    []
+  );
 
   useEffect(() => {
     const embed = videoUrl ? getVideoEmbedSrc(videoUrl) : null;
     if (!enabled || !embed) return;
 
     let alive = true;
-    let video: HTMLVideoElement | null = null;
-    let tex: THREE.VideoTexture | null = null;
-    // hls.js instance; typed loosely so the dynamic import stays lazy.
-    let hls: { destroy: () => void } | null = null;
     let src: string | null = null;
 
-    const onLoaded = () => {
-      if (!alive || !video) return;
+    // Publish the texture only once the new source has a decodable frame, so
+    // the teaser never shows the previous project's last frame. Several events
+    // are watched because engines disagree on which fires first for a stream
+    // that only starts buffering on play().
+    const onReady = () => {
+      const video = videoRef.current;
+      if (!alive || !video || !texRef.current) return;
+      if (video.readyState < 2) return;
       video.playbackRate = PLAYBACK_RATE; // re-assert after the media loaded
-      tex = new THREE.VideoTexture(video);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.minFilter = THREE.LinearFilter;
-      tex.magFilter = THREE.LinearFilter;
-      tex.generateMipmaps = false;
-      throttleUploads(tex, MAX_TEXTURE_FPS);
-      el.current = video;
-      // Swap only once a frame is decodable, so the image teaser never
-      // flashes to black while the stream spins up.
-      setTexture(tex);
+      setTexture(texRef.current);
     };
+    const READY_EVENTS = ["loadeddata", "canplay", "playing"] as const;
     // rAF stops when the tab is hidden, so the per-frame gate below stops
     // running — pause explicitly rather than decode in the background.
     const onVisibility = () => {
-      if (document.hidden) video?.pause();
+      if (document.hidden) videoRef.current?.pause();
     };
 
     void (async () => {
       src = await resolveHls(embed);
       if (!alive || !src) return;
 
-      video = document.createElement("video");
-      // CORS is open on Gumlet's media (ACAO: *); this keeps the WebGL canvas
-      // untainted, which PsychedelicFX depends on to read it back.
-      video.crossOrigin = "anonymous";
-      video.muted = true;
-      video.defaultMuted = true;
-      video.loop = true;
-      video.playsInline = true;
-      video.setAttribute("playsinline", "");
-      video.setAttribute("muted", "");
-      video.preload = "auto";
-      // load() resets playbackRate to defaultPlaybackRate, and assigning src
-      // (or attaching hls) triggers exactly that — so set both, or the rate is
-      // silently dropped back to 1x before the first frame.
-      video.defaultPlaybackRate = PLAYBACK_RATE;
-      video.playbackRate = PLAYBACK_RATE;
-      video.addEventListener("loadeddata", onLoaded, { once: true });
-      // WebKit will not reliably decode a detached media element, so keep it
-      // in the document — parked off-screen at 1px, never display:none, which
-      // would stop decoding altogether.
-      video.setAttribute("aria-hidden", "true");
-      video.style.cssText =
-        "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;" +
-        "pointer-events:none;z-index:-1;";
-      document.body.appendChild(video);
+      const video = ensure();
+      setTexture(null); // old source's frames must not show under the new item
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+      for (const ev of READY_EVENTS) video.addEventListener(ev, onReady);
 
-      if (prefersNativeHls(video)) {
-        video.src = src;
+      // Order matters: Chrome answers "maybe" to the HLS mime type but cannot
+      // actually play it, so canPlayType must never be the first branch — it
+      // would send every Chrome visitor down a path that silently never
+      // decodes. Prefer hls.js wherever Media Source Extensions exist, and
+      // keep native for the engines that lack MSE but do speak HLS (iOS).
+      const canNative = !!video.canPlayType("application/vnd.apple.mpegurl");
+      const hasMse = typeof window !== "undefined" && "MediaSource" in window;
+      const Hls = hasMse ? (await import("hls.js")).default : null;
+      if (!alive) return;
+
+      if (Hls?.isSupported()) {
+        const instance = new Hls({
+          // A teaser needs a few seconds of runway, not the whole file.
+          maxBufferLength: 8,
+          maxMaxBufferLength: 12,
+          capLevelToPlayerSize: false,
+          enableWorker: true,
+        });
+        instance.on(Hls.Events.MANIFEST_PARSED, () => {
+          // Let ABR adapt to the connection, but never above the height the
+          // teaser can actually show. Levels aren't ordered by quality in the
+          // manifest, so pick the tallest that fits the cap.
+          const levels = instance.levels ?? [];
+          let cap = -1;
+          let capH = -1;
+          levels.forEach((l, i) => {
+            if (l.height <= MAX_VIDEO_HEIGHT && l.height > capH) {
+              capH = l.height;
+              cap = i;
+            }
+          });
+          if (cap >= 0) instance.autoLevelCapping = cap;
+        });
+        instance.loadSource(src);
+        instance.attachMedia(video);
+        hlsRef.current = instance;
+      } else if (canNative) {
+        video.src = src; // iOS Safari: no MSE, but native HLS
       } else {
-        const Hls = (await import("hls.js")).default;
-        if (!alive || !video) return;
-        if (Hls.isSupported()) {
-          const instance = new Hls({
-            // Only a few seconds of runway — this is a teaser, not a player.
-            maxBufferLength: 8,
-            maxMaxBufferLength: 12,
-            capLevelToPlayerSize: false,
-            enableWorker: true,
-          });
-          instance.on(Hls.Events.MANIFEST_PARSED, () => {
-            // Let ABR adapt to the connection, but never above the height the
-            // teaser can actually show. Levels aren't ordered by quality in
-            // the manifest, so pick the tallest that fits the cap.
-            const levels = instance.levels ?? [];
-            let cap = -1;
-            let capH = -1;
-            levels.forEach((l, i) => {
-              if (l.height <= MAX_VIDEO_HEIGHT && l.height > capH) {
-                capH = l.height;
-                cap = i;
-              }
-            });
-            if (cap >= 0) instance.autoLevelCapping = cap;
-          });
-          instance.loadSource(src);
-          instance.attachMedia(video);
-          hls = instance;
-        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-          video.src = src;
-        } else {
-          return; // no path to play it; the image stays
-        }
+        return; // no path to play it; the image stays
       }
 
+      // Publish the element now, not when it becomes decodable. iOS Safari
+      // ignores preload="auto" and won't buffer until playback is requested,
+      // so gating this on readiness deadlocks: no play() means no data, no
+      // data means no ready event, so play() is never called.
+      el.current = video;
       document.addEventListener("visibilitychange", onVisibility);
 
       // Resume where this item left off.
@@ -218,16 +285,15 @@ export function useTeaserVideo(
     return () => {
       alive = false;
       document.removeEventListener("visibilitychange", onVisibility);
+      const video = videoRef.current;
       if (video) {
         if (src) resumeAt.set(src, video.currentTime);
-        video.removeEventListener("loadeddata", onLoaded);
-        video.pause();
-        video.removeAttribute("src");
-        video.load(); // drop the decoder + buffers
-        video.remove();
+        for (const ev of READY_EVENTS) video.removeEventListener(ev, onReady);
+        video.pause(); // holds position; the element itself is kept
       }
-      hls?.destroy();
-      tex?.dispose();
+      // Drop the stream's buffers, but keep the element and its texture.
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
       el.current = null;
       setTexture(null);
     };
@@ -251,7 +317,7 @@ export function driveTeaserPlayback(
     if (LOOP_SECONDS > 0 && video.currentTime >= LOOP_SECONDS) {
       video.currentTime = 0;
     }
-    if (video.paused) void video.play().catch(() => {});
+    if (video.paused) void video.play().catch(() => retryOnNextGesture(video));
   } else if (!video.paused) {
     video.pause(); // holds position — no rewind
   }
