@@ -10,13 +10,28 @@ import {
   subscribeVideoEnded,
 } from "@/lib/videoEmbed";
 
+// Ceiling on the slide height as a fraction of the window. Only bites where
+// the strip is wide relative to the window — short landscape laptops — since
+// otherwise the 16:9 width constraint is the smaller of the two.
+const MAX_HEIGHT = 0.72;
+// Vertical room the expanded view keeps for the controls row under the media
+// (button height + its margin + the overlay's own padding).
+const CONTROLS_SPACE = 120;
+
 export default function ProjectGallery({
   images,
   height,
+  onExpandedChange,
 }: {
   images?: GallerySlide[];
   /** Measured window height — never size this in vh (mobile chrome). */
   height: number;
+  /**
+   * Announces the expanded state. The overlay below is `fixed`, but it lives
+   * inside the modal's own `z-40` stacking context, so its z-index can't lift
+   * it over the project nav at `z-50` — the sheet has to raise itself.
+   */
+  onExpandedChange?: (expanded: boolean) => void;
 }) {
   const [current, setCurrent] = useState(0);
   const [dragOffset, setDragOffset] = useState(0);
@@ -37,6 +52,12 @@ export default function ProjectGallery({
   // tap (toggle playback) apart from the tail end of a swipe.
   const lastDragAbs = useRef(0);
   const iframeRefs = useRef<Record<number, HTMLIFrameElement | null>>({});
+  // The strip's own width, measured. It used to be derived from `100vw` in a
+  // calc, which both ignored whatever padding the caller applies (the sheet
+  // now insets this to clear the fixed nav) and counted the scrollbar.
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [stripW, setStripW] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
 
   // Watch every mounted player (iframes stay mounted across slides so swiping
   // never drops to a black frame): subscribe to each one's "ended" event when
@@ -82,8 +103,53 @@ export default function ProjectGallery({
     };
   }, [images]);
 
+  // Expanded: Escape closes, and the wheel is swallowed so the project sheet
+  // underneath doesn't scroll away behind the overlay. Touch needs no handler —
+  // the strip already carries `touch-none`, and so does the overlay.
+  useEffect(() => {
+    onExpandedChange?.(fullscreen);
+  }, [fullscreen, onExpandedChange]);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    const onWheel = (e: WheelEvent) => e.preventDefault();
+    window.addEventListener("keydown", onKey);
+    // Non-passive, because React's own wheel listener is passive and can't
+    // preventDefault.
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("wheel", onWheel);
+    };
+  }, [fullscreen]);
+
+  // Must run before the early return below, and must re-run once `images`
+  // arrives — the ref points at DOM that only exists past that guard, so on the
+  // first (null-returning) render there is nothing to observe.
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const measure = () => setStripW(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [images]);
+
   if (!images?.length) return null;
   const count = images.length;
+  // 16:9 against the width actually available, capped against the measured
+  // window height (never vh — that's the large viewport, so mobile Safari's
+  // collapsing chrome makes it wrong by exactly the chrome's height).
+  // Expanded, the cap is the window less the controls row beneath it.
+  const cap = fullscreen
+    ? Math.max(120, height - CONTROLS_SPACE)
+    : height * MAX_HEIGHT;
+  const stripH = Math.round(Math.min((stripW * 9) / 16, cap));
+  const ink = fullscreen ? "text-white" : "text-black";
 
   // Send play/pause to a player iframe — Vimeo's player protocol or Gumlet's
   // player.js protocol.
@@ -142,17 +208,21 @@ export default function ProjectGallery({
     // media keeps the previous boxed dimensions (16:9 at the old max-w-7xl
     // content width), centered and vh-capped — the strip's height matches
     // that media box, so nothing scales up to "cover" the wider strip.
-    <div>
+    // Expanding only swaps classes on this wrapper — the slider markup below is
+    // untouched, so React never unmounts the player iframes and a video keeps
+    // playing straight through the transition. Portalling it elsewhere, or
+    // rendering a second copy, would reload every player.
+    <div
+      className={
+        fullscreen
+          ? "fixed inset-0 z-[60] flex touch-none flex-col items-center justify-center bg-black p-4 sm:p-6"
+          : undefined
+      }
+    >
+      <div ref={stripRef} className="w-full">
       <div
-        className="relative cursor-grab touch-none select-none overflow-hidden border-y border-black bg-neutral-100 active:cursor-grabbing"
-        // Capped against the measured window height rather than 80vh: vh is
-        // resolved against the large viewport, so on mobile Safari the cap is
-        // wrong by exactly the height of the collapsing browser chrome.
-        style={{
-          height: `min(calc((min(100vw, 80rem) - 3rem) * 9 / 16), ${Math.round(
-            height * 0.8
-          )}px)`,
-        }}
+        className="relative cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing"
+        style={{ height: stripH || undefined }}
         onTouchStart={(e) => dragStart(e.touches[0].clientX)}
         onTouchMove={(e) => dragMove(e.touches[0].clientX)}
         onTouchEnd={dragEnd}
@@ -166,7 +236,7 @@ export default function ProjectGallery({
           style={{
             width: `${count * 100}%`,
             transform: `translateX(calc(${-current * (100 / count)}% + ${dragOffset}px))`,
-            transition: dragging.current ? "none" : "transform 0.4s ease",
+            transition: dragging.current ? "none" : "transform 0.28s ease",
           }}
         >
           {images.map((item, i) => {
@@ -185,9 +255,10 @@ export default function ProjectGallery({
                 className="h-full flex-shrink-0"
                 style={{ width: `${100 / count}%` }}
               >
-                {/* Centered, contained media box: 16:9 at the strip height,
-                    i.e. the same dimensions the boxed slider had. */}
-                <div className="relative mx-auto aspect-video h-full max-w-full">
+                {/* Centered, contained media box: 16:9 at the strip height.
+                    Clips its own corners so the rounding applies to the image,
+                    the iframe and the poster/play overlay alike. */}
+                <div className="relative mx-auto aspect-video h-full max-w-full overflow-hidden rounded-xl">
                 {item._type === "videoSlide" ? (
                   videoSrc ? (
                     <div className="absolute inset-0">
@@ -261,13 +332,21 @@ export default function ProjectGallery({
         </div>
       </div>
 
-      {count > 1 && (
-        <div className="mt-4 flex items-center justify-center">
-          <div className="flex items-center gap-4 rounded-full border-2 border-black px-4 py-2">
+      {/* Dots stay dead-centred under the media; the expand/close toggle is
+          absolutely placed so adding it doesn't shift them off centre. Colours
+          invert when expanded, where the ground is black rather than the
+          sheet. */}
+      <div className="relative mt-4 flex min-h-11 items-center justify-center gap-3 sm:gap-0">
+        {count > 1 && (
+          <div
+            className={`flex items-center gap-4 rounded-full border-2 px-4 py-2 ${ink} ${
+              fullscreen ? "border-white" : "border-black"
+            }`}
+          >
             <button
               type="button"
               onClick={() => goTo(current - 1)}
-              className="flex h-6 w-6 items-center justify-center text-black transition-opacity hover:opacity-50"
+              className="flex h-6 w-6 items-center justify-center transition-opacity hover:opacity-50"
               aria-label="Previous slide"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -280,8 +359,17 @@ export default function ProjectGallery({
                   key={i}
                   type="button"
                   onClick={() => goTo(i)}
-                  className="h-3 w-3 rounded-full border-2 border-black transition-colors"
-                  style={{ backgroundColor: i === current ? "black" : "transparent" }}
+                  className={`h-3 w-3 rounded-full border-2 transition-colors ${
+                    fullscreen ? "border-white" : "border-black"
+                  }`}
+                  style={{
+                    backgroundColor:
+                      i === current
+                        ? fullscreen
+                          ? "white"
+                          : "black"
+                        : "transparent",
+                  }}
                   aria-label={`Go to slide ${i + 1}`}
                 />
               ))}
@@ -289,7 +377,7 @@ export default function ProjectGallery({
             <button
               type="button"
               onClick={() => goTo(current + 1)}
-              className="flex h-6 w-6 items-center justify-center text-black transition-opacity hover:opacity-50"
+              className="flex h-6 w-6 items-center justify-center transition-opacity hover:opacity-50"
               aria-label="Next slide"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -297,8 +385,39 @@ export default function ProjectGallery({
               </svg>
             </button>
           </div>
-        </div>
-      )}
+        )}
+
+        <button
+          type="button"
+          onClick={() => setFullscreen((v) => !v)}
+          aria-label={fullscreen ? "Exit full screen" : "View full screen"}
+          // In flow beside the dots on narrow screens, where an absolute
+          // button would sit on top of a full-width pill; docked right (dots
+          // dead-centred) once there's room.
+          className={`right-0 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 transition-colors sm:absolute ${
+            fullscreen
+              ? "border-white text-white hover:bg-white hover:text-black"
+              : "border-black text-black hover:bg-black hover:text-white"
+          }`}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {fullscreen ? (
+              <>
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </>
+            ) : (
+              <>
+                <polyline points="15 3 21 3 21 9" />
+                <polyline points="9 21 3 21 3 15" />
+                <line x1="21" y1="3" x2="14" y2="10" />
+                <line x1="3" y1="21" x2="10" y2="14" />
+              </>
+            )}
+          </svg>
+        </button>
+      </div>
+      </div>
     </div>
   );
 }
