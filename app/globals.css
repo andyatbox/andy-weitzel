@@ -60,15 +60,16 @@ body {
   }
 }
 
-/* Splash ticker: one line scrolling left forever. The track holds exactly two
-   copies of the sentence, so translating it by -50% lands the second copy
-   where the first started — the reset is invisible. */
-@keyframes marquee-x {
-  from {
-    transform: translateX(0);
+/* Splash bio caret: hard on/off (paired with step-end), so it reads as a
+   terminal cursor rather than a pulse. */
+@keyframes caret-blink {
+  0%,
+  49% {
+    opacity: 1;
   }
-  to {
-    transform: translateX(-50%);
+  50%,
+  100% {
+    opacity: 0;
   }
 }
 
