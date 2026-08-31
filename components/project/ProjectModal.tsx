@@ -15,8 +15,16 @@ export interface ActiveProject {
 interface ProjectModalProps {
   project: ActiveProject | null;
   opened: boolean;
+  /**
+   * True once the teaser has finished expanding to full screen. The sheet
+   * waits for it, so the content is never laid over a still-growing teaser.
+   * Already true when navigating between projects with the sheet open — that
+   * moves the engine, not the canvas — so `revealDelay` governs there.
+   */
+  expandDone: boolean;
   height: number;
-  // Delay before the modal reveals, so it appears after the open transition.
+  // Floor on how long the sheet stays hidden, which is what paces the
+  // fade-out/fade-in when switching projects without closing.
   revealDelay?: number;
 }
 
@@ -37,11 +45,12 @@ const HEADER_TOP = "pt-40 md:pt-5";
 export default function ProjectModal({
   project,
   opened,
+  expandDone,
   height,
   revealDelay = 400,
 }: ProjectModalProps) {
   const content = useProject(project?.slug ?? null);
-  const [revealed, setRevealed] = useState(false);
+  const [waited, setWaited] = useState(false);
   // The gallery's expanded view is a fixed overlay rendered inside this sheet,
   // so it can only cover the project nav (z-50) if the sheet itself outranks
   // it. Reset on close so a project opened later starts normally.
@@ -53,14 +62,18 @@ export default function ProjectModal({
   // sheet out first — the WebGL teaser slides behind it — then fades back in.
   useEffect(() => {
     if (opened && project) {
-      setRevealed(false);
+      setWaited(false);
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
-      const t = setTimeout(() => setRevealed(true), revealDelay);
+      const t = setTimeout(() => setWaited(true), revealDelay);
       return () => clearTimeout(t);
     }
-    setRevealed(false);
+    setWaited(false);
     setGalleryExpanded(false);
   }, [opened, project, revealDelay]);
+
+  // Both gates: the minimum beat, and the teaser having actually arrived at
+  // full screen.
+  const revealed = waited && expandDone;
 
   if (!project) return null;
 

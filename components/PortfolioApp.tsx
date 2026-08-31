@@ -45,6 +45,9 @@ export default function PortfolioApp() {
   const portfolios = usePortfolios();
   const [portfolio, setPortfolio] = useState<PortfolioId>("interactive");
   const [opened, setOpened] = useState(false);
+  // True only once the teaser has finished growing to full screen; gates the
+  // project sheet's reveal.
+  const [expandDone, setExpandDone] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
   const [intro, setIntro] = useState(false);
@@ -502,6 +505,15 @@ export default function PortfolioApp() {
       anim.h = h;
     };
 
+    // The sheet waits on this rather than on a timer, so the content never
+    // appears over a teaser still growing behind it — the ease is frame-based,
+    // so its real duration moves with the refresh rate and with any change to
+    // the easing constant.
+    const settle = () => {
+      anim.animating = false;
+      setExpandDone(target === 1);
+    };
+
     let raf = 0;
     const tick = () => {
       anim.t += (target - anim.t) * 0.22;
@@ -510,15 +522,16 @@ export default function PortfolioApp() {
       if (anim.t !== target) {
         raf = requestAnimationFrame(tick);
       } else {
-        anim.animating = false;
+        settle();
       }
     };
     apply(anim.t); // sync immediately (first mount + resize-while-open)
     if (anim.t !== target) {
       anim.animating = true;
+      setExpandDone(false);
       raf = requestAnimationFrame(tick);
     } else {
-      anim.animating = false;
+      settle();
     }
     return () => cancelAnimationFrame(raf);
     // `ready` is included so this re-runs once the gallery div is actually
@@ -640,7 +653,12 @@ export default function PortfolioApp() {
       )}
 
       {/* Scrollable project content overlay — below the close button (z-50). */}
-      <ProjectModal project={activeProject} opened={opened} height={height} />
+      <ProjectModal
+        project={activeProject}
+        opened={opened}
+        expandDone={expandDone}
+        height={height}
+      />
 
       {/* Back + portfolio-switch nav — top-left. Inverted from the old close
           X: white buttons, black stroke, black text. The back arrow closes
