@@ -14,21 +14,21 @@ import SplashIntro from "./SplashIntro";
 const DRAG_MULTIPLIER = 1.6;
 const FLING_MULTIPLIER = 14;
 // Slide-reveal timing (ms), shared by the intro and portfolio switches.
-const SLIDE_HOLD = 1700;
-const SLIDE_DUR = 950;
+const SLIDE_HOLD = 1100;
+const SLIDE_DUR = 620;
 // Cap on how long a switch waits for the new portfolio's images before sliding
 // in anyway (so a slow/failed image can't strand the panel off-screen).
-const SWITCH_LOAD_CAP = 3500;
+const SWITCH_LOAD_CAP = 2500;
 // How long the open-project close transition (gallery shrink + modal fade)
 // takes to visually settle. The portfolio-switch slide-out below assumes the
 // gallery is already at its closed (75%-width) size — sliding it off-screen
 // while it's still full-screen undershoots, leaving a sliver of it hanging
 // over the hero-logo reveal. Switching from an open project waits this long
 // before starting the switch, so it starts from an already-closed gallery.
-const PROJECT_CLOSE_MS = 750;
+const PROJECT_CLOSE_MS = 500;
 // Splash fade-out (must match the transition duration in SplashIntro). The
 // gallery intro only starts once this has finished.
-const SPLASH_FADE = 600;
+const SPLASH_FADE = 400;
 
 /** Resolves once the image is loaded (or errored) — used to warm the cache. */
 function preloadImage(url: string) {
@@ -110,6 +110,9 @@ export default function PortfolioApp() {
   // Hover tooltip ("View … Project") element, driven imperatively so mouse
   // tracking never re-renders React.
   const tooltipRef = useRef<HTMLDivElement>(null);
+  // Published by the tooltip effect below so the gallery can ask for a repaint
+  // when the item under a stationary cursor changes.
+  const repaintTip = useRef<(() => void) | null>(null);
 
   // Switch the portfolio by replaying the slide intro: slide the panel out to
   // the parked (pre-intro) state — exposing the logo-bg — swap the portfolio
@@ -181,6 +184,15 @@ export default function PortfolioApp() {
     (index: number) => {
       if (openedRef.current) return;
       engine.scrollToIndex(index);
+    },
+    [engine]
+  );
+
+  // Menu chevrons: move one teaser without any wheel/drag input.
+  const stepItem = useCallback(
+    (delta: number) => {
+      if (openedRef.current) return;
+      engine.stepItems(delta);
     },
     [engine]
   );
@@ -351,10 +363,12 @@ export default function PortfolioApp() {
   // Non-touch only; hidden while dragging, while a project or info modal is
   // open, and during portfolio switches. Driven imperatively (no re-renders).
   //
-  // The label is refreshed on a frame loop rather than only on pointermove:
-  // scrolling changes which teaser sits under a stationary cursor, and a
-  // move-only update left the tooltip naming the previous project until the
-  // mouse happened to twitch. Position still tracks pointermove alone.
+  // The label has to refresh without a pointermove: scrolling changes which
+  // teaser sits under a stationary cursor, and a move-only update left the
+  // tooltip naming the previous project until the mouse happened to twitch.
+  // That used to be a permanent rAF; it's now driven by the gallery's
+  // index-change callback (published into `repaintTip`), so a parked cursor
+  // costs nothing and the main thread isn't woken 60 times a second for it.
   //
   // Depends on `ready`: the component returns null (no DOM at all, including
   // the tooltip div) until viewport + portfolios load, so this effect must
@@ -366,7 +380,6 @@ export default function PortfolioApp() {
     if (!tip) return;
     let down = false;
     let overGallery = false;
-    let raf = 0;
 
     const hide = () => {
       tip.style.opacity = "0";
@@ -397,10 +410,7 @@ export default function PortfolioApp() {
       tip.style.opacity = "1";
     };
 
-    const tick = () => {
-      paint();
-      raf = requestAnimationFrame(tick);
-    };
+    repaintTip.current = paint;
 
     const onMove = (e: PointerEvent) => {
       if (e.pointerType === "touch") return;
@@ -428,9 +438,9 @@ export default function PortfolioApp() {
     window.addEventListener("pointerdown", onDown);
     window.addEventListener("pointerup", onUp);
     document.documentElement.addEventListener("pointerleave", onLeave);
-    raf = requestAnimationFrame(tick);
+    paint();
     return () => {
-      cancelAnimationFrame(raf);
+      repaintTip.current = null;
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointerup", onUp);
@@ -494,7 +504,7 @@ export default function PortfolioApp() {
 
     let raf = 0;
     const tick = () => {
-      anim.t += (target - anim.t) * 0.14;
+      anim.t += (target - anim.t) * 0.22;
       if (Math.abs(target - anim.t) < 0.001) anim.t = target;
       apply(anim.t);
       if (anim.t !== target) {
@@ -577,6 +587,7 @@ export default function PortfolioApp() {
             intro={intro}
             onSelectPortfolio={selectPortfolio}
             onSelectItem={selectItem}
+            onStepItem={stepItem}
             onOpenInfo={openInfo}
             onInfoHover={setInfoHover}
           />
@@ -587,11 +598,11 @@ export default function PortfolioApp() {
         <div
           ref={galleryRef}
           className="absolute touch-none overflow-hidden bg-[#f8f8f8]"
-          style={{ opacity: intro ? 1 : 0, transition: "opacity 0.7s ease 80ms" }}
+          style={{ opacity: intro ? 1 : 0, transition: "opacity 0.45s ease 60ms" }}
         >
           <div
             className="h-full w-full"
-            style={{ opacity: switching ? 0 : 1, transition: "opacity 0.22s ease" }}
+            style={{ opacity: switching ? 0 : 1, transition: "opacity 0.15s ease" }}
           >
             <Gallery
               items={items}
@@ -603,7 +614,7 @@ export default function PortfolioApp() {
               // Dormant behind the splash and during a portfolio swap, so no
               // teaser video streams while the gallery is covered.
               visible={started && !switching}
-              onIndexChange={() => {}}
+              onIndexChange={() => repaintTip.current?.()}
               onReady={setGalleryCanvas}
             />
           </div>
@@ -624,7 +635,7 @@ export default function PortfolioApp() {
           ref={tooltipRef}
           aria-hidden
           className="pointer-events-none fixed left-0 top-0 z-30 whitespace-nowrap rounded-full bg-white/80 px-3.5 py-1.5 text-sm font-medium text-black shadow-lg backdrop-blur-md"
-          style={{ opacity: 0, transition: "opacity 0.15s ease", willChange: "transform" }}
+          style={{ opacity: 0, transition: "opacity 0.12s ease", willChange: "transform" }}
         />
       )}
 
@@ -635,7 +646,7 @@ export default function PortfolioApp() {
           X: white buttons, black stroke, black text. The back arrow closes
           the project; the pills below switch portfolios (closing first). */}
       <div
-        className="fixed left-5 top-5 z-50 flex flex-col items-start gap-2 transition-opacity duration-300"
+        className="fixed left-5 top-5 z-50 flex flex-col items-start gap-2 transition-opacity duration-200"
         style={{
           opacity: opened ? 1 : 0,
           pointerEvents: opened ? "auto" : "none",
@@ -696,7 +707,7 @@ export default function PortfolioApp() {
           type="button"
           onClick={() => navigateProject(-1)}
           aria-label="Previous project"
-          className="group flex h-11 w-11 items-center overflow-hidden whitespace-nowrap rounded-full bg-white pl-[13px] text-black shadow-lg ring-2 ring-inset ring-black transition-[width] duration-300 ease-out hover:w-[185px]"
+          className="group flex h-11 w-11 items-center overflow-hidden whitespace-nowrap rounded-full bg-white pl-[13px] text-black shadow-lg ring-2 ring-inset ring-black transition-[width] duration-200 ease-out hover:w-[185px]"
         >
           <svg
             width="18"
@@ -711,7 +722,7 @@ export default function PortfolioApp() {
           >
             <polyline points="18 15 12 9 6 15" />
           </svg>
-          <span className="ml-2 text-sm font-medium opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <span className="ml-2 text-sm font-medium opacity-0 transition-opacity duration-150 group-hover:opacity-100">
             Previous Project
           </span>
         </button>

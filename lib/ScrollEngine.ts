@@ -19,13 +19,14 @@ export class ScrollEngine {
   // Both of these are per-frame exponential coefficients, so the settle time
   // scales as roughly 1/k — doubling them halves the tail. Measured: a
   // one-item snap took ~1.7s at 0.08/0.1, which read as a long drift after the
-  // motion had visually stopped.
-  private static readonly EASE = 0.16;
+  // motion had visually stopped; 0.16/0.2 halved that, and these values take
+  // another third off as part of the site-wide tightening.
+  private static readonly EASE = 0.22;
   // Snap blending: while input is idle, the target itself glides toward the
   // nearest item center each frame. Because `current` is still easing toward
   // that (moving) target, the slow-down and the snap fuse into one motion
   // instead of a stop followed by a second animation.
-  private static readonly SNAP_EASE = 0.2;
+  private static readonly SNAP_EASE = 0.27;
   private static readonly SNAP_IDLE_MS = 80;
 
   setLayout(spacing: number, count: number) {
@@ -86,6 +87,18 @@ export class ScrollEngine {
   get activeIndex() {
     const raw = Math.round(this.current / this.spacing) % this.count;
     return raw < 0 ? raw + this.count : raw;
+  }
+
+  /**
+   * Advance by whole items, for the menu's prev/next chevrons. Steps from the
+   * *snapped* target rather than the raw one, so a click lands on an exact
+   * item centre even mid-glide — and so repeated clicks accumulate one item
+   * each instead of compounding a fractional offset.
+   */
+  stepItems(delta: number) {
+    if (this.spacing <= 0) return;
+    const snapped = Math.round(this.target / this.spacing) * this.spacing;
+    this.target = snapped + delta * this.spacing;
   }
 
   scrollToIndex(index: number) {

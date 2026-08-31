@@ -21,6 +21,8 @@ interface MenuProps {
   intro: boolean;
   onSelectPortfolio: (id: PortfolioId) => void;
   onSelectItem: (index: number) => void;
+  // Prev/next chevrons: ±1 teaser, no wheel or drag involved.
+  onStepItem: (delta: number) => void;
   onOpenInfo: (kind: "resume" | "contact") => void;
   // Hovering the logo or the four pills toggles the post-process effect.
   onInfoHover: (active: boolean) => void;
@@ -77,11 +79,51 @@ function Pill({
   );
 }
 
+/**
+ * One chevron of the list stepper. `dir` is the item delta, so -1 points up
+ * (previous) and +1 down (next) — the list rides up as the index grows, which
+ * matches the direction a wheel would push it.
+ */
+function StepButton({
+  dir,
+  size,
+  onClick,
+}: {
+  dir: -1 | 1;
+  size: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      // Distinct from the open-project nav's "Previous/Next project", which is
+      // the same words for a different action.
+      aria-label={dir < 0 ? "Previous teaser" : "Next teaser"}
+      className="flex items-center justify-center rounded-full border border-black/30 text-black transition-colors hover:border-black hover:bg-black hover:text-white"
+      style={{ width: size, height: size }}
+    >
+      <svg
+        width={Math.round(size * 0.5)}
+        height={Math.round(size * 0.5)}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={dir < 0 ? { transform: "rotate(180deg)" } : undefined}
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
+    </button>
+  );
+}
+
 // Roles cycled under the name. The first is repeated at the end as a clone so
 // the vertical roll can loop back seamlessly (jump happens while off-screen).
 const TICKER_TITLES = [
   "Creative Director",
-  "Marketing Director",
   "Full Stack Developer",
   "Brand Visionary",
   "Illustrator",
@@ -130,7 +172,7 @@ function TitleTicker({ workSize }: { workSize: string }) {
         style={{
           transform: `translateY(calc(-${TICKER_LINE} * ${i}))`,
           transition: animate
-            ? "transform 0.6s cubic-bezier(0.7, 0, 0.2, 1)"
+            ? "transform 0.42s cubic-bezier(0.7, 0, 0.2, 1)"
             : "none",
         }}
       >
@@ -154,6 +196,7 @@ export default function Menu({
   intro,
   onSelectPortfolio,
   onSelectItem,
+  onStepItem,
   onOpenInfo,
   onInfoHover,
 }: MenuProps) {
@@ -226,6 +269,13 @@ export default function Menu({
   // portrait.
   const listTop = isLandscape ? `${centerY}px` : "50%";
   const listPadLeft = isLandscape ? (isLarge ? 28 : 20) : 8;
+  // Prev/next chevrons dock at the list's right edge, centred on the active
+  // row. Rows reserve `chevGutter` on that side so a wrapped title can never
+  // run underneath them — in portrait the list column is only half the panel,
+  // so there isn't room to let the two overlap.
+  const chevSize = isLarge ? 34 : 30;
+  const chevInset = isLandscape ? (isLarge ? 14 : 10) : 6;
+  const chevGutter = chevSize + chevInset + 8;
 
   const n = items.length;
   // Repeat the list enough that the wrap seam sits past the fade-out radius,
@@ -261,9 +311,26 @@ export default function Menu({
     const prefix = new Array(N + 1).fill(0); // prefix sums of `heights`
     const mod = (a: number, b: number) => ((a % b) + b) % b;
 
+    // Nothing below produces a different answer while the engine sits still,
+    // so a parked list costs one comparison a frame instead of N layout reads
+    // and 2N style writes. Row heights only change with the box they wrap in,
+    // which the observer below catches.
+    let lastCurrent = NaN;
+    let remeasure = true;
+    const ro = new ResizeObserver(() => {
+      remeasure = true;
+    });
+    rowRefs.current.slice(0, N).forEach((el) => el && ro.observe(el));
+
     const tick = () => {
       const spacing = engine.spacing || 1;
       const progress = engine.current / spacing;
+      if (engine.current === lastCurrent && !remeasure) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      lastCurrent = engine.current;
+      remeasure = false;
 
       // Measure each unique item's wrapped height. Reading offsetHeight here
       // is cheap: only transforms/opacity changed since the last layout, and
@@ -309,7 +376,10 @@ export default function Menu({
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
   }, [engine, total, rowHeight, isLandscape, n, reps, baseRow, ROW_GAP]);
 
   // Initial inline placement so the first paint is already positioned.
@@ -328,7 +398,7 @@ export default function Menu({
   const introAnim = (delay: number): React.CSSProperties => ({
     opacity: intro ? 1 : 0,
     transform: intro ? "none" : "translateY(10px)",
-    transition: `opacity 0.55s ease ${delay}ms, transform 0.55s ease ${delay}ms`,
+    transition: `opacity 0.38s ease ${delay}ms, transform 0.38s ease ${delay}ms`,
   });
 
   // Resumé / Contact links. Portrait shows them inside the brand (below a
@@ -410,7 +480,7 @@ export default function Menu({
           // Rows span the column width and wrap within it (portrait); text stays
           // left-aligned, so titles fill the column instead of being padded.
           left: isLandscape ? listPadLeft : 12,
-          right: 12,
+          right: chevGutter,
           fontSize,
           transform: `translateY(calc(-50% + ${p * rowHeight}px))`,
           willChange: "transform",
@@ -452,12 +522,32 @@ export default function Menu({
   );
   const listFade: React.CSSProperties = {
     opacity: dimmed ? 0 : intro ? 1 : 0,
-    transition: intro ? "opacity 0.22s ease" : "opacity 0.55s ease 440ms",
+    transition: intro ? "opacity 0.15s ease" : "opacity 0.38s ease 300ms",
   };
   // Landscape: top and bottom fades share this height so the list dissolves
   // symmetrically about its center (the brand box covers everything above the
   // top fade). 0.42 of the region leaves a centered clear band.
   const fadeH = Math.round(regionHeight * 0.42);
+
+  // Fades in and out with the list it drives; explicitly un-clickable while
+  // faded, since opacity alone would leave invisible hit targets during a
+  // portfolio switch.
+  const stepper = (
+    <div
+      className="absolute z-20 flex flex-col"
+      style={{
+        right: chevInset,
+        top: isLandscape ? centerY : "50%",
+        transform: "translateY(-50%)",
+        gap: Math.round(chevSize * 0.3),
+        ...listFade,
+        pointerEvents: dimmed || !intro ? "none" : "auto",
+      }}
+    >
+      <StepButton dir={-1} size={chevSize} onClick={() => onStepItem(-1)} />
+      <StepButton dir={1} size={chevSize} onClick={() => onStepItem(1)} />
+    </div>
+  );
 
   return (
     <aside data-menu className="h-full w-full bg-white text-black">
@@ -469,6 +559,7 @@ export default function Menu({
           <div className="absolute inset-0" style={listFade}>
             {listStrip}
           </div>
+          {stepper}
           <div
             className="pointer-events-none absolute inset-x-0 z-10 bg-gradient-to-t from-white via-white/80 to-transparent"
             style={{ bottom: linksH, height: fadeH }}
@@ -508,6 +599,7 @@ export default function Menu({
             </div>
             {topMask}
             {bottomMask}
+            {stepper}
           </div>
         </div>
       )}
