@@ -2,6 +2,9 @@
 
 import { useEffect, useRef } from "react";
 
+// Cap on the effect's own frame rate (see the loop below).
+const FRAME_MS = 1000 / 30;
+
 // Fullscreen triangle.
 const VERT = `attribute vec2 a; void main(){ gl_Position = vec4(a, 0.0, 1.0); }`;
 
@@ -171,16 +174,28 @@ export default function PsychedelicFX({
     if (!canvas || !st) return;
     runningRef.current = true;
     const { gl, tex, u } = st;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Deliberately not the device ratio. Every pixel here costs a full-canvas
+    // upload plus ~15 fbm noise samples, and the output is a heavy swirl and
+    // domain warp — detail that fine is destroyed by the effect itself. At 1x
+    // this is a quarter of the work on a retina panel, indistinguishable.
+    const dpr = 1;
     const start = performance.now();
     let strength = 0;
+    let lastDraw = 0;
 
     const loop = (now: number) => {
       const target = activeRef.current ? 1 : 0;
       strength += (target - strength) * 0.07;
       const src = sourceRef.current;
 
-      if (src && strength > 0.002) {
+      // The warp animates slowly; there's nothing in it that reads as dropped
+      // frames at 30fps, and this halves both the upload and the shader cost.
+      // Matters most with a modal open, where the effect runs for as long as
+      // the visitor reads rather than for the length of a hover.
+      const due = now - lastDraw >= FRAME_MS;
+      if (due) lastDraw = now;
+
+      if (due && src && strength > 0.002) {
         const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
         const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
         if (canvas.width !== w || canvas.height !== h) {
@@ -199,7 +214,7 @@ export default function PsychedelicFX({
         gl.uniform2f(u.res, w, h);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         canvas.style.opacity = String(Math.min(1, strength * 1.4));
-      } else {
+      } else if (strength <= 0.002) {
         canvas.style.opacity = "0";
       }
 

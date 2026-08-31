@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import type { PortfolioItem } from "./portfolios";
 
@@ -55,6 +55,12 @@ function makePlaceholderTexture(item: PortfolioItem, index: number) {
  */
 export function useItemTextures(items: PortfolioItem[], planeAspect: number) {
   const [textures, setTextures] = useState<THREE.Texture[]>([]);
+  // What's *currently* in use, which is not the same as what this effect
+  // created: each loaded image replaces its placeholder. Disposing only the
+  // placeholders on unmount (as this used to) leaked every loaded texture —
+  // a full-size RGBA upload per item, orphaned on the GPU on each portfolio
+  // switch, since the scene remounts on `key={portfolio}`.
+  const live = useRef<THREE.Texture[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -73,13 +79,18 @@ export function useItemTextures(items: PortfolioItem[], planeAspect: number) {
           }
           loaded.colorSpace = THREE.SRGBColorSpace;
           loaded.anisotropy = 4;
-          setTextures((prev) =>
-            prev.map((tex, j) => {
+          setTextures((prev) => {
+            const next = prev.map((tex, j) => {
               if (j !== i) return tex;
               tex.dispose();
               return loaded;
-            })
-          );
+            });
+            // Tracked here rather than in a separate effect: the updater always
+            // sees the true current array, where an effect keyed on `textures`
+            // can run with a stale one in the same commit that swaps `items`.
+            live.current = next;
+            return next;
+          });
         },
         undefined,
         () => {
@@ -90,10 +101,12 @@ export function useItemTextures(items: PortfolioItem[], planeAspect: number) {
       return makePlaceholderTexture(item, i);
     });
 
+    live.current = placeholders;
     setTextures(placeholders);
     return () => {
       alive = false;
-      placeholders.forEach((tex) => tex.dispose());
+      live.current.forEach((tex) => tex.dispose());
+      live.current = [];
     };
   }, [items]);
 

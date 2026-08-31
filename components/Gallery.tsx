@@ -30,7 +30,7 @@ const MAX_RGB_SHIFT_RATIO = 0.025;
 const MOUSE_RADIUS_RATIO = 0.3; // influence radius vs min(canvas w, h)
 const MOUSE_TWIST = 0.85; // peak swirl angle in radians (directly under cursor)
 const MOUSE_CHROMA_RATIO = 0.018; // peak channel separation vs min(canvas w, h)
-const MOUSE_EASE = 0.16; // strength lerp toward target each frame
+const MOUSE_EASE = 0.22; // strength lerp toward target each frame
 
 function detectTouch() {
   if (typeof window === "undefined") return false;
@@ -51,6 +51,15 @@ const VIDEO_STILL_MS = 220;
 // tighter gap than the wider landscape rail.
 const ITEM_GAP_LANDSCAPE = 36;
 const ITEM_GAP_PORTRAIT = 6;
+
+// How far off-centre (in item steps) a plane can be and still touch the
+// screen. At CAMERA_ZOOM the visible half-extent is spacing/(2·zoom) and a
+// plane's own half-extent is spacing/2, so anything past ~1.2 steps is fully
+// outside the frustum; the margin covers the bend and the mouse swirl, which
+// can push vertices out by up to MAX_BEND_RATIO of a step. Planes beyond this
+// are already frustum-culled by three — this just stops us computing and
+// uploading vertex buffers for them too.
+const VISIBLE_STEPS = 1.8;
 
 interface GalleryProps {
   items: PortfolioItem[];
@@ -120,7 +129,7 @@ function GalleryScene({
   visible,
   onIndexChange,
 }: Omit<GalleryProps, "portfolio">) {
-  const { size, camera, gl } = useThree();
+  const { size, camera, gl, scene } = useThree();
   const planeWidth = size.width;
   const planeHeight = size.height;
   const itemGap = isLandscape ? ITEM_GAP_LANDSCAPE : ITEM_GAP_PORTRAIT;
@@ -179,6 +188,19 @@ function GalleryScene({
   // Per-plane "is currently displaced" flag, so idle planes are reset to flat
   // exactly once (instead of rewritten every frame).
   const planeDirty = useRef<boolean[]>([]);
+  // Last drawing-buffer size actually pushed to the renderer, in device pixels.
+  const lastBuffer = useRef({ w: 0, h: 0 });
+  const lastZoom = useRef(-1);
+  const lastVideoVersion = useRef(-1);
+  const lastPointer = useRef({ x: NaN, y: NaN });
+  // Redraw deadline. This scene is static whenever nothing is scrolling,
+  // animating or playing, but anything React changes (a texture finishing its
+  // load, a slide swap, a resize) alters it without touching any of those
+  // signals — so every commit buys a short window of frames.
+  const dirtyUntil = useRef(performance.now() + 1000);
+  useEffect(() => {
+    dirtyUntil.current = performance.now() + 250;
+  });
 
   // Pointer state (canvas-local NDC + eased strength). Untouched on touch
   // devices, where the effect is disabled outright.
@@ -266,7 +288,17 @@ function GalleryScene({
       cam.right = W / 2;
       cam.top = H / 2;
       cam.bottom = -H / 2;
-      gl.setSize(W, H);
+      // Reallocating the drawing buffer clears and re-allocates the default
+      // framebuffer, so only do it when the size actually moves a whole device
+      // pixel — the tail of the ease creeps by well under one.
+      const pr = gl.getPixelRatio();
+      const dw = Math.round(W * pr);
+      const dh = Math.round(H * pr);
+      if (dw !== lastBuffer.current.w || dh !== lastBuffer.current.h) {
+        lastBuffer.current.w = dw;
+        lastBuffer.current.h = dh;
+        gl.setSize(W, H);
+      }
       const aspect = W / H;
       for (let i = 0; i < items.length; i++) {
         backingRefs.current[i]?.scale.set(W, H, 1);
@@ -281,7 +313,13 @@ function GalleryScene({
         if (tex) applyCover(tex, aspect);
       }
     }
-    cam.updateProjectionMatrix();
+    // Only rebuild the projection when it can have changed: while a transition
+    // is running (frustum + zoom move together), or if the zoom itself moved.
+    // R3F updates it on resize itself.
+    if (animating || cam.zoom !== lastZoom.current) {
+      lastZoom.current = cam.zoom;
+      cam.updateProjectionMatrix();
+    }
 
     // Closed: engine-driven scroll. Opening/open: the engine's continuous
     // progress is rescaled to the collapsed spacing, so the active item stays
@@ -319,6 +357,22 @@ function GalleryScene({
     pointer.current.strength += (mTarget - pointer.current.strength) * MOUSE_EASE;
     const mStrength = pointer.current.strength;
     const mouseOn = mStrength > 0.001;
+
+    // A cursor merely *resting* over the canvas leaves the swirl live but
+    // completely unchanging. Without this the strength test alone kept the
+    // whole stack redrawing at 60fps — at full cost — for as long as the
+    // pointer sat anywhere over the gallery, which is most of the time.
+    const now = performance.now();
+    const fresh = now < dirtyUntil.current;
+    const pointerChanged =
+      pointer.current.ndcX !== lastPointer.current.x ||
+      pointer.current.ndcY !== lastPointer.current.y ||
+      Math.abs(mTarget - mStrength) > 0.001;
+    lastPointer.current.x = pointer.current.ndcX;
+    lastPointer.current.y = pointer.current.ndcY;
+    // Whether the displacement maths can have produced a different result than
+    // last frame. If not, the buffers already hold the right vertices.
+    const recompute = bendActive || pointerChanged || fresh || animating;
     const minDim = Math.min(planeWidth, planeHeight);
     const RPx = minDim * MOUSE_RADIUS_RATIO;
     const chromaPx = minDim * MOUSE_CHROMA_RATIO;
@@ -334,6 +388,11 @@ function GalleryScene({
     // nearest wrapped copy, then its geometries are rewritten with bend +
     // pointer swirl/chroma — but only when something actually affects it.
     const total = items.length * spacingUsed;
+    // Set whenever a vertex buffer is actually rewritten, so the draw gate
+    // below knows the picture moved. (A "some plane is displaced" test would
+    // be true for as long as the cursor hovers, which is exactly the case
+    // this is trying to stop drawing.)
+    let geomChanged = false;
     for (let i = 0; i < items.length; i++) {
       const group = groupRefs.current[i];
       if (!group) continue;
@@ -360,6 +419,12 @@ function GalleryScene({
         if (ndx * ndx + ndy * ndy <= RPx * RPx) planeMouse = true;
       }
 
+      // Off-screen planes get no vertex work at all. The bend is global, so
+      // without this every item in the portfolio — 30-odd of them, three
+      // geometries each — was rewritten and re-uploaded on every frame of
+      // every scroll, to be frustum-culled immediately afterwards.
+      const onScreen = Math.abs(p) <= VISIBLE_STEPS * spacingUsed;
+
       const gMain = geoms.mains[i];
       const gRed = geoms.reds[i];
       const gBlue = geoms.blues[i];
@@ -367,7 +432,13 @@ function GalleryScene({
       const pr = gRed.attributes.position as THREE.BufferAttribute;
       const pb = gBlue.attributes.position as THREE.BufferAttribute;
 
-      if (bendActive || planeMouse) {
+      // Whether this plane *should* be displaced, kept separate from whether
+      // the displacement needs recalculating: a hovered plane that nothing has
+      // changed under keeps the buffers it already has, but must not be
+      // flattened by the branch below.
+      const wantsDisplace = onScreen && (bendActive || planeMouse);
+
+      if (wantsDisplace && recompute) {
         // Cursor in this plane's local px (origin at the plane center).
         const mlx = mouseWorldX - gx;
         const mly = mouseWorldY - gy;
@@ -418,7 +489,8 @@ function GalleryScene({
         pr.needsUpdate = true;
         pb.needsUpdate = true;
         planeDirty.current[i] = true;
-      } else if (planeDirty.current[i]) {
+        geomChanged = true;
+      } else if (!wantsDisplace && planeDirty.current[i]) {
         // Nothing affects this plane now — flatten it back to base once.
         for (let v = 0; v < count; v++) {
           const bx = basePositions[v * 3];
@@ -431,6 +503,7 @@ function GalleryScene({
         pr.needsUpdate = true;
         pb.needsUpdate = true;
         planeDirty.current[i] = false;
+        geomChanged = true;
       }
     }
     lastBend.current = bendTarget;
@@ -471,7 +544,6 @@ function GalleryScene({
     // "At rest" means the strip has stopped AND the open/close transition is
     // done. The engine doesn't move during that transition, so `settled` alone
     // reads true right through it — the most expensive animation in the app.
-    const now = performance.now();
     const atRest = engine.settled && !anim.animating;
     if (atRest) {
       if (!stillSince.current) stillSince.current = now;
@@ -484,9 +556,16 @@ function GalleryScene({
     // Adopt a video only once things are at rest, so flicking past never spins
     // one up; hold it while it stays the active item; drop it the moment the
     // active item changes (the playhead is remembered).
+    //
+    // `opened` drops it too: the project sheet sits over the teaser, so playing
+    // underneath would decode and upload frames nobody can see — and the sheet
+    // is translucent, which would leak the motion through the blur. Reverting
+    // to the thumbnail matches what an inactive teaser shows; closing the
+    // project re-adopts the video and resumes from the remembered playhead.
     let want = videoIndexRef.current;
-    if (want !== null && (want !== index || !visible)) want = null;
-    if (want === null && visible && restStable && items[index]?.video) want = index;
+    if (want !== null && (want !== index || !visible || opened)) want = null;
+    if (want === null && visible && !opened && restStable && items[index]?.video)
+      want = index;
     if (want !== videoIndexRef.current) {
       videoIndexRef.current = want;
       setVideoIndex(want);
@@ -523,7 +602,33 @@ function GalleryScene({
       slideIndexRef.current = wantSlides;
       setSlideIndex(wantSlides);
     }
-  });
+
+    // --- draw -------------------------------------------------------------
+    // A priority > 0 frame callback takes rendering over from R3F, which lets
+    // us skip the draw entirely when the scene provably hasn't changed. Sitting
+    // on a snapped teaser with no video, that's every frame: previously the
+    // full stack was re-rendered 60x a second to produce an identical image,
+    // which is most of what the fan was for. The state machine above still runs
+    // every frame, so nothing can wedge — only the GPU work is skipped.
+    // A playing teaser only needs a frame when it has actually decoded one.
+    // `throttleUploads` caps that at MAX_TEXTURE_FPS and bumps `version` each
+    // time it lets one through, so following the version draws at the video's
+    // rate instead of the display's — half the work, same picture.
+    const texVersion = teaser.texture ? teaser.texture.version : -1;
+    const videoFrame =
+      videoLiveRef.current && texVersion !== lastVideoVersion.current;
+    const drawing =
+      animating ||
+      !engine.settled ||
+      videoFrame ||
+      geomChanged ||
+      pointerChanged ||
+      fresh;
+    if (drawing) {
+      lastVideoVersion.current = texVersion;
+      gl.render(scene, camera);
+    }
+  }, 1);
 
   return (
     <>
