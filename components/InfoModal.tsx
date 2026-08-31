@@ -108,16 +108,14 @@ function ResumeBody() {
   return (
     <>
       <p className="mt-8 text-lg leading-relaxed text-black md:text-xl">
-        Creative leader and full-stack technologist with over two decades of
-        experience at the intersection of design, brand strategy, and emerging
-        technology. As co-founder of Box Creative and its Creative Director —
-        currently serving as CCO — has directed award-winning campaigns and
-        digital experiences for Fortune 50 brands and high-growth startups alike
-        — spanning identity systems, integrated marketing, AR/AI/3D experiences,
-        and custom application development. Defined by a rare fluency across the
-        full creative-to-technical pipeline: equally comfortable directing a
-        national campaign, crafting the strategy behind it, and engineering the
-        application that delivers it.
+        Creative Director, full-stack developer, and visual artist with over two
+        decades of experience at the intersection of design, brand strategy, and
+        emerging technology. Co-founded Box Creative in 2007 and serves as its
+        hands-on Creative Director and CCO, shipping award-winning campaigns,
+        digital experiences, and branding solutions for Fortune 50 businesses and
+        startups alike. Work spans identity systems, integrated marketing,
+        immersive AR/AI/3D experiences, and application development — a rare
+        fluency across the full creative-to-technical pipeline.
       </p>
 
       <Section title="Experience">
@@ -429,7 +427,7 @@ export default function InfoModal({
               </p>
               <h2 className={`mt-2 pr-12 ${NAME}`}>Andrew Weitzel</h2>
               <p className="mt-3 text-lg font-medium text-black md:text-xl">
-                Creative Director · Chief Creative Officer · Marketing Director
+                Creative Director • New York City
               </p>
               <a
                 href={RESUME_FILE}
