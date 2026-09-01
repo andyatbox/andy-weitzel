@@ -777,6 +777,7 @@ export default function PortfolioApp() {
           onChoose={chooseStart}
           onOpenInfo={openInfo}
           hiding={splashHiding}
+          width={width}
           height={height}
         />
       )}

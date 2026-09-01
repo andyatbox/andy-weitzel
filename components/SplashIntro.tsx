@@ -30,6 +30,13 @@ const NAME_SIZE = "clamp(34px, 6vw, 86px)";
 // it — makes it read as the same size as the wordmark's capitals.
 const CAP_RATIO = 0.717;
 const LOGO_SIZE = `calc(${NAME_SIZE} * ${CAP_RATIO})`;
+// Phones stack the mark above the wordmark instead of setting it on the same
+// baseline, so the cap-height match below is moot there and it can be sized on
+// its own terms — a touch larger than the wordmark, which at this width has
+// bottomed out on its clamp and left the mark looking undersized.
+const PHONE_LOGO_SIZE = `calc(${NAME_SIZE} * 1.05)`;
+// Tailwind's `sm`, which is where the lockup switches from stacked to a row.
+const PHONE_MAX = 640;
 // Body copy size, used for the bio and everything under the divider.
 const COPY_SIZE = "clamp(15px, 1.5vw, 20px)";
 
@@ -55,17 +62,22 @@ export default function SplashIntro({
   onChoose,
   onOpenInfo,
   hiding,
+  width,
   height,
 }: {
   onChoose: (id: PortfolioId) => void;
   onOpenInfo: (kind: "resume" | "contact") => void;
   // Parent flips this to fade the overlay out before unmounting it.
   hiding: boolean;
-  // Real pixel height (never 100vh — mobile browser chrome makes that wrong).
+  // Measured viewport size (never vw/vh — mobile browser chrome makes vh
+  // wrong, and the logo size below can't be expressed as a media query from
+  // an inline style).
+  width: number;
   height: number;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [typed, setTyped] = useState(0);
+  const isPhone = width < PHONE_MAX;
 
   // Hold everything hidden until the webfonts have settled, then run the
   // stagger. Revealing earlier means watching the copy reflow from the
@@ -134,16 +146,20 @@ export default function SplashIntro({
       <div className="flex h-full w-full flex-col overflow-y-auto overscroll-contain">
         <div className="m-auto w-full py-8">
           {/* Wordmark left, logo pushed to the page's right gutter and sitting
-              on the wordmark's baseline. Stacks (logo on top, left-aligned)
-              below the sm breakpoint. Baseline alignment works because an SVG
-              is a replaced element, so its baseline is its bottom edge. */}
+              on the wordmark's baseline. Below the sm breakpoint it stacks —
+              mark top-right, wordmark under it. Baseline alignment works
+              because an SVG is a replaced element, so its baseline is its
+              bottom edge. */}
           <div
             className="flex flex-col items-start gap-4 px-6 sm:flex-row sm:items-baseline sm:gap-6 sm:px-10"
             style={step(0)}
           >
             <LogoMark
-              className="shrink-0 text-black sm:order-last sm:ml-auto"
-              style={{ height: LOGO_SIZE, width: "auto" }}
+              className="shrink-0 self-end text-black sm:order-last sm:ml-auto sm:self-auto"
+              style={{
+                height: isPhone ? PHONE_LOGO_SIZE : LOGO_SIZE,
+                width: "auto",
+              }}
             />
             <h1
               className="font-medium leading-none tracking-tighter"
