@@ -9,7 +9,7 @@ import Gallery from "./Gallery";
 import ProjectModal, { type ActiveProject } from "./project/ProjectModal";
 import InfoModal, { type InfoKind } from "./InfoModal";
 import PsychedelicFX from "./PsychedelicFX";
-import SplashIntro from "./SplashIntro";
+import AgentIntro from "./AgentIntro";
 
 const DRAG_MULTIPLIER = 1.6;
 const FLING_MULTIPLIER = 14;
@@ -26,7 +26,7 @@ const SWITCH_LOAD_CAP = 2500;
 // over the hero-logo reveal. Switching from an open project waits this long
 // before starting the switch, so it starts from an already-closed gallery.
 const PROJECT_CLOSE_MS = 500;
-// Splash fade-out (must match the transition duration in SplashIntro). The
+// Landing fade-out (must match the transition duration in AgentIntro). The
 // gallery intro only starts once this has finished.
 const SPLASH_FADE = 400;
 
@@ -773,7 +773,7 @@ export default function PortfolioApp() {
           with that one already loaded. It also repeats the Resumé/Contact
           links, so the popup sits above it at z-90. */}
       {!started && (
-        <SplashIntro
+        <AgentIntro
           onChoose={chooseStart}
           onOpenInfo={openInfo}
           hiding={splashHiding}
