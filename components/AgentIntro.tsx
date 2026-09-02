@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LABELS, PORTFOLIO_IDS, type PortfolioId } from "@/lib/portfolios";
 import LogoMark from "./LogoMark";
+import NameWheel from "./NameWheel";
 import AgentBlob from "./AgentBlob";
 
 /**
@@ -149,7 +150,6 @@ const TALK_GRACE_MS = 110;
 const LEAD_OUT_MS = 380;
 
 const NAME_SIZE = "clamp(22px, 2.5vw, 34px)";
-const ROLE_SIZE = "clamp(12px, 1.05vw, 16px)";
 // Floor on the shrink-to-fit below; past this the copy is too small to read
 // and letting the page scroll is the better answer.
 const MIN_CAP_FIT = 0.6;
@@ -499,24 +499,14 @@ export default function AgentIntro({
       <div className="flex h-full w-full flex-col overflow-y-auto overscroll-contain">
         {/* Wordmark left, monogram right, across the top. */}
         <header className="flex shrink-0 items-start justify-between px-6 pt-6 sm:px-10 sm:pt-8">
-          <span className="flex flex-col items-start">
-            <span
-              className="font-medium leading-none tracking-tighter"
-              style={{ fontSize: NAME_SIZE, ...arrive(0) }}
-            >
-              Andy Weitzel
-            </span>
-            <span
-              className="mt-2 leading-none text-black"
-              style={{ fontSize: ROLE_SIZE, ...arrive(90) }}
-            >
-              Creative Director
-            </span>
-          </span>
+          <NameWheel
+            className="font-medium tracking-tighter"
+            style={{ fontSize: NAME_SIZE, ...arrive(0) }}
+          />
           <LogoMark
             className="shrink-0 text-black"
             style={{
-              height: `calc(${NAME_SIZE} * ${CAP_RATIO} * 1.35)`,
+              height: `calc(${NAME_SIZE} * ${CAP_RATIO} * 1.6)`,
               width: "auto",
               ...arrive(140),
             }}

@@ -10,6 +10,7 @@ import {
 import type { ScrollEngine } from "@/lib/ScrollEngine";
 import type { ViewportState } from "@/lib/useViewport";
 import LogoMark from "./LogoMark";
+import NameWheel from "./NameWheel";
 
 interface MenuProps {
   portfolio: PortfolioId;
@@ -117,72 +118,6 @@ function StepButton({
         <polyline points="6 9 12 15 18 9" />
       </svg>
     </button>
-  );
-}
-
-// Roles cycled under the name. The first is repeated at the end as a clone so
-// the vertical roll can loop back seamlessly (jump happens while off-screen).
-const TICKER_TITLES = [
-  "Creative Director",
-  "Full Stack Developer",
-  "Brand Visionary",
-  "Illustrator",
-];
-const TICKER_LINE = "1.5em"; // line height of one role (em → tracks fontSize)
-const TICKER_PAUSE = 2800; // ms each role rests before rolling to the next
-
-/** Vertical role ticker shown under the name — same font/color as "Work:". */
-function TitleTicker({ workSize }: { workSize: string }) {
-  const [i, setI] = useState(0);
-  const [animate, setAnimate] = useState(true);
-
-  // Advance one role at a steady cadence.
-  useEffect(() => {
-    const id = setInterval(() => setI((n) => n + 1), TICKER_PAUSE);
-    return () => clearInterval(id);
-  }, []);
-
-  // On reaching the appended clone of the first role, snap back to the real
-  // first one without a transition, mid-pause, so the loop is invisible.
-  useEffect(() => {
-    if (i !== TICKER_TITLES.length) return;
-    const t = setTimeout(() => {
-      setAnimate(false);
-      setI(0);
-    }, 650);
-    return () => clearTimeout(t);
-  }, [i]);
-
-  // Re-enable the transition on the next frame after a snap.
-  useEffect(() => {
-    if (animate) return;
-    const r = requestAnimationFrame(() => setAnimate(true));
-    return () => cancelAnimationFrame(r);
-  }, [animate]);
-
-  const list = [...TICKER_TITLES, TICKER_TITLES[0]];
-
-  return (
-    <div
-      aria-hidden
-      className="overflow-hidden tracking-normal text-black/60"
-      style={{ fontSize: workSize, height: TICKER_LINE }}
-    >
-      <div
-        style={{
-          transform: `translateY(calc(-${TICKER_LINE} * ${i}))`,
-          transition: animate
-            ? "transform 0.42s cubic-bezier(0.7, 0, 0.2, 1)"
-            : "none",
-        }}
-      >
-        {list.map((title, k) => (
-          <div key={k} style={{ height: TICKER_LINE, lineHeight: TICKER_LINE }}>
-            {title}
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -464,13 +399,8 @@ export default function Menu({
             />
           </span>
         </div>
-        <div className="pt-2 md:pt-5 leading-tight tracking-tighter" style={introAnim(160)}>
-          <div className="font-medium" style={{ fontSize: nameSize }}>
-            Andy Weitzel
-          </div>
-          <div className="mt-1.5">
-            <TitleTicker workSize={workSize} />
-          </div>
+        <div className="leading-tight tracking-tighter" style={introAnim(160)}>
+          <NameWheel className="font-medium" style={{ fontSize: nameSize }} />
         </div>
       </div>
 
