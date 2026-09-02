@@ -223,8 +223,16 @@ export async function GET(req: NextRequest) {
         // Keyed by coordinate, so a short shared cache is safe here in a way
         // the response as a whole is not — but kept brief, because rain starts
         // inside a ten-minute window.
+        // The retry deliberately skips the cache. Open-Meteo answers 200 with
+        // a plain-text error often enough that it matters, and Next caches a
+        // 200 whatever the body is — so a single bad reply would otherwise be
+        // served to every visitor for the whole revalidate window, with the
+        // retry hitting that same poisoned entry and changing nothing. That is
+        // exactly the shape of "no weather at all, for everyone, for minutes".
         const res = await fetch(url, {
-          next: { revalidate: 300 },
+          ...(attempt === 0
+            ? { next: { revalidate: 300 } }
+            : { cache: "no-store" as const }),
           signal: AbortSignal.timeout(3000),
         });
         if (!res.ok) {
