@@ -89,6 +89,9 @@ const START_DELAY = 900; // lets the blob settle before it "speaks"
 const TALK_GRACE_MS = 110;
 
 const NAME_SIZE = "clamp(22px, 2.5vw, 34px)";
+// Floor on the shrink-to-fit below; past this the copy is too small to read
+// and letting the page scroll is the better answer.
+const MIN_CAP_FIT = 0.6;
 const CAP_RATIO = 0.717;
 
 const PILL =
@@ -120,6 +123,27 @@ export default function AgentIntro({
   width: number;
   height: number;
 }) {
+  // The lockup and the blob arrive before the agent speaks. Held until the
+  // webfonts settle, so the wordmark doesn't reflow from the fallback face
+  // mid-fade; capped so a stalled font can't strand the page.
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const show = () => alive && setRevealed(true);
+    void Promise.race([
+      document.fonts?.ready ?? Promise.resolve(),
+      new Promise((r) => setTimeout(r, 1500)),
+    ]).then(show);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const arrive = (delay: number): React.CSSProperties => ({
+    opacity: revealed ? 1 : 0,
+    transform: revealed ? "none" : "translateY(-10px)",
+    transition: `opacity 0.6s ease ${delay}ms, transform 0.6s ease ${delay}ms`,
+  });
+
   const [greeting, setGreeting] = useState<{
     place: string | null;
     weather: string | null;
@@ -293,6 +317,17 @@ export default function AgentIntro({
   // zero and the transition below carries it home. The shift is applied
   // without a transition while still centred, so growing text stays centred
   // instead of chasing its own easing.
+  const mainRef = useRef<HTMLElement>(null);
+  const [mainH, setMainH] = useState(0);
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    const measure = () => setMainH(el.clientHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const capRef = useRef<HTMLParagraphElement>(null);
   const typedRef = useRef<HTMLSpanElement>(null);
   // Zero-width marker sitting immediately after the last typed character. The
@@ -331,9 +366,42 @@ export default function AgentIntro({
   });
 
   const isPhone = width < 640;
-  const capSize = isPhone
+  // Width-driven ideal size. Height is handled separately, by measurement.
+  const capBase = isPhone
     ? "clamp(21px, 5.6vw, 30px)"
     : "clamp(26px, 2.9vw, 46px)";
+
+  // Shrink-to-fit against the region the copy actually has. A width-only size
+  // is fine until the window is short, where the finished paragraph runs into
+  // the wordmark above or the buttons below. The paragraph is always laid out
+  // at its finished size (the transparent tail sees to that), so this measures
+  // the same height from the first frame rather than growing as it types.
+  const [capFit, setCapFit] = useState(1);
+  // Start from the full size again whenever the box or the copy changes, so
+  // the loop below only ever has to shrink.
+  useEffect(() => setCapFit(1), [script, width, height]);
+  useEffect(() => {
+    const box = mainRef.current;
+    const para = capRef.current;
+    if (!box || !para) return;
+    const pad = getComputedStyle(box);
+    const avail =
+      box.clientHeight -
+      parseFloat(pad.paddingTop) -
+      parseFloat(pad.paddingBottom);
+    const used = para.scrollHeight;
+    if (avail <= 0 || used <= 0 || used <= avail) return;
+    // Scale the *current* size by how much it overshot, and repeat until it
+    // fits. Solving it in one pass assumes height falls off linearly with font
+    // size, which it doesn't — the copy re-wraps into fewer lines as it
+    // shrinks, so a single ratio left it still overlapping on short windows.
+    const next = Math.max(MIN_CAP_FIT, capFit * (avail / used) * 0.985);
+    if (next < capFit - 0.004) setCapFit(next);
+  }, [script, width, height, capFit]);
+
+  const capSize = `calc(${capBase} * ${capFit.toFixed(3)})`;
+  // Keep the blob inside the same region, so it can't bleed past the lockup.
+  const blobSize = Math.round(Math.min(width * 0.98, mainH * 1.02, 1040));
 
   return (
     <div
@@ -354,27 +422,40 @@ export default function AgentIntro({
         <header className="flex shrink-0 items-center justify-between px-6 pt-6 sm:px-10 sm:pt-8">
           <span
             className="font-medium leading-none tracking-tighter"
-            style={{ fontSize: NAME_SIZE }}
+            style={{ fontSize: NAME_SIZE, ...arrive(0) }}
           >
             Andy Weitzel
           </span>
           <LogoMark
             className="shrink-0 text-black"
-            style={{ height: `calc(${NAME_SIZE} * ${CAP_RATIO} * 1.35)`, width: "auto" }}
+            style={{
+              height: `calc(${NAME_SIZE} * ${CAP_RATIO} * 1.35)`,
+              width: "auto",
+              ...arrive(140),
+            }}
           />
         </header>
 
         {/* Blob behind, captions on top. */}
-        <main className="relative flex min-h-0 flex-1 items-center justify-center px-6 py-10 sm:px-10">
+        <main
+          ref={mainRef}
+          className="relative flex min-h-0 flex-1 items-center justify-center px-6 py-10 sm:px-10"
+        >
           <AgentBlob
             speaking={speaking}
-            className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            // Centring lives in the transform, not utility classes, so the
+            // arrival scale can compose with it.
+            className="pointer-events-none absolute left-1/2 top-1/2"
             // Square, so the shader's circle isn't cropped into an ellipse by
             // its own box. Copy overhangs the sides slightly, which reads as
             // deliberate; the alternative is a blob wider than the screen.
             style={{
-              width: `min(${Math.round(width * 0.98)}px, ${Math.round(height * 0.98)}px, 1040px)`,
-              height: `min(${Math.round(width * 0.98)}px, ${Math.round(height * 0.98)}px, 1040px)`,
+              width: blobSize,
+              height: blobSize,
+              opacity: revealed ? 1 : 0,
+              transform: `translate(-50%, -50%) scale(${revealed ? 1 : 0.82})`,
+              transition:
+                "opacity 0.9s ease 260ms, transform 0.9s cubic-bezier(0.22, 1, 0.36, 1) 260ms",
             }}
           />
           {/* Centred while the copy is still one line, then slid to its
