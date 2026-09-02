@@ -9,6 +9,9 @@ import { NextResponse, type NextRequest } from "next/server";
  * request. Weather comes from Open-Meteo, which needs no API key either.
  */
 
+// Forecast models to consult. See the fetch below for why more than one.
+const MODELS = ["best_match", "icon_seamless", "gfs_seamless"] as const;
+
 // Per-visitor by definition, so this response must never be shared between
 // them. Next's fetch cache has already burned this codebase once (the
 // video-poster route served stale upstream data for a whole window) — only the
@@ -23,12 +26,15 @@ export const dynamic = "force-dynamic";
  * most common code — turned up in nearly every greeting.
  */
 function condition(
-  code: number | null,
+  skyCode: number | null,
+  wetCode: number | null,
+  precipNow: number,
   f: number | null,
   humidity: number | null,
   rainSoon: boolean,
   isDay: boolean
 ): string | null {
+  const code = wetCode;
   if (code !== null) {
     if (code >= 95) return "stormy";
     if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snowy";
@@ -36,18 +42,33 @@ function condition(
     if (code >= 51 && code <= 57) return "drizzly";
     if (code === 45 || code === 48) return "foggy";
   }
+  // Measured precipitation with no matching code: still wet.
+  if (precipNow > 0) return "rainy";
   if (f !== null && f < 20) return "frigid";
   if (f !== null && f < 38) return "cold";
   if (rainSoon) return "soon-to-be rainy";
   if (f !== null && f >= 88) return "hot";
   if (humidity !== null && humidity >= 70 && f !== null && f >= 74) return "humid";
-  if (code === 0 || code === 1) return isDay ? "sunny" : "clear";
-  if (code === 2) return "partly cloudy";
-  if (code === 3) return "overcast";
+  if (skyCode === 0 || skyCode === 1) return isDay ? "sunny" : "clear";
+  if (skyCode === 2) return "partly cloudy";
+  if (skyCode === 3) return "overcast";
   if (f === null) return null;
   if (f < 52) return "cool";
   if (f < 76) return "mild";
   return "warm";
+}
+
+/**
+ * How wet a WMO code is, so the worst reading across the models below wins.
+ * 0 means "nothing falling".
+ */
+function wetRank(code: number): number {
+  if (code >= 95) return 5;
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 4;
+  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return 3;
+  if (code >= 51 && code <= 57) return 2;
+  if (code === 45 || code === 48) return 1;
+  return 0;
 }
 
 /**
@@ -179,7 +200,14 @@ export async function GET(req: NextRequest) {
       `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}` +
       `&longitude=${encodeURIComponent(lon)}` +
       `&current=temperature_2m,weather_code,relative_humidity_2m,is_day` +
-      `&hourly=precipitation_probability&forecast_hours=6` +
+      // Three models rather than one. The default blend misses light rain that
+      // others catch — checked against a wet afternoon in Brooklyn where
+      // best_match, HRRR and ECMWF all reported plain overcast and ICON alone
+      // reported 0.3mm. Telling someone it's overcast while they're getting
+      // wet is a worse error than the reverse, so anything falling in any
+      // model counts. `current` doesn't split by model; `hourly` does.
+      `&hourly=weather_code,precipitation,precipitation_probability` +
+      `&models=${MODELS.join(",")}&forecast_hours=6` +
       `&temperature_unit=fahrenheit`;
     // Open-Meteo intermittently answers 200 with a plain-text upstream error
     // ("timeoutReached") instead of JSON — observed several times in a row
@@ -187,10 +215,11 @@ export async function GET(req: NextRequest) {
     // giving up and letting the copy do without.
     for (let attempt = 0; attempt < 2 && weather === null; attempt++) {
       try {
-        // Weather moves slowly and this is keyed by coordinate, so a short
-        // shared cache is safe here in a way the response as a whole is not.
+        // Keyed by coordinate, so a short shared cache is safe here in a way
+        // the response as a whole is not — but kept brief, because rain starts
+        // inside a ten-minute window.
         const res = await fetch(url, {
-          next: { revalidate: 600 },
+          next: { revalidate: 300 },
           signal: AbortSignal.timeout(3000),
         });
         if (!res.ok) continue;
@@ -201,19 +230,40 @@ export async function GET(req: NextRequest) {
             relative_humidity_2m?: number;
             is_day?: number;
           };
-          hourly?: { precipitation_probability?: (number | null)[] };
+          hourly?: Record<string, (number | null)[]>;
         };
         const c = data.current ?? {};
-        const probs = (data.hourly?.precipitation_probability ?? []).filter(
-          (n): n is number => typeof n === "number"
-        );
-        const rainSoon = probs.length > 0 && Math.max(...probs) >= 55;
+        const h = data.hourly ?? {};
+        const num = (v: unknown) => (typeof v === "number" ? v : null);
+
+        // Union across the models: the wettest code anyone reports for this
+        // hour, and the most precipitation anyone measures.
+        let wetCode: number | null = null;
+        let wetBest = 0;
+        let precipNow = 0;
+        let probSoon = 0;
+        for (const m of MODELS) {
+          const code = num(h[`weather_code_${m}`]?.[0]);
+          if (code !== null && wetRank(code) > wetBest) {
+            wetBest = wetRank(code);
+            wetCode = code;
+          }
+          precipNow = Math.max(precipNow, num(h[`precipitation_${m}`]?.[0]) ?? 0);
+          // From the *next* hour on, so "coming later" never describes now.
+          const probs = h[`precipitation_probability_${m}`] ?? [];
+          for (let i = 1; i < probs.length; i++) {
+            probSoon = Math.max(probSoon, num(probs[i]) ?? 0);
+          }
+        }
+
         const isDay = c.is_day !== 0;
         const cond = condition(
-          typeof c.weather_code === "number" ? c.weather_code : null,
-          typeof c.temperature_2m === "number" ? c.temperature_2m : null,
-          typeof c.relative_humidity_2m === "number" ? c.relative_humidity_2m : null,
-          rainSoon,
+          num(c.weather_code),
+          wetCode,
+          precipNow,
+          num(c.temperature_2m),
+          num(c.relative_humidity_2m),
+          probSoon >= 55,
           isDay
         );
         if (cond) {
