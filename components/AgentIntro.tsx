@@ -26,30 +26,18 @@ function timeOfDay(d = new Date()): string {
 }
 
 /**
- * Naming the visitor's city turned out to be a liability. IP lookup returns
- * where the ISP hands off, not where the person is — a Brooklyn visitor
- * resolved to Lynbrook, twenty miles out on Long Island — and one wrong place
- * name destroys the whole conceit far more effectively than a right one earns
- * it. Weather comes from the same coordinates but survives that error, because
- * it's true across a whole metro. So: keep what's reliably right, drop what
- * isn't. Set this true if the trade ever looks worth it again; the route still
- * returns the city.
+ * Steps down depending on what the lookup returned. Nothing is load-bearing:
+ * weather can simply fail, and place is absent behind a VPN. `place` is a
+ * state or a country rather than a city — see the route for why the city field
+ * can't be trusted.
  */
-const NAME_THE_CITY = false;
-
-/**
- * Steps down depending on what the lookup returned. Nothing here is allowed to
- * be load-bearing: weather can simply fail, and city is absent behind a VPN.
- */
-function openingLine(city: string | null, weather: string | null): string {
+function openingLine(place: string | null, weather: string | null): string {
   const tod = timeOfDay();
-  if (NAME_THE_CITY && city && weather) {
-    return `Welcome from a ${weather} ${tod} in ${city} ${TAIL}`;
-  }
-  if (NAME_THE_CITY && city) {
+  if (place && weather) return `Welcome from a ${weather} ${tod} in ${place} ${TAIL}`;
+  if (place) {
     return tod === "night"
-      ? `Welcome from ${city} tonight ${TAIL}`
-      : `Welcome from ${city} this ${tod} ${TAIL}`;
+      ? `Welcome from ${place} tonight ${TAIL}`
+      : `Welcome from ${place} this ${tod} ${TAIL}`;
   }
   if (weather) return `Welcome from a ${weather} ${tod} ${TAIL}`;
   return tod === "night"
@@ -96,7 +84,7 @@ export default function AgentIntro({
   height: number;
 }) {
   const [greeting, setGreeting] = useState<{
-    city: string | null;
+    place: string | null;
     weather: string | null;
   } | null>(null);
   const [typed, setTyped] = useState(0);
@@ -108,14 +96,14 @@ export default function AgentIntro({
   // stalled request must not strand the landing.
   useEffect(() => {
     let alive = true;
-    const settle = (g: { city: string | null; weather: string | null }) => {
+    const settle = (g: { place: string | null; weather: string | null }) => {
       if (alive) setGreeting((prev) => prev ?? g);
     };
-    const cap = setTimeout(() => settle({ city: null, weather: null }), 2500);
+    const cap = setTimeout(() => settle({ place: null, weather: null }), 2500);
     fetch("/api/greeting")
-      .then((r) => (r.ok ? r.json() : { city: null, weather: null }))
+      .then((r) => (r.ok ? r.json() : { place: null, weather: null }))
       .then(settle)
-      .catch(() => settle({ city: null, weather: null }));
+      .catch(() => settle({ place: null, weather: null }));
     return () => {
       alive = false;
       clearTimeout(cap);
@@ -123,7 +111,7 @@ export default function AgentIntro({
   }, []);
 
   const beats = greeting
-    ? [openingLine(greeting.city, greeting.weather), BEAT_TWO, BEAT_THREE]
+    ? [openingLine(greeting.place, greeting.weather), BEAT_TWO, BEAT_THREE]
     : null;
   const script = beats ? beats.join(" ") : "";
 

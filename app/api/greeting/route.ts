@@ -38,9 +38,51 @@ function tempWord(f: number): string {
   return "hot";
 }
 
+// US state codes, the only subdivisions worth naming in an English sentence:
+// elsewhere the ISO code is either opaque ("IDF") or numeric ("75"), so those
+// visitors get their country instead.
+const US_STATES: Record<string, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+  CO: "Colorado", CT: "Connecticut", DE: "Delaware", DC: "Washington, D.C.",
+  FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois",
+  IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana",
+  ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan",
+  MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana",
+  NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
+  NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota",
+  OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania",
+  PR: "Puerto Rico", RI: "Rhode Island", SC: "South Carolina",
+  SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah",
+  VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia",
+  WI: "Wisconsin", WY: "Wyoming",
+};
+
+// Country names that need an article to sit in "…night in ___".
+const NEEDS_THE = /^(United |Netherlands|Philippines|Bahamas|Maldives|Czech)/;
+
+/**
+ * The place worth naming: a US state, otherwise the country. Both are far more
+ * reliable than the city field, which reports where the ISP hands off — two
+ * devices in the same house resolved to Queens and to Lynbrook, and neither
+ * was right. State and country were correct for both.
+ */
+function placeName(countryCode: string | null, regionCode: string | null): string | null {
+  if (countryCode === "US" && regionCode) return US_STATES[regionCode] ?? null;
+  if (!countryCode) return null;
+  try {
+    const name = new Intl.DisplayNames(["en"], { type: "region" }).of(countryCode);
+    if (!name || name === countryCode) return null;
+    return NEEDS_THE.test(name) ? `the ${name}` : name;
+  } catch {
+    return null;
+  }
+}
+
 export interface Greeting {
-  /** e.g. "Brooklyn" — city-level at best, and often the ISP's hub. */
+  /** e.g. "Brooklyn" — city-level at best, and usually wrong. Unused in copy. */
   city: string | null;
+  /** e.g. "New York" or "France" — the granularity that's actually reliable. */
+  place: string | null;
   /** e.g. "cool, grey". Null whenever the lookup didn't work out. */
   weather: string | null;
 }
@@ -59,6 +101,8 @@ export async function GET(req: NextRequest) {
   }
   let lat = h.get("x-vercel-ip-latitude");
   let lon = h.get("x-vercel-ip-longitude");
+  let country = h.get("x-vercel-ip-country");
+  let region = h.get("x-vercel-ip-country-region");
 
   // Those headers only exist on Vercel, so locally there is nothing to read.
   // Stand in for them off-production so the full copy path is actually
@@ -67,6 +111,8 @@ export async function GET(req: NextRequest) {
     city = city ?? "Brooklyn";
     lat = "40.6782";
     lon = "-73.9442";
+    country = country ?? "US";
+    region = region ?? "NY";
   }
 
   let weather: string | null = null;
@@ -102,5 +148,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ city, weather } satisfies Greeting);
+  return NextResponse.json({
+    city,
+    place: placeName(country, region),
+    weather,
+  } satisfies Greeting);
 }
