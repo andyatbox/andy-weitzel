@@ -51,31 +51,43 @@ function condition(
 }
 
 /**
- * The sign-off, as a whole sentence rather than a fragment, so a condition can
- * phrase it however it wants — an overcast sky hopes for the sun rather than
- * hoping *you* do something about it. Nothing here should read as consolation.
+ * Season as a person would say it — "late-summer", not "Q3". Astronomical
+ * boundaries rather than meteorological ones, because in early September
+ * people still say late summer, not early autumn. Each season is split into
+ * thirds for the early/mid/late qualifier.
  */
-function wishFor(cond: string, isDay: boolean, autumn: boolean): string {
-  switch (cond) {
-    case "stormy": return "Hoping you're cozy indoors!";
-    case "snowy": return "Hoping you're warm out there!";
-    case "rainy":
-    case "drizzly": return "Hoping you stay dry!";
-    case "soon-to-be rainy": return "Hoping you stay ahead of it!";
-    case "foggy": return "Hoping you enjoy the quiet of it!";
-    case "frigid":
-    case "cold": return "Hoping you're staying warm!";
-    case "hot":
-    case "humid": return "Hoping you're keeping cool!";
-    case "sunny": return "Hoping you catch some rays!";
-    case "clear": return "Hoping you get a look at the stars!";
-    case "overcast": return "Hope the sun breaks through for you.";
-    default:
-      if (autumn) return "Hoping you're enjoying the changing leaves!";
-      return isDay
-        ? "Hoping you enjoy the seasonably nice weather!"
-        : "Hoping you have a lovely evening!";
+function seasonName(lat: number, d = new Date()): string {
+  const start = Date.UTC(d.getUTCFullYear(), 0, 0);
+  const doy = Math.floor((d.getTime() - start) / 86_400_000);
+  // Northern-hemisphere season starts, by day of year.
+  const marks: [number, string][] = [
+    [79, "spring"],
+    [172, "summer"],
+    [265, "fall"],
+    [355, "winter"],
+  ];
+  let name = "winter";
+  let from = 355 - 365; // winter began late last year
+  let to = 79;
+  for (let i = 0; i < marks.length; i++) {
+    const [mStart, mName] = marks[i];
+    const next = i + 1 < marks.length ? marks[i + 1][0] : 365 + 79;
+    if (doy >= mStart && doy < next) {
+      name = mName;
+      from = mStart;
+      to = next;
+      break;
+    }
   }
+  // South of the equator the same date is the opposite season.
+  if (lat < 0) {
+    name = { spring: "fall", summer: "winter", fall: "spring", winter: "summer" }[
+      name
+    ]!;
+  }
+  const through = (doy - from) / Math.max(1, to - from);
+  const phase = through < 1 / 3 ? "early" : through < 2 / 3 ? "mid" : "late";
+  return `${phase}-${name}`;
 }
 
 // US state codes, the only subdivisions worth naming in an English sentence:
@@ -125,8 +137,10 @@ export interface Greeting {
   place: string | null;
   /** A single adjective, e.g. "overcast" or "soon-to-be rainy". */
   weather: string | null;
-  /** The matching sign-off, a whole sentence, e.g. "Hoping you stay dry!" */
-  wish: string | null;
+  /** Rounded and formatted, e.g. "76°F". */
+  temp: string | null;
+  /** e.g. "late-summer" — hemisphere-aware. */
+  season: string | null;
 }
 
 export async function GET(req: NextRequest) {
@@ -158,7 +172,8 @@ export async function GET(req: NextRequest) {
   }
 
   let weather: string | null = null;
-  let wish: string | null = null;
+  let temp: string | null = null;
+  let season: string | null = null;
   if (lat && lon) {
     const url =
       `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}` +
@@ -194,10 +209,6 @@ export async function GET(req: NextRequest) {
         );
         const rainSoon = probs.length > 0 && Math.max(...probs) >= 55;
         const isDay = c.is_day !== 0;
-        // Autumn only makes sense north of the tropics, and only in season.
-        const month = new Date().getUTCMonth(); // 8..10 = Sep..Nov
-        const autumn =
-          month >= 8 && month <= 10 && Number(lat) > 25;
         const cond = condition(
           typeof c.weather_code === "number" ? c.weather_code : null,
           typeof c.temperature_2m === "number" ? c.temperature_2m : null,
@@ -207,7 +218,9 @@ export async function GET(req: NextRequest) {
         );
         if (cond) {
           weather = cond;
-          wish = wishFor(cond, isDay, autumn);
+          if (typeof c.temperature_2m === "number")
+            temp = `${Math.round(c.temperature_2m)}°F`;
+          season = seasonName(Number(lat));
         }
       } catch {
         // Non-JSON body, timeout, or network — try once more, then give up.
@@ -219,6 +232,7 @@ export async function GET(req: NextRequest) {
     city,
     place: placeName(country, region),
     weather,
-    wish,
+    temp,
+    season,
   } satisfies Greeting);
 }

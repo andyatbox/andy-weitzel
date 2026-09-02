@@ -14,9 +14,9 @@ interface Beat {
   parts: { text: string; link?: PortfolioId }[];
   /** Portfolio button lit while this sentence is being typed. */
   highlight?: PortfolioId;
+  /** Once this beat lands, the portfolio buttons appear. */
+  asks?: boolean;
 }
-/** After this beat finishes, the portfolio buttons appear. */
-const ASK_BEAT = 3;
 
 /** Visitor's own clock — the one variable that is never wrong. */
 function timeOfDay(d = new Date()): string {
@@ -29,40 +29,96 @@ function timeOfDay(d = new Date()): string {
 }
 
 /**
- * The scripted beats. Nothing here is load-bearing: the weather read can fail
- * and `place` is absent behind a VPN, so the observation and the sign-off drop
- * out independently rather than leaving a sentence half-built.
+ * The weather sentence, one per condition. Each is a whole line rather than a
+ * template with a sign-off bolted on, so it can be phrased however it wants —
+ * a stormy afternoon and a clear night don't want the same shape.
+ *
+ * Location and temperature are both optional (a VPN hides one, a partial
+ * upstream reply the other), so every line is assembled rather than
+ * interpolated blind — no "in undefined", no stray double spaces.
+ */
+/**
+ * "a 76°F" but "an 80°F" — the article follows how the number is *said*, and
+ * eight, eleven and eighteen all open on a vowel sound.
+ */
+function tempArticle(temp: string | null): string {
+  if (!temp) return "a";
+  const n = parseInt(temp, 10);
+  if (Number.isNaN(n)) return "a";
+  const an = n === 8 || n === 11 || n === 18 || (n >= 80 && n <= 89);
+  return an ? "an" : "a";
+}
+
+function weatherLine(
+  cond: string,
+  temp: string | null,
+  season: string,
+  tod: string,
+  place: string | null
+): string {
+  const at = place ? ` in ${place}` : "";
+  const t = temp ? `${temp} ` : "";
+  switch (cond) {
+    case "stormy":
+      return `Looks like a stormy ${t}${season} ${tod}.${
+        place ? ` Stay dry in ${place}!` : " Stay dry!"
+      }`;
+    case "snowy":
+      return `Looks like a snowy ${t}${season} ${tod}${at}. Stay in and get cozy!`;
+    case "rainy":
+    case "drizzly":
+      return `Looks like a rainy ${t}${season} ${tod}${at}. Stay dry!`;
+    case "foggy":
+      return `Looks like a foggy ${t}${season} ${tod}${at}. Hoping for minimal travel.`;
+    case "frigid":
+      return `Looks like a frigid ${t}${season} ${tod}${at}. Stay warm and cozy!`;
+    case "cold":
+    case "cool":
+      return `Looks like a chilly ${t}${season} ${tod}${at}. Time to get cozy!`;
+    case "soon-to-be rainy":
+      return `Could be rainy ${t}${season}${at} later. Stay dry!`;
+    case "hot":
+      return `It's ${tempArticle(temp)} ${t}hot ${season}${at}. Stay cool!`;
+    case "humid":
+      return `Looks like a humid ${t}${season} ${tod}${at}. Stay cool!`;
+    case "sunny":
+      return `Clear blue ${season} skies${at} this ${tod}.${
+        temp ? ` Enjoy the ${temp} day!` : " Enjoy the day!"
+      }`;
+    case "clear":
+      return `Clear ${season} skies tonight${at}. Perfect for star-gazing!`;
+    case "partly cloudy":
+      return `It's a partly cloudy ${season} ${tod}${at}. Pretty nice!`;
+    case "overcast":
+      return `It's an overcast ${season} ${tod}. Hope the sun breaks through for you!`;
+    default: // mild, warm
+      return `It's ${tempArticle(temp)} ${t}${season} ${tod}${at}. Nice!`;
+  }
+}
+
+/**
+ * The scripted beats. With no weather read there is nothing true to say about
+ * where the visitor is, so the greeting drops the time of day too and simply
+ * says hello rather than performing a familiarity it doesn't have.
  */
 function buildBeats(
   place: string | null,
   weather: string | null,
-  wish: string | null
+  temp: string | null,
+  season: string | null
 ): Beat[] {
   const tod = timeOfDay();
   const line = (text: string): Beat => ({ parts: [{ text }] });
-  const beats: Beat[] = [
-    line(tod === "night" ? "Good evening!" : `Good ${tod}!`),
-  ];
+  const beats: Beat[] = [];
 
-  if (weather) {
-    const daypart = tod === "morning" || tod === "afternoon" ? "day" : "night";
-    // "an overcast day" vs "a rainy day".
-    const article = /^[aeiou]/i.test(weather) ? "an" : "a";
-    beats.push(
-      line(
-        place
-          ? `Looks to be ${article} ${weather} ${daypart} in ${place}.`
-          : `Looks to be ${article} ${weather} ${daypart} where you are.`
-      )
-    );
-  } else if (place) {
-    beats.push(line(`Good to have you here from ${place}.`));
+  if (weather && season) {
+    beats.push(line(tod === "night" ? "Good evening!" : `Good ${tod}!`));
+    beats.push(line(weatherLine(weather, temp, season, tod, place)));
   } else {
-    beats.push(line("Good to have you here."));
+    beats.push(line("Hello!"));
   }
 
-  beats.push(line(wish ?? "Hope your day is going well!"));
-  beats.push(line("Which portfolio would you like to start with?"));
+  beats.push({ ...line("Which portfolio would you like to start with?"), asks: true });
   beats.push({
     highlight: "interactive",
     parts: [
@@ -152,7 +208,8 @@ export default function AgentIntro({
   const [greeting, setGreeting] = useState<{
     place: string | null;
     weather: string | null;
-    wish: string | null;
+    temp: string | null;
+    season: string | null;
   } | null>(null);
   const [typed, setTyped] = useState(0);
   const [done, setDone] = useState(false);
@@ -171,18 +228,19 @@ export default function AgentIntro({
     const settle = (g: {
       place: string | null;
       weather: string | null;
-      wish: string | null;
+      temp: string | null;
+      season: string | null;
     }) => {
       if (alive) setGreeting((prev) => prev ?? g);
     };
     const cap = setTimeout(
-      () => settle({ place: null, weather: null, wish: null }),
+      () => settle({ place: null, weather: null, temp: null, season: null }),
       2500
     );
     fetch("/api/greeting")
-      .then((r) => (r.ok ? r.json() : { place: null, weather: null, wish: null }))
+      .then((r) => (r.ok ? r.json() : { place: null, weather: null, temp: null, season: null }))
       .then(settle)
-      .catch(() => settle({ place: null, weather: null, wish: null }));
+      .catch(() => settle({ place: null, weather: null, temp: null, season: null }));
     return () => {
       alive = false;
       clearTimeout(cap);
@@ -190,7 +248,7 @@ export default function AgentIntro({
   }, []);
 
   const beats = greeting
-    ? buildBeats(greeting.place, greeting.weather, greeting.wish)
+    ? buildBeats(greeting.place, greeting.weather, greeting.temp, greeting.season)
     : null;
 
   // Flatten the beats to one run of segments carrying their absolute offset in
@@ -369,11 +427,15 @@ export default function AgentIntro({
     );
   }, [typed, script, width]);
 
+  // Not a fixed index any more: with no weather read there's no weather
+  // sentence, so the question moves up one.
+  const askBeat = beats ? beats.findIndex((b) => b.asks) : -1;
+
   // Each row of buttons arrives with the sentence that offers it.
   const past = (beat: number) =>
     done || (stops.current.length > beat && typed >= stops.current[beat]);
-  const showPortfolios = past(ASK_BEAT);
-  const showSecondary = past(ASK_BEAT + 1);
+  const showPortfolios = askBeat >= 0 && past(askBeat);
+  const showSecondary = done;
 
   const rowIn = (shown: boolean): React.CSSProperties => ({
     opacity: shown ? 1 : 0,
