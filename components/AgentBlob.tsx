@@ -46,8 +46,8 @@ void main(){
 
   float k = u_speak;
   // At rest this barely moves; while a line is typing it churns.
-  float amp = 0.055 + 0.40 * k;
-  float spd = 0.14 + 1.35 * k;
+  float amp = 0.035 + 0.42 * k;
+  float spd = 0.07 + 1.45 * k;
   float t = u_time * spd;
 
   // Domain warp: the wobble in the outline and the drift in the colour.
@@ -59,7 +59,11 @@ void main(){
   float r = length(w);
   // A defined core with a soft shoulder, rather than an even haze across the
   // whole box — the latter reads as a smudge, not a blob.
-  float mask = smoothstep(0.98, 0.30, r);
+  // The silhouette stops well short of the canvas edge on purpose: the warp
+  // below pushes vertices outward by up to ~0.25, and at the old radius the
+  // shape ran off its own box and showed a hard cut along the edges whenever
+  // it was animating hard.
+  float mask = smoothstep(0.72, 0.18, r);
   mask = pow(mask, 0.85);
 
   // Kept high-luminance on purpose: black caption type sits directly on this,
@@ -89,7 +93,7 @@ void main(){
 // resolution, capped frame rate, and stopped whenever it isn't on screen.
 const MAX_DPR = 1.5;
 const FRAME_MS = 1000 / 30;
-const SPEAK_EASE = 0.06;
+const SPEAK_EASE = 0.26;
 
 export default function AgentBlob({
   speaking,
@@ -195,6 +199,9 @@ export default function AgentBlob({
     <canvas
       ref={canvasRef}
       aria-hidden
+      // Reflects the uniform's target, so the idle/animated switch is
+      // inspectable from the outside instead of only visible in the pixels.
+      data-speaking={speaking ? "1" : "0"}
       className={className}
       style={style}
     />

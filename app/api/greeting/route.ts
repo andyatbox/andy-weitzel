@@ -58,14 +58,14 @@ function wishFor(cond: string, isDay: boolean, autumn: boolean): string {
     case "rainy":
     case "drizzly": return "stay dry";
     case "soon-to-be rainy": return "stay ahead of it";
-    case "foggy": return "take it slow out there";
+    case "foggy": return "enjoy the quiet of it";
     case "frigid":
     case "cold": return "are staying warm";
     case "hot":
     case "humid": return "are keeping cool";
     case "sunny": return "can catch some rays";
     case "clear": return "get a look at the stars";
-    case "overcast": return "are making the most of it";
+    case "overcast": return "see the sun break through";
     default:
       if (autumn) return "are enjoying the changing leaves";
       return isDay

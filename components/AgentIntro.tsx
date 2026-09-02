@@ -70,10 +70,12 @@ function buildBeats(
 // Typing. Driven from elapsed time in a rAF loop rather than a per-character
 // interval, which can't be trusted below ~16ms.
 const CHARS_PER_SEC = 78;
-const BEAT_PAUSE = 780; // ms of silence between sentences
+const BEAT_PAUSE = 1150; // ms of silence between sentences
 const START_DELAY = 900; // lets the blob settle before it "speaks"
+// How long after the last character the blob still counts as talking.
+const TALK_GRACE_MS = 110;
 
-const NAME_SIZE = "clamp(20px, 2.2vw, 30px)";
+const NAME_SIZE = "clamp(27px, 3.2vw, 44px)";
 const CAP_RATIO = 0.717;
 
 const PILL =
@@ -112,6 +114,11 @@ export default function AgentIntro({
   } | null>(null);
   const [typed, setTyped] = useState(0);
   const [done, setDone] = useState(false);
+  // Whether characters are appearing *right now*. Distinct from "not finished
+  // yet": the counter sits still through every between-sentence rest, and the
+  // blob has to settle in those gaps for the start/stop to read.
+  const [talking, setTalking] = useState(false);
+  const talkingRef = useRef(false);
   const skipRef = useRef(false);
 
   // Hold the whole sequence until the lookup answers (or fails), so the first
@@ -166,6 +173,8 @@ export default function AgentIntro({
     let t0 = 0;
     let held = 0; // accumulated pause time, so pauses don't shorten the script
     let lastStop = -1;
+    let lastN = 0;
+    let lastAdvance = -Infinity; // not "advanced at navigation start"
     const tick = (now: number) => {
       // Skip has to stop the loop, not just jump the counter: the next frame
       // would otherwise write its own progress straight back over the top and
@@ -173,6 +182,8 @@ export default function AgentIntro({
       if (skipRef.current) {
         setTyped(script.length);
         setDone(true);
+        talkingRef.current = false;
+        setTalking(false);
         return;
       }
       if (!t0) t0 = now;
@@ -192,9 +203,23 @@ export default function AgentIntro({
         }
       }
       n = Math.min(n, script.length);
+      // Grace window rather than a bare "did it advance this frame": at ~13ms
+      // a character against a ~17ms frame, two frames occasionally land inside
+      // one character and the state flickered off and straight back on.
+      if (n > lastN) lastAdvance = now;
+      lastN = n;
+      const advancing = n < script.length && now - lastAdvance < TALK_GRACE_MS;
+      if (advancing !== talkingRef.current) {
+        talkingRef.current = advancing;
+        setTalking(advancing);
+      }
       setTyped(n);
       if (n < script.length) raf = requestAnimationFrame(tick);
-      else setDone(true);
+      else {
+        setDone(true);
+        talkingRef.current = false;
+        setTalking(false);
+      }
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -206,9 +231,7 @@ export default function AgentIntro({
     setDone(true);
   };
 
-  // Only "speaking" while characters are actually appearing — not during the
-  // pauses between sentences, and not once it has finished.
-  const speaking = !!script && typed > 0 && typed < script.length;
+  const speaking = talking;
 
   // Each row of buttons arrives with the sentence that offers it.
   const past = (beat: number) =>
@@ -266,12 +289,12 @@ export default function AgentIntro({
             // its own box. Copy overhangs the sides slightly, which reads as
             // deliberate; the alternative is a blob wider than the screen.
             style={{
-              width: `min(${Math.round(width * 0.86)}px, ${Math.round(height * 0.72)}px, 720px)`,
-              height: `min(${Math.round(width * 0.86)}px, ${Math.round(height * 0.72)}px, 720px)`,
+              width: `min(${Math.round(width * 0.98)}px, ${Math.round(height * 0.98)}px, 1040px)`,
+              height: `min(${Math.round(width * 0.98)}px, ${Math.round(height * 0.98)}px, 1040px)`,
             }}
           />
           <p
-            className="relative mx-auto max-w-3xl text-center font-medium leading-snug"
+            className="relative mx-auto max-w-3xl text-left font-medium leading-snug"
             style={{ fontSize: capSize }}
           >
             {/* The finished sentence for assistive tech, so a half-typed
