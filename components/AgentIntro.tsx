@@ -87,8 +87,13 @@ const BEAT_PAUSE = 1150; // ms of silence between sentences
 const START_DELAY = 900; // lets the blob settle before it "speaks"
 // How long after the last character the blob still counts as talking.
 const TALK_GRACE_MS = 110;
+// How far *before* a sentence ends the blob starts settling. The idle ramp
+// takes about this long, so beginning it here means the blob arrives at rest
+// as the last character lands, instead of carrying on afterwards.
+const LEAD_OUT_MS = 380;
 
 const NAME_SIZE = "clamp(22px, 2.5vw, 34px)";
+const ROLE_SIZE = "clamp(12px, 1.05vw, 16px)";
 // Floor on the shrink-to-fit below; past this the copy is too small to read
 // and letting the page scroll is the better answer.
 const MIN_CAP_FIT = 0.6;
@@ -273,7 +278,19 @@ export default function AgentIntro({
       // one character and the state flickered off and straight back on.
       if (n > lastN) lastAdvance = now;
       lastN = n;
-      const advancing = n < script.length && now - lastAdvance < TALK_GRACE_MS;
+      // Start settling before the sentence lands. The lead is capped to a
+      // share of the sentence's own length, or a short one ("Good morning!")
+      // would be entirely inside the lead and never animate at all.
+      const si = stops.current.findIndex((e) => e >= n);
+      const end = si === -1 ? script.length : stops.current[si];
+      const from = si <= 0 ? 0 : stops.current[si - 1] + 1;
+      const sentenceMs = ((end - from) / CHARS_PER_SEC) * 1000;
+      const lead = Math.min(LEAD_OUT_MS, sentenceMs * 0.35);
+      const msLeft = ((end - n) / CHARS_PER_SEC) * 1000;
+      const advancing =
+        n < script.length &&
+        now - lastAdvance < TALK_GRACE_MS &&
+        msLeft > lead;
       if (advancing !== talkingRef.current) {
         talkingRef.current = advancing;
         setTalking(advancing);
@@ -419,12 +436,20 @@ export default function AgentIntro({
           content overflows (justify-center would). */}
       <div className="flex h-full w-full flex-col overflow-y-auto overscroll-contain">
         {/* Wordmark left, monogram right, across the top. */}
-        <header className="flex shrink-0 items-center justify-between px-6 pt-6 sm:px-10 sm:pt-8">
-          <span
-            className="font-medium leading-none tracking-tighter"
-            style={{ fontSize: NAME_SIZE, ...arrive(0) }}
-          >
-            Andy Weitzel
+        <header className="flex shrink-0 items-start justify-between px-6 pt-6 sm:px-10 sm:pt-8">
+          <span className="flex flex-col items-start">
+            <span
+              className="font-medium leading-none tracking-tighter"
+              style={{ fontSize: NAME_SIZE, ...arrive(0) }}
+            >
+              Andy Weitzel
+            </span>
+            <span
+              className="mt-2 leading-none text-black"
+              style={{ fontSize: ROLE_SIZE, ...arrive(90) }}
+            >
+              Creative Director
+            </span>
           </span>
           <LogoMark
             className="shrink-0 text-black"
