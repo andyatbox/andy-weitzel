@@ -37,24 +37,24 @@ float fbm(vec2 p){
 
 void main(){
   vec2 uv = gl_FragCoord.xy / u_res;
-  // Unstretched for the silhouette, so the blob fills its (wide) box as an
-  // ellipse rather than a circle marooned in the middle...
-  vec2 p = (uv - 0.5) * 2.0;
-  // ...but aspect-corrected for the noise, so the morph doesn't smear.
+  // Aspect-corrected throughout, so the silhouette is a circle rather than an
+  // ellipse stretched to the box, and the noise doesn't smear with it.
   float aspect = u_res.x / max(u_res.y, 1.0);
-  vec2 n = vec2(p.x * aspect, p.y);
+  vec2 p = (uv - 0.5) * 2.0;
+  p.x *= aspect;
+  vec2 n = p;
 
   float k = u_speak;
   // At rest this barely moves; while a line is typing it churns.
-  float amp = 0.09 + 0.34 * k;
-  float spd = 0.22 + 1.05 * k;
+  float amp = 0.055 + 0.40 * k;
+  float spd = 0.14 + 1.35 * k;
   float t = u_time * spd;
 
   // Domain warp: the wobble in the outline and the drift in the colour.
   vec2 q = vec2(fbm(n * 1.15 + t * 0.30),
                 fbm(n * 1.15 + vec2(3.1, 1.7) - t * 0.26));
   vec2 w = p + (q - 0.5) * amp * 2.0;
-  vec2 wn = vec2(w.x * aspect, w.y);
+  vec2 wn = w;
 
   float r = length(w);
   // A defined core with a soft shoulder, rather than an even haze across the

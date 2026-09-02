@@ -516,7 +516,7 @@ export default function PortfolioApp() {
 
     let raf = 0;
     const tick = () => {
-      anim.t += (target - anim.t) * 0.22;
+      anim.t += (target - anim.t) * 0.17;
       if (Math.abs(target - anim.t) < 0.001) anim.t = target;
       apply(anim.t);
       if (anim.t !== target) {

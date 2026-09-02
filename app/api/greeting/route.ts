@@ -15,27 +15,63 @@ import { NextResponse, type NextRequest } from "next/server";
 // Open-Meteo call below is cached, and that's keyed by coordinate.
 export const dynamic = "force-dynamic";
 
-// Sky, by WMO weather code — the vocabulary a person would actually use.
-function skyWord(code: number): string {
-  if (code === 0) return "clear";
-  if (code === 1) return "mostly clear";
+/**
+ * One adjective for the weather, chosen by what a person would actually lead
+ * with: anything falling from the sky first, then a temperature worth
+ * remarking on, then rain that's coming, then the sky itself. Pairing
+ * temperature *and* sky (as this used to) meant overcast — far and away the
+ * most common code — turned up in nearly every greeting.
+ */
+function condition(
+  code: number | null,
+  f: number | null,
+  humidity: number | null,
+  rainSoon: boolean,
+  isDay: boolean
+): string | null {
+  if (code !== null) {
+    if (code >= 95) return "stormy";
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snowy";
+    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return "rainy";
+    if (code >= 51 && code <= 57) return "drizzly";
+    if (code === 45 || code === 48) return "foggy";
+  }
+  if (f !== null && f < 20) return "frigid";
+  if (f !== null && f < 38) return "cold";
+  if (rainSoon) return "soon-to-be rainy";
+  if (f !== null && f >= 88) return "hot";
+  if (humidity !== null && humidity >= 70 && f !== null && f >= 74) return "humid";
+  if (code === 0 || code === 1) return isDay ? "sunny" : "clear";
   if (code === 2) return "partly cloudy";
-  if (code === 3) return "grey";
-  if (code === 45 || code === 48) return "foggy";
-  if (code >= 51 && code <= 57) return "drizzly";
-  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return "rainy";
-  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snowy";
-  if (code >= 95) return "stormy";
-  return "";
+  if (code === 3) return "overcast";
+  if (f === null) return null;
+  if (f < 52) return "cool";
+  if (f < 76) return "mild";
+  return "warm";
 }
 
-function tempWord(f: number): string {
-  if (f < 25) return "frigid";
-  if (f < 40) return "cold";
-  if (f < 55) return "cool";
-  if (f < 70) return "mild";
-  if (f < 82) return "warm";
-  return "hot";
+/** The sign-off that goes with it. */
+function wishFor(cond: string, isDay: boolean, autumn: boolean): string {
+  switch (cond) {
+    case "stormy": return "are cozy indoors";
+    case "snowy": return "are staying warm out there";
+    case "rainy":
+    case "drizzly": return "stay dry";
+    case "soon-to-be rainy": return "stay ahead of it";
+    case "foggy": return "take it slow out there";
+    case "frigid":
+    case "cold": return "are staying warm";
+    case "hot":
+    case "humid": return "are keeping cool";
+    case "sunny": return "can catch some rays";
+    case "clear": return "get a look at the stars";
+    case "overcast": return "are making the most of it";
+    default:
+      if (autumn) return "are enjoying the changing leaves";
+      return isDay
+        ? "can enjoy the seasonably nice weather"
+        : "have a good evening";
+  }
 }
 
 // US state codes, the only subdivisions worth naming in an English sentence:
@@ -83,8 +119,10 @@ export interface Greeting {
   city: string | null;
   /** e.g. "New York" or "France" — the granularity that's actually reliable. */
   place: string | null;
-  /** e.g. "cool, grey". Null whenever the lookup didn't work out. */
+  /** A single adjective, e.g. "overcast" or "soon-to-be rainy". */
   weather: string | null;
+  /** The matching sign-off, e.g. "stay dry". */
+  wish: string | null;
 }
 
 export async function GET(req: NextRequest) {
@@ -116,11 +154,14 @@ export async function GET(req: NextRequest) {
   }
 
   let weather: string | null = null;
+  let wish: string | null = null;
   if (lat && lon) {
     const url =
       `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}` +
       `&longitude=${encodeURIComponent(lon)}` +
-      `&current=temperature_2m,weather_code&temperature_unit=fahrenheit`;
+      `&current=temperature_2m,weather_code,relative_humidity_2m,is_day` +
+      `&hourly=precipitation_probability&forecast_hours=6` +
+      `&temperature_unit=fahrenheit`;
     // Open-Meteo intermittently answers 200 with a plain-text upstream error
     // ("timeoutReached") instead of JSON — observed several times in a row
     // while building this. So: a bounded timeout, and one retry, before
@@ -135,13 +176,35 @@ export async function GET(req: NextRequest) {
         });
         if (!res.ok) continue;
         const data = (await res.json()) as {
-          current?: { temperature_2m?: number; weather_code?: number };
+          current?: {
+            temperature_2m?: number;
+            weather_code?: number;
+            relative_humidity_2m?: number;
+            is_day?: number;
+          };
+          hourly?: { precipitation_probability?: (number | null)[] };
         };
-        const t = data.current?.temperature_2m;
-        const code = data.current?.weather_code;
-        const sky = typeof code === "number" ? skyWord(code) : "";
-        const temp = typeof t === "number" ? tempWord(t) : "";
-        weather = [temp, sky].filter(Boolean).join(", ") || null;
+        const c = data.current ?? {};
+        const probs = (data.hourly?.precipitation_probability ?? []).filter(
+          (n): n is number => typeof n === "number"
+        );
+        const rainSoon = probs.length > 0 && Math.max(...probs) >= 55;
+        const isDay = c.is_day !== 0;
+        // Autumn only makes sense north of the tropics, and only in season.
+        const month = new Date().getUTCMonth(); // 8..10 = Sep..Nov
+        const autumn =
+          month >= 8 && month <= 10 && Number(lat) > 25;
+        const cond = condition(
+          typeof c.weather_code === "number" ? c.weather_code : null,
+          typeof c.temperature_2m === "number" ? c.temperature_2m : null,
+          typeof c.relative_humidity_2m === "number" ? c.relative_humidity_2m : null,
+          rainSoon,
+          isDay
+        );
+        if (cond) {
+          weather = cond;
+          wish = wishFor(cond, isDay, autumn);
+        }
       } catch {
         // Non-JSON body, timeout, or network — try once more, then give up.
       }
@@ -152,5 +215,6 @@ export async function GET(req: NextRequest) {
     city,
     place: placeName(country, region),
     weather,
+    wish,
   } satisfies Greeting);
 }

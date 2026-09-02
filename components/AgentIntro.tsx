@@ -5,15 +5,12 @@ import { LABELS, PORTFOLIO_IDS, type PortfolioId } from "@/lib/portfolios";
 import LogoMark from "./LogoMark";
 import AgentBlob from "./AgentBlob";
 
-// Typed on in sequence, accumulating into one paragraph. Written as whole
-// sentences rather than assembled from fragments so every degraded variant
-// still reads like a person wrote it.
-const BEAT_TWO =
-  "“Interactive” has digital experiences, many in AI, AR, and 3D, activations, apps and rich media.";
-const BEAT_THREE =
-  "“Branding” for logo/identity, print, and packaging designs.";
-
-const TAIL = "to the portfolios of Andy Weitzel, Creative Director.";
+// The last two beats each bring a row of buttons up with them, so the visitor
+// is offered one thing at a time rather than a wall of choices.
+const BEAT_ASK = "Which portfolio would you like to start with?";
+const BEAT_ELSE = "Or perhaps Andy's resumé or contact info?";
+/** Index of the beat that reveals the portfolio buttons. */
+const ASK_BEAT = 3;
 
 /** Visitor's own clock — the one variable that is never wrong. */
 function timeOfDay(d = new Date()): string {
@@ -26,29 +23,54 @@ function timeOfDay(d = new Date()): string {
 }
 
 /**
- * Steps down depending on what the lookup returned. Nothing is load-bearing:
- * weather can simply fail, and place is absent behind a VPN. `place` is a
- * state or a country rather than a city — see the route for why the city field
- * can't be trusted.
+ * The scripted beats. Nothing here is load-bearing: the weather read can fail
+ * and `place` is absent behind a VPN, so the observation and the sign-off drop
+ * out independently rather than leaving a sentence half-built.
  */
-function openingLine(place: string | null, weather: string | null): string {
+function buildBeats(
+  place: string | null,
+  weather: string | null,
+  wish: string | null
+): string[] {
   const tod = timeOfDay();
-  if (place && weather) return `Welcome from a ${weather} ${tod} in ${place} ${TAIL}`;
-  if (place) {
-    return tod === "night"
-      ? `Welcome from ${place} tonight ${TAIL}`
-      : `Welcome from ${place} this ${tod} ${TAIL}`;
+  const beats: string[] = [
+    tod === "night" ? "Good evening!" : `Good ${tod}!`,
+  ];
+
+  if (weather) {
+    const daypart = tod === "morning" || tod === "afternoon" ? "day" : "night";
+    // "an overcast day" vs "a rainy day".
+    const article = /^[aeiou]/i.test(weather) ? "an" : "a";
+    beats.push(
+      place
+        ? `Looks to be ${article} ${weather} ${daypart} in ${place}.`
+        : `Looks to be ${article} ${weather} ${daypart} where you are.`
+    );
+  } else if (place) {
+    beats.push(`Good to have you here from ${place}.`);
+  } else {
+    beats.push("Good to have you here.");
   }
-  if (weather) return `Welcome from a ${weather} ${tod} ${TAIL}`;
-  return tod === "night"
-    ? `Welcome, and good evening, ${TAIL}`
-    : `Welcome, this ${tod}, ${TAIL}`;
+
+  if (wish) {
+    // "Hoping you are cozy" is stiff where "Hoping you're cozy" is speech.
+    beats.push(
+      wish.startsWith("are ")
+        ? `Hoping you're ${wish.slice(4)}.`
+        : `Hoping you ${wish}.`
+    );
+  }
+  else beats.push("Hope your day is going well.");
+
+  beats.push(BEAT_ASK);
+  beats.push(BEAT_ELSE);
+  return beats;
 }
 
 // Typing. Driven from elapsed time in a rAF loop rather than a per-character
 // interval, which can't be trusted below ~16ms.
-const CHARS_PER_SEC = 42;
-const BEAT_PAUSE = 620; // ms of silence between sentences
+const CHARS_PER_SEC = 78;
+const BEAT_PAUSE = 780; // ms of silence between sentences
 const START_DELAY = 900; // lets the blob settle before it "speaks"
 
 const NAME_SIZE = "clamp(20px, 2.2vw, 30px)";
@@ -86,6 +108,7 @@ export default function AgentIntro({
   const [greeting, setGreeting] = useState<{
     place: string | null;
     weather: string | null;
+    wish: string | null;
   } | null>(null);
   const [typed, setTyped] = useState(0);
   const [done, setDone] = useState(false);
@@ -96,14 +119,21 @@ export default function AgentIntro({
   // stalled request must not strand the landing.
   useEffect(() => {
     let alive = true;
-    const settle = (g: { place: string | null; weather: string | null }) => {
+    const settle = (g: {
+      place: string | null;
+      weather: string | null;
+      wish: string | null;
+    }) => {
       if (alive) setGreeting((prev) => prev ?? g);
     };
-    const cap = setTimeout(() => settle({ place: null, weather: null }), 2500);
+    const cap = setTimeout(
+      () => settle({ place: null, weather: null, wish: null }),
+      2500
+    );
     fetch("/api/greeting")
-      .then((r) => (r.ok ? r.json() : { place: null, weather: null }))
+      .then((r) => (r.ok ? r.json() : { place: null, weather: null, wish: null }))
       .then(settle)
-      .catch(() => settle({ place: null, weather: null }));
+      .catch(() => settle({ place: null, weather: null, wish: null }));
     return () => {
       alive = false;
       clearTimeout(cap);
@@ -111,7 +141,7 @@ export default function AgentIntro({
   }, []);
 
   const beats = greeting
-    ? [openingLine(greeting.place, greeting.weather), BEAT_TWO, BEAT_THREE]
+    ? buildBeats(greeting.place, greeting.weather, greeting.wish)
     : null;
   const script = beats ? beats.join(" ") : "";
 
@@ -180,6 +210,19 @@ export default function AgentIntro({
   // pauses between sentences, and not once it has finished.
   const speaking = !!script && typed > 0 && typed < script.length;
 
+  // Each row of buttons arrives with the sentence that offers it.
+  const past = (beat: number) =>
+    done || (stops.current.length > beat && typed >= stops.current[beat]);
+  const showPortfolios = past(ASK_BEAT);
+  const showSecondary = past(ASK_BEAT + 1);
+
+  const rowIn = (shown: boolean): React.CSSProperties => ({
+    opacity: shown ? 1 : 0,
+    transform: shown ? "none" : "translateY(10px)",
+    transition: "opacity 0.45s ease, transform 0.45s ease",
+    pointerEvents: shown ? "auto" : "none",
+  });
+
   const isPhone = width < 640;
   const capSize = isPhone
     ? "clamp(21px, 5.6vw, 30px)"
@@ -219,13 +262,16 @@ export default function AgentIntro({
           <AgentBlob
             speaking={speaking}
             className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            // Square, so the shader's circle isn't cropped into an ellipse by
+            // its own box. Copy overhangs the sides slightly, which reads as
+            // deliberate; the alternative is a blob wider than the screen.
             style={{
-              width: `min(${Math.round(width * 0.92)}px, 1100px)`,
-              height: `min(${Math.round(height * 0.62)}px, 620px)`,
+              width: `min(${Math.round(width * 0.86)}px, ${Math.round(height * 0.72)}px, 720px)`,
+              height: `min(${Math.round(width * 0.86)}px, ${Math.round(height * 0.72)}px, 720px)`,
             }}
           />
           <p
-            className="relative mx-auto max-w-4xl text-center font-medium leading-snug"
+            className="relative mx-auto max-w-3xl text-center font-medium leading-snug"
             style={{ fontSize: capSize }}
           >
             {/* The finished sentence for assistive tech, so a half-typed
@@ -251,23 +297,21 @@ export default function AgentIntro({
         </main>
 
         {/* Portfolios first, then the secondary pair, separated. */}
-        <footer
-          className="shrink-0 px-6 pb-8 sm:px-10 sm:pb-10"
-          style={{
-            opacity: done ? 1 : 0,
-            transform: done ? "none" : "translateY(10px)",
-            transition: "opacity 0.5s ease, transform 0.5s ease",
-            pointerEvents: done ? "auto" : "none",
-          }}
-        >
-          <div className="flex flex-wrap items-center justify-center gap-3">
+        <footer className="shrink-0 px-6 pb-8 sm:px-10 sm:pb-10">
+          <div
+            className="flex flex-wrap items-center justify-center gap-3"
+            style={rowIn(showPortfolios)}
+          >
             {PORTFOLIO_IDS.map((id) => (
               <button key={id} type="button" onClick={() => onChoose(id)} className={PILL}>
                 {SPLASH_LABELS[id]}
               </button>
             ))}
           </div>
-          <div className="mx-auto mt-5 flex max-w-xs items-center gap-4">
+          <div
+            className="mx-auto mt-5 flex max-w-xs items-center gap-4"
+            style={rowIn(showSecondary)}
+          >
             <span className="h-px flex-1 bg-black/15" />
             <span className="flex flex-wrap items-center justify-center gap-2">
               <button type="button" onClick={() => onOpenInfo("resume")} className={PILL_QUIET}>

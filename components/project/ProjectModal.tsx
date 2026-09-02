@@ -41,6 +41,9 @@ const GUTTER = "px-6 md:px-40";
 // stack alone is a third of a phone's width — so there the title drops below
 // the stack's full height (top-5 + back button + two pills ≈ 152px) instead.
 const HEADER_TOP = "pt-40 md:pt-5";
+// Beat between the teaser arriving at full screen and the sheet fading up, so
+// the two read as separate moments rather than one continuous crossfade.
+const POST_EXPAND_MS = 340;
 
 export default function ProjectModal({
   project,
@@ -55,6 +58,7 @@ export default function ProjectModal({
   // so it can only cover the project nav (z-50) if the sheet itself outranks
   // it. Reset on close so a project opened later starts normally.
   const [galleryExpanded, setGalleryExpanded] = useState(false);
+  const [settled, setSettled] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Reveal after the full-screen open transition; hide immediately on close.
@@ -71,9 +75,20 @@ export default function ProjectModal({
     setGalleryExpanded(false);
   }, [opened, project, revealDelay]);
 
-  // Both gates: the minimum beat, and the teaser having actually arrived at
-  // full screen.
-  const revealed = waited && expandDone;
+  // Let the full-screen teaser sit for a moment before the sheet arrives over
+  // it. Keyed on `project` too, so prev/next navigation gets the same pacing.
+  useEffect(() => {
+    if (!opened || !expandDone) {
+      setSettled(false);
+      return;
+    }
+    const t = setTimeout(() => setSettled(true), POST_EXPAND_MS);
+    return () => clearTimeout(t);
+  }, [opened, expandDone, project]);
+
+  // Both gates: the minimum beat, and the teaser having arrived at full screen
+  // and then held there.
+  const revealed = waited && settled;
 
   if (!project) return null;
 
