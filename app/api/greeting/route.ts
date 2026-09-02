@@ -69,7 +69,7 @@ function wishFor(cond: string, isDay: boolean, autumn: boolean): string {
     case "humid": return "Hoping you're keeping cool!";
     case "sunny": return "Hoping you catch some rays!";
     case "clear": return "Hoping you get a look at the stars!";
-    case "overcast": return "Hoping the sun breaks through!";
+    case "overcast": return "Hope the sun breaks through for you.";
     default:
       if (autumn) return "Hoping you're enjoying the changing leaves!";
       return isDay
