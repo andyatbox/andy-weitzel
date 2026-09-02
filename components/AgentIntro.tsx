@@ -26,18 +26,32 @@ function timeOfDay(d = new Date()): string {
 }
 
 /**
- * Three steps down, depending on what the lookup actually returned. City is
- * absent behind a VPN or a corporate proxy and weather can simply fail, so
- * neither is allowed to be load-bearing.
+ * Naming the visitor's city turned out to be a liability. IP lookup returns
+ * where the ISP hands off, not where the person is — a Brooklyn visitor
+ * resolved to Lynbrook, twenty miles out on Long Island — and one wrong place
+ * name destroys the whole conceit far more effectively than a right one earns
+ * it. Weather comes from the same coordinates but survives that error, because
+ * it's true across a whole metro. So: keep what's reliably right, drop what
+ * isn't. Set this true if the trade ever looks worth it again; the route still
+ * returns the city.
+ */
+const NAME_THE_CITY = false;
+
+/**
+ * Steps down depending on what the lookup returned. Nothing here is allowed to
+ * be load-bearing: weather can simply fail, and city is absent behind a VPN.
  */
 function openingLine(city: string | null, weather: string | null): string {
   const tod = timeOfDay();
-  if (city && weather) return `Welcome from a ${weather} ${tod} in ${city} ${TAIL}`;
-  if (city) {
+  if (NAME_THE_CITY && city && weather) {
+    return `Welcome from a ${weather} ${tod} in ${city} ${TAIL}`;
+  }
+  if (NAME_THE_CITY && city) {
     return tod === "night"
       ? `Welcome from ${city} tonight ${TAIL}`
       : `Welcome from ${city} this ${tod} ${TAIL}`;
   }
+  if (weather) return `Welcome from a ${weather} ${tod} ${TAIL}`;
   return tod === "night"
     ? `Welcome, and good evening, ${TAIL}`
     : `Welcome, this ${tod}, ${TAIL}`;
