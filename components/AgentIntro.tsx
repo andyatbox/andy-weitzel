@@ -5,11 +5,17 @@ import { LABELS, PORTFOLIO_IDS, type PortfolioId } from "@/lib/portfolios";
 import LogoMark from "./LogoMark";
 import AgentBlob from "./AgentBlob";
 
-// The last two beats each bring a row of buttons up with them, so the visitor
-// is offered one thing at a time rather than a wall of choices.
-const BEAT_ASK = "Which portfolio would you like to start with?";
-const BEAT_ELSE = "Or perhaps Andy's resumé or contact info?";
-/** Index of the beat that reveals the portfolio buttons. */
+/**
+ * A sentence, as pieces rather than a string, so a phrase inside it can be
+ * underlined and clickable — "Interactive Experiences" is both the name of the
+ * portfolio and a way into it.
+ */
+interface Beat {
+  parts: { text: string; link?: PortfolioId }[];
+  /** Portfolio button lit while this sentence is being typed. */
+  highlight?: PortfolioId;
+}
+/** After this beat finishes, the portfolio buttons appear. */
 const ASK_BEAT = 3;
 
 /** Visitor's own clock — the one variable that is never wrong. */
@@ -31,10 +37,11 @@ function buildBeats(
   place: string | null,
   weather: string | null,
   wish: string | null
-): string[] {
+): Beat[] {
   const tod = timeOfDay();
-  const beats: string[] = [
-    tod === "night" ? "Good evening!" : `Good ${tod}!`,
+  const line = (text: string): Beat => ({ parts: [{ text }] });
+  const beats: Beat[] = [
+    line(tod === "night" ? "Good evening!" : `Good ${tod}!`),
   ];
 
   if (weather) {
@@ -42,20 +49,34 @@ function buildBeats(
     // "an overcast day" vs "a rainy day".
     const article = /^[aeiou]/i.test(weather) ? "an" : "a";
     beats.push(
-      place
-        ? `Looks to be ${article} ${weather} ${daypart} in ${place}.`
-        : `Looks to be ${article} ${weather} ${daypart} where you are.`
+      line(
+        place
+          ? `Looks to be ${article} ${weather} ${daypart} in ${place}.`
+          : `Looks to be ${article} ${weather} ${daypart} where you are.`
+      )
     );
   } else if (place) {
-    beats.push(`Good to have you here from ${place}.`);
+    beats.push(line(`Good to have you here from ${place}.`));
   } else {
-    beats.push("Good to have you here.");
+    beats.push(line("Good to have you here."));
   }
 
-  beats.push(wish ?? "Hope your day is going well!");
-
-  beats.push(BEAT_ASK);
-  beats.push(BEAT_ELSE);
+  beats.push(line(wish ?? "Hope your day is going well!"));
+  beats.push(line("Which portfolio would you like to start with?"));
+  beats.push({
+    highlight: "interactive",
+    parts: [
+      { text: "Interactive Experiences", link: "interactive" },
+      { text: " include apps and digital experiences, activations, and rich media." },
+    ],
+  });
+  beats.push({
+    highlight: "branding",
+    parts: [
+      { text: "Branding", link: "branding" },
+      { text: " includes logo/identity and print works." },
+    ],
+  });
   return beats;
 }
 
@@ -142,13 +163,36 @@ export default function AgentIntro({
   const beats = greeting
     ? buildBeats(greeting.place, greeting.weather, greeting.wish)
     : null;
-  const script = beats ? beats.join(" ") : "";
 
-  // Boundaries in the joined string, so the cursor can rest between sentences.
+  // Flatten the beats to one run of segments carrying their absolute offset in
+  // the script, so typing stays a single counter while the markup stays rich.
+  const segments: {
+    text: string;
+    link?: PortfolioId;
+    start: number;
+    beat: number;
+  }[] = [];
+  let script = "";
   const stops = useRef<number[]>([]);
+  const highlights = useRef<(PortfolioId | undefined)[]>([]);
   if (beats) {
-    let at = 0;
-    stops.current = beats.map((b) => (at += b.length + 1) - 1);
+    const ends: number[] = [];
+    beats.forEach((b, bi) => {
+      if (bi > 0) {
+        // The join has to be a segment of its own, not just appended to the
+        // script — anything not in a segment never gets rendered, and the
+        // sentences ran together.
+        segments.push({ text: " ", start: script.length, beat: bi });
+        script += " ";
+      }
+      for (const part of b.parts) {
+        segments.push({ ...part, start: script.length, beat: bi });
+        script += part.text;
+      }
+      ends.push(script.length);
+    });
+    stops.current = ends;
+    highlights.current = beats.map((b) => b.highlight);
   }
 
   useEffect(() => {
@@ -230,6 +274,49 @@ export default function AgentIntro({
 
   const speaking = talking;
 
+  // The segment the typing has reached — where the measuring marker goes.
+  let caretSegment = 0;
+  for (let i = 0; i < segments.length; i++) {
+    if (typed >= segments[i].start) caretSegment = i;
+  }
+
+  /** Which sentence is being typed right now (-1 once finished). */
+  const activeBeat = done
+    ? -1
+    : stops.current.findIndex((end) => typed <= end);
+  const lit =
+    activeBeat >= 0 ? highlights.current[activeBeat] ?? null : null;
+
+  // Centre-until-it-wraps. `text-align` can't be animated between values, so
+  // the paragraph is always left-aligned and nudged right by half its slack
+  // while the copy still fits on one line; when it wraps, that offset goes to
+  // zero and the transition below carries it home. The shift is applied
+  // without a transition while still centred, so growing text stays centred
+  // instead of chasing its own easing.
+  const capRef = useRef<HTMLParagraphElement>(null);
+  const typedRef = useRef<HTMLSpanElement>(null);
+  // Zero-width marker sitting immediately after the last typed character. The
+  // run itself can't be measured directly — it also contains the transparent
+  // tail, so its rects always span the finished paragraph.
+  const caretRef = useRef<HTMLSpanElement>(null);
+  const [centreShift, setCentreShift] = useState(0);
+  const [multiLine, setMultiLine] = useState(false);
+  useEffect(() => {
+    const box = capRef.current;
+    const run = typedRef.current;
+    const mark = caretRef.current;
+    if (!box || !run || !mark || !typed) return;
+    const first = run.getClientRects()[0];
+    if (!first) return;
+    const at = mark.getBoundingClientRect();
+    // Past the first line box means the copy has wrapped.
+    const wrapped = at.top - first.top > first.height * 0.5;
+    setMultiLine(wrapped);
+    setCentreShift(
+      wrapped ? 0 : Math.max(0, (box.clientWidth - (at.left - first.left)) / 2)
+    );
+  }, [typed, script, width]);
+
   // Each row of buttons arrives with the sentence that offers it.
   const past = (beat: number) =>
     done || (stops.current.length > beat && typed >= stops.current[beat]);
@@ -290,19 +377,62 @@ export default function AgentIntro({
               height: `min(${Math.round(width * 0.98)}px, ${Math.round(height * 0.98)}px, 1040px)`,
             }}
           />
+          {/* Centred while the copy is still one line, then slid to its
+              left-aligned home once it wraps. Done as a translate rather than
+              text-align, which can't be animated — see `centreShift`. */}
           <p
+            ref={capRef}
             className="relative mx-auto max-w-3xl text-left font-medium leading-snug"
-            style={{ fontSize: capSize }}
+            style={{
+              fontSize: capSize,
+              transform: `translateX(${centreShift}px)`,
+              transition: multiLine ? "transform 0.55s ease" : "none",
+            }}
           >
             {/* The finished sentence for assistive tech, so a half-typed
                 paragraph never reaches a screen reader. */}
             <span className="sr-only">{script}</span>
-            <span aria-hidden>
-              {script.slice(0, typed)}
-              {/* Transparent tail: holds the paragraph at its finished size and
-                  final wrapping from the first frame, so the composition never
-                  reflows as sentences accumulate. */}
-              <span className="opacity-0">{script.slice(typed)}</span>
+            <span aria-hidden ref={typedRef}>
+              {segments.map((seg, i) => {
+                const shown = Math.max(0, Math.min(typed - seg.start, seg.text.length));
+                const vis = seg.text.slice(0, shown);
+                const rest = seg.text.slice(shown);
+                const isCaret = i === caretSegment;
+                return (
+                  <span key={i}>
+                    {seg.link ? (
+                      <span
+                        role="button"
+                        tabIndex={vis ? 0 : -1}
+                        onClick={() => vis && onChoose(seg.link!)}
+                        onKeyDown={(e) => {
+                          if (vis && (e.key === "Enter" || e.key === " ")) onChoose(seg.link!);
+                        }}
+                        className="cursor-pointer underline decoration-2 underline-offset-4 transition-opacity hover:opacity-60"
+                      >
+                        {vis}
+                      </span>
+                    ) : (
+                      vis
+                    )}
+                    {isCaret && (
+                      // Full line-height, not a zero-height box: an empty
+                      // inline sits *on* the baseline, so its top lands most
+                      // of a line below the line box and every measurement
+                      // read as "already wrapped".
+                      <span
+                        ref={caretRef}
+                        className="inline-block w-0 align-baseline"
+                        style={{ height: "1em" }}
+                      />
+                    )}
+                    {/* Transparent tail: holds the paragraph at its finished
+                        size and final wrapping from the first frame, so the
+                        composition never reflows as sentences accumulate. */}
+                    <span className="opacity-0">{rest}</span>
+                  </span>
+                );
+              })}
             </span>
           </p>
         </main>
@@ -314,7 +444,12 @@ export default function AgentIntro({
             style={rowIn(showPortfolios)}
           >
             {PORTFOLIO_IDS.map((id) => (
-              <button key={id} type="button" onClick={() => onChoose(id)} className={PILL}>
+              <button
+                key={id}
+                type="button"
+                onClick={() => onChoose(id)}
+                className={`${PILL} ${lit === id ? "bg-black text-white" : ""}`}
+              >
                 {SPLASH_LABELS[id]}
               </button>
             ))}
