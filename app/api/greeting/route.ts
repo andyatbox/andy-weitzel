@@ -195,6 +195,11 @@ export async function GET(req: NextRequest) {
   let weather: string | null = null;
   let temp: string | null = null;
   let season: string | null = null;
+  // Why a read failed, surfaced only via ?debug=1. Weather depends on headers
+  // and an upstream that behave differently in production than they do
+  // locally, and without this the only symptom is a silent fallback.
+  let why = "ok";
+  if (!lat || !lon) why = "no-coords";
   if (lat && lon) {
     const url =
       `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}` +
@@ -222,7 +227,10 @@ export async function GET(req: NextRequest) {
           next: { revalidate: 300 },
           signal: AbortSignal.timeout(3000),
         });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          why = `upstream-${res.status}`;
+          continue;
+        }
         const data = (await res.json()) as {
           current?: {
             temperature_2m?: number;
@@ -266,23 +274,29 @@ export async function GET(req: NextRequest) {
           probSoon >= 55,
           isDay
         );
+        if (!cond) why = "no-condition";
         if (cond) {
           weather = cond;
           if (typeof c.temperature_2m === "number")
             temp = `${Math.round(c.temperature_2m)}°F`;
           season = seasonName(Number(lat));
         }
-      } catch {
+      } catch (e) {
         // Non-JSON body, timeout, or network — try once more, then give up.
+        why = `threw-${e instanceof Error ? e.name : "unknown"}`;
       }
     }
   }
 
-  return NextResponse.json({
+  const body: Greeting & Record<string, unknown> = {
     city,
     place: placeName(country, region),
     weather,
     temp,
     season,
-  } satisfies Greeting);
+  };
+  if (req.nextUrl.searchParams.get("debug") === "1") {
+    body.debug = { why, lat, lon, country, region };
+  }
+  return NextResponse.json(body);
 }
