@@ -61,13 +61,13 @@ function buildBeats(
 
 // Typing. Driven from elapsed time in a rAF loop rather than a per-character
 // interval, which can't be trusted below ~16ms.
-const CHARS_PER_SEC = 52;
+const CHARS_PER_SEC = 40;
 const BEAT_PAUSE = 1150; // ms of silence between sentences
 const START_DELAY = 900; // lets the blob settle before it "speaks"
 // How long after the last character the blob still counts as talking.
 const TALK_GRACE_MS = 110;
 
-const NAME_SIZE = "clamp(27px, 3.2vw, 44px)";
+const NAME_SIZE = "clamp(22px, 2.5vw, 34px)";
 const CAP_RATIO = 0.717;
 
 const PILL =
@@ -299,15 +299,6 @@ export default function AgentIntro({
             <span className="sr-only">{script}</span>
             <span aria-hidden>
               {script.slice(0, typed)}
-              <span
-                className="-mr-[2px] ml-[1px] inline-block w-[2px] bg-current align-baseline"
-                style={{
-                  height: "0.95em",
-                  verticalAlign: "-0.12em",
-                  opacity: done ? 0 : undefined,
-                  animation: done ? undefined : "caret-blink 0.9s step-end infinite",
-                }}
-              />
               {/* Transparent tail: holds the paragraph at its finished size and
                   final wrapping from the first frame, so the composition never
                   reflows as sentences accumulate. */}

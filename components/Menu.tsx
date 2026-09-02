@@ -288,7 +288,16 @@ export default function Menu({
   );
 
   const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // Every render rewrites each row's inline transform with the constant-pitch
+  // placement below, which clobbers the measured positions the frame loop
+  // wrote. Opening a project re-renders this component, so without forcing a
+  // reposition the list was left on that fallback spacing — visibly wrong
+  // around any title that wraps. Set after every commit; cleared by the loop.
+  const needsPlacement = useRef(true);
   const titleRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  useEffect(() => {
+    needsPlacement.current = true;
+  });
 
   // Drive placement/opacity from the shared scroll engine every frame — the
   // same source the WebGL gallery reads, so menu and gallery stay locked,
@@ -362,10 +371,11 @@ export default function Menu({
     const tick = () => {
       const spacing = engine.spacing || 1;
       const progress = engine.current / spacing;
-      if (engine.current === lastCurrent && !dirty) {
+      if (engine.current === lastCurrent && !dirty && !needsPlacement.current) {
         raf = requestAnimationFrame(tick);
         return;
       }
+      needsPlacement.current = false;
       lastCurrent = engine.current;
       if (dirty) {
         total_H = relayout();

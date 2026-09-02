@@ -60,8 +60,8 @@ body {
   }
 }
 
-/* Splash bio caret: hard on/off (paired with step-end), so it reads as a
-   terminal cursor rather than a pulse. */
+/* Typing caret. The agent landing no longer shows one; this stays for
+   SplashIntro, which is kept as the revert path back to the old landing. */
 @keyframes caret-blink {
   0%,
   49% {
