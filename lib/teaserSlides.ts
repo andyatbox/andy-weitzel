@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 // How long each frame holds. No transition — it's a hard cut between stills.
-const SLIDE_MS = 2000;
+const SLIDE_MS = 1300;
 // Thumbnail + this many gallery stills is the whole cycle.
 const MAX_SLIDES = 3;
 
