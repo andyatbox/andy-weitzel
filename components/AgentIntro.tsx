@@ -52,15 +52,7 @@ function buildBeats(
     beats.push("Good to have you here.");
   }
 
-  if (wish) {
-    // "Hoping you are cozy" is stiff where "Hoping you're cozy" is speech.
-    beats.push(
-      wish.startsWith("are ")
-        ? `Hoping you're ${wish.slice(4)}.`
-        : `Hoping you ${wish}.`
-    );
-  }
-  else beats.push("Hope your day is going well.");
+  beats.push(wish ?? "Hope your day is going well!");
 
   beats.push(BEAT_ASK);
   beats.push(BEAT_ELSE);
@@ -69,7 +61,7 @@ function buildBeats(
 
 // Typing. Driven from elapsed time in a rAF loop rather than a per-character
 // interval, which can't be trusted below ~16ms.
-const CHARS_PER_SEC = 78;
+const CHARS_PER_SEC = 52;
 const BEAT_PAUSE = 1150; // ms of silence between sentences
 const START_DELAY = 900; // lets the blob settle before it "speaks"
 // How long after the last character the blob still counts as talking.
@@ -198,6 +190,11 @@ export default function AgentIntro({
           } else {
             lastStop = s;
             held += BEAT_PAUSE;
+            // `n` above was computed before this rest was discounted, so it
+            // counts the entire pause as typing time — a whole sentence
+            // appeared for one frame and then vanished again. Recompute.
+            const after = now - t0 - START_DELAY - held;
+            n = after <= 0 ? 0 : Math.floor((after / 1000) * CHARS_PER_SEC);
           }
           break;
         }

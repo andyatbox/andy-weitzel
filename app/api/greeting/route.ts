@@ -50,27 +50,31 @@ function condition(
   return "warm";
 }
 
-/** The sign-off that goes with it. */
+/**
+ * The sign-off, as a whole sentence rather than a fragment, so a condition can
+ * phrase it however it wants — an overcast sky hopes for the sun rather than
+ * hoping *you* do something about it. Nothing here should read as consolation.
+ */
 function wishFor(cond: string, isDay: boolean, autumn: boolean): string {
   switch (cond) {
-    case "stormy": return "are cozy indoors";
-    case "snowy": return "are staying warm out there";
+    case "stormy": return "Hoping you're cozy indoors!";
+    case "snowy": return "Hoping you're warm out there!";
     case "rainy":
-    case "drizzly": return "stay dry";
-    case "soon-to-be rainy": return "stay ahead of it";
-    case "foggy": return "enjoy the quiet of it";
+    case "drizzly": return "Hoping you stay dry!";
+    case "soon-to-be rainy": return "Hoping you stay ahead of it!";
+    case "foggy": return "Hoping you enjoy the quiet of it!";
     case "frigid":
-    case "cold": return "are staying warm";
+    case "cold": return "Hoping you're staying warm!";
     case "hot":
-    case "humid": return "are keeping cool";
-    case "sunny": return "can catch some rays";
-    case "clear": return "get a look at the stars";
-    case "overcast": return "see the sun break through";
+    case "humid": return "Hoping you're keeping cool!";
+    case "sunny": return "Hoping you catch some rays!";
+    case "clear": return "Hoping you get a look at the stars!";
+    case "overcast": return "Hoping the sun breaks through!";
     default:
-      if (autumn) return "are enjoying the changing leaves";
+      if (autumn) return "Hoping you're enjoying the changing leaves!";
       return isDay
-        ? "can enjoy the seasonably nice weather"
-        : "have a good evening";
+        ? "Hoping you enjoy the seasonably nice weather!"
+        : "Hoping you have a lovely evening!";
   }
 }
 
@@ -121,7 +125,7 @@ export interface Greeting {
   place: string | null;
   /** A single adjective, e.g. "overcast" or "soon-to-be rainy". */
   weather: string | null;
-  /** The matching sign-off, e.g. "stay dry". */
+  /** The matching sign-off, a whole sentence, e.g. "Hoping you stay dry!" */
   wish: string | null;
 }
 

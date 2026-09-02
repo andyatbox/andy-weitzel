@@ -304,48 +304,74 @@ export default function Menu({
     let raf = 0;
     const N = n;
     if (N === 0) return;
-    // Landscape's spread pitch is a floor, so single-line rows keep the airy
-    // rhythm while wrapped rows grow past it as needed.
-    const minAdvance = isLandscape ? rowHeight : 0;
-    const heights = new Array(N).fill(baseRow); // per-item advance (px)
-    const prefix = new Array(N + 1).fill(0); // prefix sums of `heights`
+    const heights = new Array(N).fill(baseRow); // measured row heights (px)
+    const advance = new Array(N).fill(baseRow); // height + the shared gap
+    const prefix = new Array(N + 1).fill(0); // prefix sums of `advance`
     const mod = (a: number, b: number) => ((a % b) + b) % b;
 
-    // Nothing below produces a different answer while the engine sits still,
-    // so a parked list costs one comparison a frame instead of N layout reads
-    // and 2N style writes. Row heights only change with the box they wrap in,
-    // which the observer below catches.
+    // Heights are pushed in by the observer rather than read every frame. Two
+    // reasons: N layout reads a frame is the most expensive thing this loop
+    // did, and a re-read that's gated on "has anything moved" can go stale
+    // exactly when it matters — a row rewrapping while the list sits still.
     let lastCurrent = NaN;
-    let remeasure = true;
-    const ro = new ResizeObserver(() => {
-      remeasure = true;
+    let dirty = true;
+    const indexOf = new Map<Element, number>();
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        const i = indexOf.get(e.target);
+        if (i === undefined) continue;
+        const h = e.contentRect.height || baseRow;
+        if (h !== heights[i]) {
+          heights[i] = h;
+          dirty = true;
+        }
+      }
     });
-    rowRefs.current.slice(0, N).forEach((el) => el && ro.observe(el));
+    for (let i = 0; i < N; i++) {
+      const el = rowRefs.current[i];
+      if (!el) continue;
+      indexOf.set(el, i);
+      heights[i] = el.offsetHeight || baseRow; // seed before the first frame
+      ro.observe(el);
+    }
+
+    /**
+     * One gap between every pair of rows, whatever their line count. The old
+     * rule took `max(pitch, height + gap)`, so a single-line row was spaced by
+     * the pitch and a wrapped one by its own height — visibly different gaps
+     * either side of any title that wrapped. Deriving the gap from the
+     * shortest row keeps landscape's airy rhythm for single-line rows while a
+     * wrapped row simply takes the extra height it needs.
+     */
+    const relayout = () => {
+      const shortest = Math.min(...heights);
+      const gap = isLandscape
+        ? Math.max(ROW_GAP, rowHeight - shortest)
+        : ROW_GAP;
+      let H = 0;
+      for (let i = 0; i < N; i++) advance[i] = heights[i] + gap;
+      for (let i = 0; i < N; i++) {
+        prefix[i] = H;
+        H += advance[i];
+      }
+      prefix[N] = H;
+      return H;
+    };
+    let total_H = relayout();
 
     const tick = () => {
       const spacing = engine.spacing || 1;
       const progress = engine.current / spacing;
-      if (engine.current === lastCurrent && !remeasure) {
+      if (engine.current === lastCurrent && !dirty) {
         raf = requestAnimationFrame(tick);
         return;
       }
       lastCurrent = engine.current;
-      remeasure = false;
-
-      // Measure each unique item's wrapped height. Reading offsetHeight here
-      // is cheap: only transforms/opacity changed since the last layout, and
-      // neither dirties layout, so this doesn't force a reflow.
-      let H = 0;
-      for (let i = 0; i < N; i++) {
-        const el = rowRefs.current[i];
-        const h = el ? el.offsetHeight : 0;
-        heights[i] = Math.max(minAdvance, (h > 0 ? h : baseRow) + ROW_GAP);
+      if (dirty) {
+        total_H = relayout();
+        dirty = false;
       }
-      for (let i = 0; i < N; i++) {
-        prefix[i] = H;
-        H += heights[i];
-      }
-      prefix[N] = H;
+      const H = total_H;
       const ET = reps * H; // wrap period in px (matches the node strip length)
 
       // Pixel scroll position that should sit at the viewport center. At an
@@ -353,8 +379,8 @@ export default function Menu({
       // interpolates by their half-heights so the motion stays smooth.
       const iI = Math.floor(progress);
       const frac = progress - iI;
-      const hI = heights[mod(iI, N)];
-      const hI1 = heights[mod(iI + 1, N)];
+      const hI = advance[mod(iI, N)];
+      const hI1 = advance[mod(iI + 1, N)];
       const cumCenterI = Math.floor(iI / N) * H + prefix[mod(iI, N)] + hI / 2;
       const S = mod(cumCenterI + frac * (hI / 2 + hI1 / 2), ET);
 
@@ -362,7 +388,7 @@ export default function Menu({
         const el = rowRefs.current[k];
         if (!el) continue;
         // Linear center of this node, then nearest wrapped copy around S.
-        const Lk = Math.floor(k / N) * H + prefix[k % N] + heights[k % N] / 2;
+        const Lk = Math.floor(k / N) * H + prefix[k % N] + advance[k % N] / 2;
         const pPx = mod(Lk - S + ET / 2, ET) - ET / 2;
         // Fade/underline stay keyed to item-step distance (consistent count
         // of visible items), independent of the variable pixel spacing.

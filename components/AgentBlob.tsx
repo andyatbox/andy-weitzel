@@ -46,8 +46,8 @@ void main(){
 
   float k = u_speak;
   // At rest this barely moves; while a line is typing it churns.
-  float amp = 0.035 + 0.42 * k;
-  float spd = 0.07 + 1.45 * k;
+  float amp = 0.062 + 0.40 * k;
+  float spd = 0.17 + 1.35 * k;
   float t = u_time * spd;
 
   // Domain warp: the wobble in the outline and the drift in the colour.
