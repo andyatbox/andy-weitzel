@@ -122,7 +122,7 @@ function ResumeBody() {
         <Job
           title="Chief Creative Officer, Creative Director & Co-founder"
           org="Box Creative"
-          meta="2007 — Present · www.box.biz"
+          meta="2007 — Present • www.box.biz"
         >
           <p>
             Co-founded and built Box Creative, an award-winning design firm and
@@ -186,12 +186,12 @@ function ResumeBody() {
         </Skill>
         <Skill title="Design Tools">
           Adobe Creative Cloud (Illustrator, Photoshop, InDesign, Premiere Pro,
-          After Effects, Dreamweaver, Express), Figma, ChatGPT, Claude Design,
-          Google Gemini, Blender (3D/CGI)
+          After Effects, Dreamweaver, Express), Figma with Claude Design, Blender
+          (3D/CGI)
         </Skill>
         <Skill title="Coding Tools">
-          Agentic Full-Stack Development (Claude Code, Codex), VS Code, Xcode,
-          Google Web Designer (Rich Media), Nova / Coda
+          Agentic Full-Stack Development (Claude Code, OpenAI Codex), VS Code,
+          Xcode, Google Web Designer + Google Studio / Doubleclick, Nova
         </Skill>
         <Skill title="Coding Languages">
           <p>
@@ -238,7 +238,7 @@ function ResumeBody() {
 
       <Section title="Education">
         <div>
-          <h4 className={ITEM}>BFA, Columbus College of Art & Design</h4>
+          <h4 className={ITEM}>BFA, Columbus College of Art and Design</h4>
           <p className={`mt-1.5 ${LABEL}`}>1999 — 2003</p>
           <p className={`mt-2 ${BODY}`}>
             Major in Illustration, additional studies in Graphic Design, Fine
@@ -247,7 +247,7 @@ function ResumeBody() {
         </div>
         <div>
           <h4 className={ITEM}>LaSalle High School</h4>
-          <p className={`mt-1.5 ${LABEL}`}>Graduated 1999</p>
+          <p className={`mt-1.5 ${LABEL}`}>Class of 1999</p>
         </div>
       </Section>
 

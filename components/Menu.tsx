@@ -472,20 +472,6 @@ export default function Menu({
     );
   });
 
-  // Static white gradient masks dissolve the list at the top/bottom (replacing
-  // the old per-item opacity). pointer-events-none so list clicks pass through.
-  const topMask = (
-    <div
-      className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-white via-white/80 to-transparent"
-      style={{ height: "42%" }}
-    />
-  );
-  const bottomMask = (
-    <div
-      className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-white via-white/80 to-transparent"
-      style={{ height: "42%" }}
-    />
-  );
   const listFade: React.CSSProperties = {
     opacity: dimmed ? 0 : intro ? 1 : 0,
     transition: intro ? "opacity 0.15s ease" : "opacity 0.38s ease 300ms",
@@ -494,6 +480,25 @@ export default function Menu({
   // symmetrically about its center (the brand box covers everything above the
   // top fade). 0.42 of the region leaves a centered clear band.
   const fadeH = Math.round(regionHeight * 0.42);
+
+  // The list dissolves at its top and bottom through a mask on the list layer
+  // itself, not white gradients laid over it. Overlays only hid rows while
+  // everything above them was opaque: the Resumé/Contact bar fades in with
+  // opacity on the intro and on every portfolio switch, and for those frames
+  // the unmasked rows beneath it showed through at full strength. A mask
+  // travels with the list, so no sibling's animation can undo it. Stops
+  // mirror the old white → white/80 → clear ramp (mask alpha 0 → 0.2 → 1),
+  // and landscape also clips to nothing under the brand box and links bar.
+  const T = regionTop;
+  const B = regionBottom;
+  const listMask = isLandscape
+    ? `linear-gradient(to bottom, transparent ${T}px, rgba(0,0,0,0.2) ${T + fadeH / 2}px, #000 ${T + fadeH}px, #000 calc(100% - ${B + fadeH}px), rgba(0,0,0,0.2) calc(100% - ${B + fadeH / 2}px), transparent calc(100% - ${B}px))`
+    : "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 21%, #000 42%, #000 58%, rgba(0,0,0,0.2) 79%, transparent 100%)";
+  const listLayer: React.CSSProperties = {
+    ...listFade,
+    WebkitMaskImage: listMask,
+    maskImage: listMask,
+  };
 
   // Fades in and out with the list it drives; explicitly un-clickable while
   // faded, since opacity alone would leave invisible hit targets during a
@@ -522,20 +527,12 @@ export default function Menu({
         // top on an opaque white box (masking the top), and a bottom gradient
         // dissolves the tail.
         <div className="relative h-full w-full overflow-hidden">
-          <div className="absolute inset-0" style={listFade}>
+          <div className="absolute inset-0" style={listLayer}>
             {listStrip}
           </div>
           {stepper}
-          <div
-            className="pointer-events-none absolute inset-x-0 z-10 bg-gradient-to-t from-white via-white/80 to-transparent"
-            style={{ bottom: linksH, height: fadeH }}
-          />
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
             <div ref={brandBoxRef} className="pointer-events-auto bg-white p-5 min-[992px]:p-7">{brand}</div>
-            <div
-              className="bg-gradient-to-b from-white via-white/80 to-transparent"
-              style={{ height: fadeH }}
-            />
           </div>
           {/* Resumé / Contact docked across the bottom of the rail, left-aligned. */}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
@@ -560,11 +557,9 @@ export default function Menu({
             {brand}
           </div>
           <div className="relative h-full w-1/2 overflow-hidden">
-            <div className="absolute inset-0" style={listFade}>
+            <div className="absolute inset-0" style={listLayer}>
               {listStrip}
             </div>
-            {topMask}
-            {bottomMask}
             {stepper}
           </div>
         </div>
