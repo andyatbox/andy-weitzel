@@ -55,7 +55,7 @@ function Pill({
   onHoverChange?: (active: boolean) => void;
   children: React.ReactNode;
 }) {
-  const cls = `inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors min-[992px]:text-sm ${
+  const cls = `inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors min-[992px]:text-sm min-[1200px]:px-3.5 min-[1200px]:text-base ${
     active
       ? "border-black bg-black text-white"
       : "border-black/30 text-black hover:border-black/70"
@@ -139,9 +139,10 @@ export default function Menu({
     onMouseEnter: () => onInfoHover(true),
     onMouseLeave: () => onInfoHover(false),
   };
+  const isXL = viewport.width >= 1200;
   const isLarge = viewport.width >= 992;
   const isMedium = viewport.width >= 768;
-  const fontSize = isLarge ? 18 : isMedium ? 16 : 14;
+  const fontSize = isXL ? 21 : isLarge ? 18 : isMedium ? 16 : 14;
   const baseRow = Math.round(fontSize * 1.95);
   // Vertical breathing space added to each row's measured (possibly wrapped)
   // height in portrait, so multi-line items still separate cleanly.
@@ -341,8 +342,7 @@ export default function Menu({
         el.style.transform = `translateY(calc(-50% + ${pPx}px))`;
         el.style.pointerEvents = Math.abs(stepP) > FADE_ZERO * 0.7 ? "none" : "auto";
         const title = titleRefs.current[k];
-        if (title)
-          title.style.textDecoration = Math.abs(stepP) < 0.5 ? "underline" : "none";
+        if (title) title.dataset.on = String(Math.abs(stepP) < 0.5);
       }
       raf = requestAnimationFrame(tick);
     };
@@ -362,9 +362,9 @@ export default function Menu({
     ? isMedium ? "clamp(100px, 9vw, 160px)" : "clamp(72px, 7vw, 120px)"
     : isMedium ? "clamp(96px, 14vw, 140px)" : "clamp(72px, 15vw, 116px)";
   const nameSize = isLandscape
-    ? isLarge ? "clamp(18px, 1.8vw, 28px)" : isMedium ? "clamp(15px, 1.6vw, 20px)" : "clamp(13px, 1.35vw, 18px)"
+    ? isXL ? "clamp(24px, 2vw, 32px)" : isLarge ? "clamp(18px, 1.8vw, 28px)" : isMedium ? "clamp(15px, 1.6vw, 20px)" : "clamp(13px, 1.35vw, 18px)"
     : isMedium ? "clamp(16px, 3vw, 22px)" : "clamp(15px, 3vw, 19px)";
-  const workSize = "clamp(11px, 1.05vw, 13px)";
+  const workSize = isXL ? "15px" : "clamp(11px, 1.05vw, 13px)";
 
   const introAnim = (delay: number): React.CSSProperties => ({
     opacity: intro ? 1 : 0,
@@ -458,13 +458,13 @@ export default function Menu({
         >
           {String(node.item + 1).padStart(2, "0")}
         </span>
+        {/* The canvas carries no titles, so the centred item is marked in the
+            active-pill style. Padding is on every title, not just the lit one,
+            so the highlight toggling never shifts text sideways mid-scroll. */}
         <span
           ref={(el) => void (titleRefs.current[node.key] = el)}
-          className="min-w-0 break-words"
-          style={{
-            textUnderlineOffset: 4,
-            textDecoration: Math.abs(p) < 0.5 ? "underline" : "none",
-          }}
+          data-on={Math.abs(p) < 0.5}
+          className="min-w-0 break-words px-2 transition-colors duration-150 data-[on=true]:bg-black data-[on=true]:text-white"
         >
           {items[node.item].title}
         </span>
