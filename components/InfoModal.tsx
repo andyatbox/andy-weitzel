@@ -431,7 +431,13 @@ export default function InfoModal({
               </p>
               <a
                 href={RESUME_FILE}
+                // Desktop honours `download` and saves the file. Mobile browsers
+                // often ignore it for PDFs and navigate to the file instead,
+                // which dropped visitors out of the site — the new tab is where
+                // that fallback lands, with the OS viewer's own share/save.
                 download
+                target="_blank"
+                rel="noopener"
                 className="mt-6 inline-flex items-center rounded-full border border-black px-5 py-2 font-medium text-black transition-colors hover:bg-black hover:text-white"
               >
                 Download Resumé
