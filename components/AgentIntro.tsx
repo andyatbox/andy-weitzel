@@ -142,7 +142,7 @@ function buildBeats(
 
 // Typing. Driven from elapsed time in a rAF loop rather than a per-character
 // interval, which can't be trusted below ~16ms.
-const CHARS_PER_SEC = 40;
+const CHARS_PER_SEC = 60;
 const BEAT_PAUSE = 1150; // ms of silence after the greeting (see Beat.pause)
 // How long after the last character the blob still counts as talking.
 const TALK_GRACE_MS = 110;
@@ -260,6 +260,8 @@ export default function AgentIntro({
     link?: PortfolioId;
     start: number;
     beat: number;
+    /** Join that follows a resting beat: drawn as a spaced line break. */
+    brk?: boolean;
   }[] = [];
   let script = "";
   const stops = useRef<number[]>([]);
@@ -274,7 +276,12 @@ export default function AgentIntro({
         // The join has to be a segment of its own, not just appended to the
         // script — anything not in a segment never gets rendered, and the
         // sentences ran together.
-        segments.push({ text: " ", start: script.length, beat: bi });
+        segments.push({
+          text: " ",
+          start: script.length,
+          beat: bi,
+          brk: !!beats[bi - 1].pause,
+        });
         script += " ";
       }
       for (const part of b.parts) {
@@ -579,6 +586,11 @@ export default function AgentIntro({
                       >
                         {vis}
                       </span>
+                    ) : seg.brk ? (
+                      // The greeting stands apart from the pitch that follows.
+                      // Drawn from the first frame, like the transparent tail,
+                      // so the gap never pops in and reflows the paragraph.
+                      <span className="block" style={{ height: "0.5em" }} />
                     ) : (
                       vis
                     )}
@@ -596,7 +608,7 @@ export default function AgentIntro({
                     {/* Transparent tail: holds the paragraph at its finished
                         size and final wrapping from the first frame, so the
                         composition never reflows as sentences accumulate. */}
-                    <span className="opacity-0">{rest}</span>
+                    {!seg.brk && <span className="opacity-0">{rest}</span>}
                   </span>
                 );
               })}

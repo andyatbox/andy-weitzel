@@ -76,18 +76,18 @@ function Skill({ title, children }: { title: string; children: React.ReactNode }
 }
 
 function Award({
+  label,
   title,
-  tag,
   children,
 }: {
+  label: string;
   title: string;
-  tag: string;
   children: React.ReactNode;
 }) {
   return (
     <div>
-      <h4 className={ITEM}>{title}</h4>
-      <p className={`mt-1 ${LABEL}`}>{tag}</p>
+      <p className={LABEL}>{label}</p>
+      <h4 className={`mt-1 ${ITEM}`}>{title}</h4>
       <div className={`mt-2 space-y-0.5 ${BODY}`}>{children}</div>
     </div>
   );
@@ -209,35 +209,30 @@ function ResumeBody() {
         </Skill>
         <Skill title="Project Management Tools">Slack, Linear, Asana</Skill>
         <Skill title="Strategic">
-          Brand Audits, Analytics & Media Analysis, New Business Development
+          Team Leadership, Project Management, Brand Audits, Media Analytics,
+          New Business Development
         </Skill>
       </Section>
 
       <Section title="Awards">
-        <Award
-          title="Webby Awards, 2026"
-          tag="Webby Winner / People’s Voice Winner / Nominee (AR)"
-        >
+        <Award label="Webby Awards, 2026" title="E.L.F. Cosmetics’ elfnalysis.com">
+          <p>Award: Webby winner, People’s Voice winner, Nominee (AR)</p>
           <p>Agency: Movement Strategy</p>
           <p>
-            E.L.F. Cosmetics —{" "}
             <a
               href="https://www.elfnalysis.com"
               target="_blank"
               rel="noreferrer"
-              className="underline underline-offset-2"
+              className="italic underline underline-offset-2"
             >
               elfnalysis.com
             </a>{" "}
-            · AI-driven beauty season identifier
+            A.I. season identifier webapp
           </p>
         </Award>
-        <Award title="Webby Awards, 2021" tag="Honoree">
+        <Award label="Webby Awards, 2021" title="VMAs Burger King x Lil Yachty">
           <p>Agencies: Coffee Labs, Paramount</p>
-          <p>MTV VMAs AR — Burger King x Lil Yachty</p>
-        </Award>
-        <Award title="Society of Illustrators" tag="Award of Merit">
-          <p>Painting / illustration of William S. Burroughs</p>
+          <p>MTV VMAs AR Burger King x Lil Yachty webapp</p>
         </Award>
       </Section>
 
@@ -364,6 +359,11 @@ export default function InfoModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Read after mount rather than during render, so server and client markup
+  // agree. Deliberately counts an iPad with a trackpad as touch — see below.
+  const [touch, setTouch] = useState(false);
+  useEffect(() => setTouch(navigator.maxTouchPoints > 0), []);
+
   const isResume = kind === "resume";
   const email = decode(CONTACT_EMAIL_B64);
 
@@ -431,11 +431,12 @@ export default function InfoModal({
               </p>
               <a
                 href={RESUME_FILE}
-                // Desktop honours `download` and saves the file. Mobile browsers
-                // often ignore it for PDFs and navigate to the file instead,
-                // which dropped visitors out of the site — the new tab is where
-                // that fallback lands, with the OS viewer's own share/save.
-                download
+                // Desktop honours `download` and saves the file. iOS Safari
+                // honours it too, but by opening its download preview in the
+                // *current* tab — `target` is ignored once `download` is set —
+                // which dropped visitors out of the site. So touch devices get
+                // a plain new tab, where the OS viewer offers share/save.
+                download={touch ? undefined : true}
                 target="_blank"
                 rel="noopener"
                 className="mt-6 inline-flex items-center rounded-full border border-black px-5 py-2 font-medium text-black transition-colors hover:bg-black hover:text-white"
