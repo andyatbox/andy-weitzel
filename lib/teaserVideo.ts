@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { getVideoEmbedSrc } from "./videoEmbed";
 
-// --- Trim/speed. Teasers loop just the opening at a lifted rate, which also
-// means only the first HLS segments are ever fetched. Set LOOP_SECONDS to 0 to
-// play the whole video, and PLAYBACK_RATE to 1 for normal speed.
-const LOOP_SECONDS = 15;
-const PLAYBACK_RATE = 1.5;
+// --- Trim/speed. Teasers play the whole video at triple speed, so a full pass
+// stays short enough to read as a teaser. Set LOOP_SECONDS above 0 to loop only
+// the opening seconds instead (then only the first HLS segments are fetched),
+// and PLAYBACK_RATE to 1 for normal speed.
+const LOOP_SECONDS = 0;
+const PLAYBACK_RATE = 3;
 
 // Quality/cost dial. The teaser plane is at most about window-sized, so 720p
 // covers it; each step up multiplies both decode work and the per-frame GPU
@@ -233,9 +234,11 @@ export function useTeaserVideo(
 
       if (Hls?.isSupported()) {
         const instance = new Hls({
-          // A teaser needs a few seconds of runway, not the whole file.
-          maxBufferLength: 8,
-          maxMaxBufferLength: 12,
+          // A few seconds of runway, not the whole file. These are media
+          // seconds, which drain at PLAYBACK_RATE — scaled so the wall-clock
+          // runway doesn't shrink at 2x and stall mid-teaser.
+          maxBufferLength: 8 * PLAYBACK_RATE,
+          maxMaxBufferLength: 12 * PLAYBACK_RATE,
           capLevelToPlayerSize: false,
           enableWorker: true,
         });
