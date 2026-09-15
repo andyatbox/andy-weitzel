@@ -10,6 +10,11 @@ import { getVideoEmbedSrc } from "./videoEmbed";
 // and PLAYBACK_RATE to 1 for normal speed.
 const LOOP_SECONDS = 0;
 const PLAYBACK_RATE = 3;
+// Native HLS (iOS) is AVFoundation underneath, which only plays normally up to
+// 2x. Above that it switches to fast-forward trick play — keyframes only —
+// and the teaser stutters through stills. Desktop Safari goes through hls.js
+// and isn't affected, so only the native path is held to this.
+const NATIVE_HLS_MAX_RATE = 2;
 
 // Quality/cost dial. The teaser plane is at most about window-sized, so 720p
 // covers it; each step up multiplies both decode work and the per-frame GPU
@@ -202,7 +207,9 @@ export function useTeaserVideo(
       const video = videoRef.current;
       if (!alive || !video || !texRef.current) return;
       if (video.readyState < 2) return;
-      video.playbackRate = PLAYBACK_RATE; // re-assert after the media loaded
+      // Re-assert after the media loaded. The default holds the rate chosen
+      // for whichever playback path this element is on.
+      video.playbackRate = video.defaultPlaybackRate;
       setTexture(texRef.current);
     };
     const READY_EVENTS = ["loadeddata", "canplay", "playing"] as const;
@@ -261,7 +268,11 @@ export function useTeaserVideo(
         instance.attachMedia(video);
         hlsRef.current = instance;
       } else if (canNative) {
-        video.src = src; // iOS Safari: no MSE, but native HLS
+        // iOS Safari: no MSE, but native HLS.
+        const rate = Math.min(PLAYBACK_RATE, NATIVE_HLS_MAX_RATE);
+        video.defaultPlaybackRate = rate;
+        video.playbackRate = rate;
+        video.src = src;
       } else {
         return; // no path to play it; the image stays
       }
