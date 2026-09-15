@@ -17,6 +17,8 @@ interface Beat {
   highlight?: PortfolioId;
   /** Once this beat lands, the portfolio buttons appear. */
   asks?: boolean;
+  /** Rest after this beat before the next starts. Everything else runs on. */
+  pause?: boolean;
 }
 
 /** Visitor's own clock — the one variable that is never wrong. */
@@ -114,9 +116,10 @@ function buildBeats(
 
   if (weather && season) {
     beats.push(line(tod === "night" ? "Good evening!" : `Good ${tod}!`));
-    beats.push(line(weatherLine(weather, temp, season, tod, place)));
+    // The script's one rest: let the greeting land before the pitch starts.
+    beats.push({ ...line(weatherLine(weather, temp, season, tod, place)), pause: true });
   } else {
-    beats.push(line("Hello!"));
+    beats.push({ ...line("Hello!"), pause: true });
   }
 
   beats.push({ ...line("Which portfolio would you like to start with?"), asks: true });
@@ -140,8 +143,7 @@ function buildBeats(
 // Typing. Driven from elapsed time in a rAF loop rather than a per-character
 // interval, which can't be trusted below ~16ms.
 const CHARS_PER_SEC = 40;
-const BEAT_PAUSE = 1150; // ms of silence between sentences
-const START_DELAY = 900; // lets the blob settle before it "speaks"
+const BEAT_PAUSE = 1150; // ms of silence after the greeting (see Beat.pause)
 // How long after the last character the blob still counts as talking.
 const TALK_GRACE_MS = 110;
 // How far *before* a sentence ends the blob starts settling. The idle ramp
@@ -214,8 +216,8 @@ export default function AgentIntro({
   const [typed, setTyped] = useState(0);
   const [done, setDone] = useState(false);
   // Whether characters are appearing *right now*. Distinct from "not finished
-  // yet": the counter sits still through every between-sentence rest, and the
-  // blob has to settle in those gaps for the start/stop to read.
+  // yet": the counter sits still through the rest after the greeting, and the
+  // blob has to settle in that gap for the start/stop to read.
   const [talking, setTalking] = useState(false);
   const talkingRef = useRef(false);
   const skipRef = useRef(false);
@@ -261,9 +263,12 @@ export default function AgentIntro({
   }[] = [];
   let script = "";
   const stops = useRef<number[]>([]);
+  // The subset of `stops` that rest before typing on.
+  const pauses = useRef<number[]>([]);
   const highlights = useRef<(PortfolioId | undefined)[]>([]);
   if (beats) {
     const ends: number[] = [];
+    const rests: number[] = [];
     beats.forEach((b, bi) => {
       if (bi > 0) {
         // The join has to be a segment of its own, not just appended to the
@@ -277,8 +282,10 @@ export default function AgentIntro({
         script += part.text;
       }
       ends.push(script.length);
+      if (b.pause) rests.push(script.length);
     });
     stops.current = ends;
+    pauses.current = rests;
     highlights.current = beats.map((b) => b.highlight);
   }
 
@@ -310,10 +317,10 @@ export default function AgentIntro({
         return;
       }
       if (!t0) t0 = now;
-      const ms = now - t0 - START_DELAY - held;
+      const ms = now - t0 - held;
       let n = ms <= 0 ? 0 : Math.floor((ms / 1000) * CHARS_PER_SEC);
-      // Rest at the end of each sentence before starting the next.
-      for (const s of stops.current) {
+      // Rest at the end of the greeting before starting the next sentence.
+      for (const s of pauses.current) {
         if (n >= s && s > lastStop) {
           const over = ((ms / 1000) * CHARS_PER_SEC - s) / CHARS_PER_SEC;
           if (over * 1000 < BEAT_PAUSE) {
@@ -324,7 +331,7 @@ export default function AgentIntro({
             // `n` above was computed before this rest was discounted, so it
             // counts the entire pause as typing time — a whole sentence
             // appeared for one frame and then vanished again. Recompute.
-            const after = now - t0 - START_DELAY - held;
+            const after = now - t0 - held;
             n = after <= 0 ? 0 : Math.floor((after / 1000) * CHARS_PER_SEC);
           }
           break;
@@ -336,12 +343,14 @@ export default function AgentIntro({
       // one character and the state flickered off and straight back on.
       if (n > lastN) lastAdvance = now;
       lastN = n;
-      // Start settling before the sentence lands. The lead is capped to a
-      // share of the sentence's own length, or a short one ("Good morning!")
-      // would be entirely inside the lead and never animate at all.
-      const si = stops.current.findIndex((e) => e >= n);
-      const end = si === -1 ? script.length : stops.current[si];
-      const from = si <= 0 ? 0 : stops.current[si - 1] + 1;
+      // Start settling before the typing stops. Only a rest or the finish
+      // counts: sentences otherwise run straight on, and settling at every
+      // full stop would dip the blob while characters were still appearing.
+      // The lead is capped to a share of the run's own length, or a short one
+      // ("Hello!") would be entirely inside the lead and never animate at all.
+      const si = pauses.current.findIndex((e) => e >= n);
+      const end = si === -1 ? script.length : pauses.current[si];
+      const from = si <= 0 ? 0 : pauses.current[si - 1] + 1;
       const sentenceMs = ((end - from) / CHARS_PER_SEC) * 1000;
       const lead = Math.min(LEAD_OUT_MS, sentenceMs * 0.35);
       const msLeft = ((end - n) / CHARS_PER_SEC) * 1000;
