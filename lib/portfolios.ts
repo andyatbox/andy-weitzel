@@ -64,33 +64,26 @@ interface RawProject {
   slides?: RawStill[];
 }
 
-// How many stills the teaser cycles. Kept low deliberately: it's a glance at
-// the project, not the project — the slider is where the rest live.
-const TEASER_STILLS = 3;
-
 /**
- * Stills in gallery order, with each `imagesSlide` group opened out into its
- * own frames, so a project whose gallery is one multi-image upload cycles
- * exactly like one built from single images.
+ * Every still in gallery order, with each `imagesSlide` group opened out into
+ * its own frames, so a project whose gallery is one multi-image upload cycles
+ * exactly like one built from single images. Uncapped: the teaser plays a
+ * project's whole run of stills.
  */
 function stillsFrom(slides: RawStill[] | undefined): RawImage[] {
-  return (slides ?? [])
-    .flatMap((s) => (s._type === "imagesSlide" ? s.images ?? [] : [s as RawImage]))
-    .slice(0, TEASER_STILLS);
+  return (slides ?? []).flatMap((s) =>
+    s._type === "imagesSlide" ? s.images ?? [] : [s as RawImage]
+  );
 }
 
 // `video` is the project's single video slide, if it has one — the teaser
 // plays it in place of the thumbnail. Projects carry at most one. `slides` is
-// the opening gallery stills, which the teaser cycles through instead when
-// there's no video. Both entry kinds are fetched: taking the first few
-// *entries* and then flattening can't overshoot, since one group already
-// carries more stills than the teaser shows.
+// every gallery still, which the teaser cycles through instead when there's no
+// video — single images and whole multi-image uploads alike.
 const LIST_QUERY = `*[_type == "project" && defined(thumbnail)] | order(orderRank) {
   _id, title, "slug": slug.current, category, thumbnail,
   "video": gallery[_type == "videoSlide"][0].videoUrl,
-  "slides": gallery[_type == "image" || _type == "imagesSlide"][0...${TEASER_STILLS}]{
-    ..., images[0...${TEASER_STILLS}]
-  }
+  "slides": gallery[_type == "image" || _type == "imagesSlide"]{ ..., images[] }
 }`;
 
 /** Fetches both portfolios' teasers (title + 16:9 thumbnail + slug) from Sanity. */
@@ -115,8 +108,13 @@ export function usePortfolios(): Portfolios | null {
           video: row.video,
           // Same 16:9 crop as the thumbnail, so cycling between them never
           // shifts the framing.
+          // Same 16:9 crop as the thumbnail so cycling never shifts framing,
+          // but requested smaller: a project can carry twenty of these and the
+          // active teaser holds them all on the GPU at once. 1280x720 matches
+          // the cap the teaser video already renders at, on a plane that is at
+          // most window-sized.
           slides: stillsFrom(row.slides).map((img) =>
-            urlFor(img).width(1600).height(900).fit("crop").auto("format").url()
+            urlFor(img).width(1280).height(720).fit("crop").auto("format").url()
           ),
           // Force a 16:9 crop (respecting the hotspot) so the WebGL cover logic
           // and procedural fallback stay consistent.
