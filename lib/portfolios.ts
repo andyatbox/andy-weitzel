@@ -43,6 +43,17 @@ const ID_BY_CATEGORY: Record<string, PortfolioId> = {
   "branding-print": "branding",
 };
 
+type RawImage = Parameters<typeof urlFor>[0];
+
+/**
+ * A gallery entry the teaser can take stills from. Either a lone `image` or an
+ * `imagesSlide` — one entry holding a whole upload of them.
+ */
+interface RawStill {
+  _type?: string;
+  images?: RawImage[];
+}
+
 interface RawProject {
   _id: string;
   title: string;
@@ -50,17 +61,36 @@ interface RawProject {
   category: string;
   thumbnail: Parameters<typeof urlFor>[0];
   video?: string;
-  slides?: Parameters<typeof urlFor>[0][];
+  slides?: RawStill[];
+}
+
+// How many stills the teaser cycles. Kept low deliberately: it's a glance at
+// the project, not the project — the slider is where the rest live.
+const TEASER_STILLS = 3;
+
+/**
+ * Stills in gallery order, with each `imagesSlide` group opened out into its
+ * own frames, so a project whose gallery is one multi-image upload cycles
+ * exactly like one built from single images.
+ */
+function stillsFrom(slides: RawStill[] | undefined): RawImage[] {
+  return (slides ?? [])
+    .flatMap((s) => (s._type === "imagesSlide" ? s.images ?? [] : [s as RawImage]))
+    .slice(0, TEASER_STILLS);
 }
 
 // `video` is the project's single video slide, if it has one — the teaser
 // plays it in place of the thumbnail. Projects carry at most one. `slides` is
-// the first few gallery stills, which the teaser cycles through instead when
-// there's no video.
+// the opening gallery stills, which the teaser cycles through instead when
+// there's no video. Both entry kinds are fetched: taking the first few
+// *entries* and then flattening can't overshoot, since one group already
+// carries more stills than the teaser shows.
 const LIST_QUERY = `*[_type == "project" && defined(thumbnail)] | order(orderRank) {
   _id, title, "slug": slug.current, category, thumbnail,
   "video": gallery[_type == "videoSlide"][0].videoUrl,
-  "slides": gallery[_type == "image"][0...3]
+  "slides": gallery[_type == "image" || _type == "imagesSlide"][0...${TEASER_STILLS}]{
+    ..., images[0...${TEASER_STILLS}]
+  }
 }`;
 
 /** Fetches both portfolios' teasers (title + 16:9 thumbnail + slug) from Sanity. */
@@ -85,7 +115,7 @@ export function usePortfolios(): Portfolios | null {
           video: row.video,
           // Same 16:9 crop as the thumbnail, so cycling between them never
           // shifts the framing.
-          slides: (row.slides ?? []).map((img) =>
+          slides: stillsFrom(row.slides).map((img) =>
             urlFor(img).width(1600).height(900).fit("crop").auto("format").url()
           ),
           // Force a 16:9 crop (respecting the hotspot) so the WebGL cover logic
@@ -124,6 +154,16 @@ export interface VideoSlide {
   videoUrl: string;
 }
 
+/**
+ * Several stills uploaded into one gallery entry. Never reaches a component:
+ * `useProject` opens it out into its images, so downstream a gallery is always
+ * a flat run of slides.
+ */
+export interface ImagesSlide {
+  _type: "imagesSlide";
+  images?: SanityImage[];
+}
+
 export type GallerySlide = SanityImage | VideoSlide;
 
 export interface ColumnsGroup {
@@ -149,7 +189,11 @@ export const CATEGORY_LABELS: Record<string, string> = {
 
 const PROJECT_QUERY = `*[_type == "project" && slug.current == $slug][0]{
   _id, title, category,
-  gallery[]{ ..., _type == "image" => { ..., asset-> } },
+  gallery[]{
+    ...,
+    _type == "image" => { ..., asset-> },
+    _type == "imagesSlide" => { ..., images[]{ ..., asset-> } }
+  },
   body[]{ ..., _type == "image" => { ..., asset-> } },
   columnsContent[]{
     columns,
@@ -158,6 +202,25 @@ const PROJECT_QUERY = `*[_type == "project" && slug.current == $slug][0]{
     column3[]{ ..., _type == "image" => { ..., asset-> } }
   }
 }`;
+
+/** As fetched: the gallery may still hold multi-image groups. */
+type RawProjectContent = Omit<ProjectContent, "gallery"> & {
+  gallery?: (GallerySlide | ImagesSlide)[];
+};
+
+/**
+ * One slide per image. The slider has no notion of a group — its dots, drag
+ * and per-slide video state are all indexed off a flat array — so a group is
+ * opened out here rather than teaching every consumer about it.
+ */
+function flattenGallery(doc: RawProjectContent): ProjectContent {
+  return {
+    ...doc,
+    gallery: doc.gallery?.flatMap((slide) =>
+      slide._type === "imagesSlide" ? slide.images ?? [] : [slide]
+    ),
+  };
+}
 
 /** Loads the full structured content for one project by slug. */
 export function useProject(slug: string | null): ProjectContent | null {
@@ -171,8 +234,8 @@ export function useProject(slug: string | null): ProjectContent | null {
     let alive = true;
     setProject(null);
     sanity
-      .fetch<ProjectContent>(PROJECT_QUERY, { slug })
-      .then((doc) => alive && setProject(doc));
+      .fetch<RawProjectContent>(PROJECT_QUERY, { slug })
+      .then((doc) => alive && setProject(doc ? flattenGallery(doc) : doc));
     return () => {
       alive = false;
     };
