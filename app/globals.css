@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Tailwind's container scale stops at 7xl (80rem), so `max-w-8xl` would emit
+   nothing at all — a silent no-op class — without this. The project sheet uses
+   it to let content breathe on large displays. */
+@theme {
+  --container-8xl: 96rem;
+}
+
 @font-face {
   font-family: "New Spirit";
   src: url("/fonts/NewSpirit-Medium.otf") format("opentype");

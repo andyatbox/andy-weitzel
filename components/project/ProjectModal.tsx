@@ -122,19 +122,19 @@ export default function ProjectModal({
         style={{ minHeight: height }}
       >
         <header
-          className={`mx-auto max-w-5xl text-center ${HEADER_TOP} ${GUTTER}`}
+          className={`mx-auto max-w-8xl text-center ${HEADER_TOP} ${GUTTER}`}
         >
           <h1 className="text-3xl text-black md:text-5xl">{project.title}</h1>
         </header>
 
         {!content ? (
-          <p className={`mx-auto max-w-5xl py-10 text-black/40 ${GUTTER}`}>
-            Loading…
-          </p>
+          <div className={`py-10 ${GUTTER}`}>
+            <p className="mx-auto max-w-prose text-black/40">Loading…</p>
+          </div>
         ) : (
           <div className="pt-6">
             {content.gallery?.length ? (
-              <div className={`mx-auto mb-14 max-w-7xl ${GUTTER}`}>
+              <div className={`mx-auto mb-14 max-w-8xl ${GUTTER}`}>
                 <ProjectGallery
                   images={content.gallery}
                   height={height}
@@ -143,13 +143,24 @@ export default function ProjectModal({
               </div>
             ) : null}
 
+            {/* Running text keeps a reading measure rather than the sheet's
+                full width: `prose` is 65ch, so the line length follows the font
+                size instead of the display, and stays near the 70-80 characters
+                an eye can track without losing its place. The media above and
+                the columns below still span the full 8xl. */}
             {content.body && (
-              <div className={`mx-auto mt-4 max-w-5xl ${GUTTER}`}>
-                <ProjectPortableText value={content.body} />
+              // Two elements, two jobs: the outer keeps the gutter that clears
+              // the fixed nav columns, the inner carries the measure. Putting
+              // both on one element subtracts the gutter *from* the measure,
+              // which left the copy at barely half its intended line length.
+              <div className={`mx-auto mt-4 ${GUTTER}`}>
+                <div className="mx-auto max-w-prose">
+                  <ProjectPortableText value={content.body} />
+                </div>
               </div>
             )}
 
-            <div className={`mx-auto max-w-7xl ${GUTTER}`}>
+            <div className={`mx-auto max-w-8xl ${GUTTER}`}>
               <ProjectColumns groups={content.columnsContent} />
             </div>
           </div>
