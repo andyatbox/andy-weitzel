@@ -110,7 +110,7 @@ export default function ProjectModal({
           for the whole sheet on every scroll frame. */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 bg-white/70 backdrop-blur-md"
+        className="pointer-events-none fixed inset-0 bg-white/60 backdrop-blur-[25px]"
       />
 
       {/* Content rides above the scrim. Base copy steps up at >=768px (headings
@@ -129,12 +129,13 @@ export default function ProjectModal({
 
         {!content ? (
           <div className={`py-10 ${GUTTER}`}>
-            <p className="mx-auto max-w-prose text-black/40">Loading…</p>
+            <p className="mx-auto max-w-[75ch] text-black/40">Loading…</p>
           </div>
         ) : (
           <div className="pt-6">
+            {/* No width cap: the slider runs as wide as the gutter allows. */}
             {content.gallery?.length ? (
-              <div className={`mx-auto mb-14 max-w-8xl ${GUTTER}`}>
+              <div className={`mx-auto mb-14 ${GUTTER}`}>
                 <ProjectGallery
                   images={content.gallery}
                   height={height}
@@ -144,17 +145,16 @@ export default function ProjectModal({
             ) : null}
 
             {/* Running text keeps a reading measure rather than the sheet's
-                full width: `prose` is 65ch, so the line length follows the font
-                size instead of the display, and stays near the 70-80 characters
-                an eye can track without losing its place. The media above and
-                the columns below still span the full 8xl. */}
+                full width. Stated in ch so the line length follows the font
+                size instead of the display; the media above and the columns
+                below still take the width they're given. */}
             {content.body && (
               // Two elements, two jobs: the outer keeps the gutter that clears
               // the fixed nav columns, the inner carries the measure. Putting
               // both on one element subtracts the gutter *from* the measure,
               // which left the copy at barely half its intended line length.
               <div className={`mx-auto mt-4 ${GUTTER}`}>
-                <div className="mx-auto max-w-prose">
+                <div className="mx-auto max-w-[75ch]">
                   <ProjectPortableText value={content.body} />
                 </div>
               </div>
