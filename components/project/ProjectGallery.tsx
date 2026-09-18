@@ -17,6 +17,10 @@ const MAX_HEIGHT = 0.72;
 // Vertical room the expanded view keeps for the controls row under the media
 // (button height + its margin + the overlay's own padding).
 const CONTROLS_SPACE = 120;
+// Past this many slides the dot row grows as wide as the media it sits under,
+// and the dots stop being countable at a glance — so the strip shows its
+// position as a figure instead.
+const DOTS_MAX = 6;
 
 export default function ProjectGallery({
   images,
@@ -353,27 +357,40 @@ export default function ProjectGallery({
                 <polyline points="15 18 9 12 15 6" />
               </svg>
             </button>
-            <div className="flex gap-3">
-              {images.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => goTo(i)}
-                  className={`h-3 w-3 rounded-full border-2 transition-colors ${
-                    fullscreen ? "border-white" : "border-black"
-                  }`}
-                  style={{
-                    backgroundColor:
-                      i === current
-                        ? fullscreen
-                          ? "white"
-                          : "black"
-                        : "transparent",
-                  }}
-                  aria-label={`Go to slide ${i + 1}`}
-                />
-              ))}
-            </div>
+            {count > DOTS_MAX ? (
+              // Tabular figures and a width sized to the widest reading
+              // ("19 / 19"), so stepping through never resizes the pill or
+              // shifts the arrows either side of it.
+              <span
+                className="text-center font-label text-sm tabular-nums"
+                style={{ minWidth: `${String(count).length * 2 + 3}ch` }}
+                aria-live="polite"
+              >
+                {current + 1} / {count}
+              </span>
+            ) : (
+              <div className="flex gap-3">
+                {images.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => goTo(i)}
+                    className={`h-3 w-3 rounded-full border-2 transition-colors ${
+                      fullscreen ? "border-white" : "border-black"
+                    }`}
+                    style={{
+                      backgroundColor:
+                        i === current
+                          ? fullscreen
+                            ? "white"
+                            : "black"
+                          : "transparent",
+                    }}
+                    aria-label={`Go to slide ${i + 1}`}
+                  />
+                ))}
+              </div>
+            )}
             <button
               type="button"
               onClick={() => goTo(current + 1)}
