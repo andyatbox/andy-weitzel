@@ -13,10 +13,6 @@ import AgentBlob from "./AgentBlob";
  */
 interface Beat {
   parts: { text: string; link?: PortfolioId }[];
-  /** Portfolio button lit while this sentence is being typed. */
-  highlight?: PortfolioId;
-  /** Once this beat lands, the portfolio buttons appear. */
-  asks?: boolean;
   /** Rest after this beat before the next starts. Everything else runs on. */
   pause?: boolean;
 }
@@ -93,7 +89,10 @@ function weatherLine(
     case "partly cloudy":
       return `It's a partly cloudy ${season} ${tod}${at}. Pretty nice!`;
     case "overcast":
-      return `It's an overcast ${season} ${tod}. Hope the sun breaks through for you!`;
+      // No sun to hope for after dark — the line just stops there.
+      return `It's an overcast ${season} ${tod}.${
+        tod === "night" ? "" : " Hope the sun breaks through for you!"
+      }`;
     default: // mild, warm
       return `It's ${tempArticle(temp)} ${t}${season} ${tod}${at}. Nice!`;
   }
@@ -122,16 +121,14 @@ function buildBeats(
     beats.push({ ...line("Hello!"), pause: true });
   }
 
-  beats.push({ ...line("Which portfolio would you like to start with?"), asks: true });
+  beats.push(line("Which portfolio would you like to start with?"));
   beats.push({
-    highlight: "interactive",
     parts: [
       { text: "Interactive Experiences", link: "interactive" },
       { text: " include apps and digital experiences, activations, and rich media." },
     ],
   });
   beats.push({
-    highlight: "branding",
     parts: [
       { text: "Branding", link: "branding" },
       { text: " includes logo/identity and print works." },
@@ -158,9 +155,9 @@ const MIN_CAP_FIT = 0.6;
 const CAP_RATIO = 0.717;
 
 const PILL =
-  "inline-flex shrink-0 items-center rounded-full border border-black px-5 py-2.5 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white min-[992px]:text-base";
+  "inline-flex shrink-0 items-center rounded-full border border-white px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white hover:text-black min-[992px]:text-base";
 const PILL_QUIET =
-  "inline-flex shrink-0 items-center rounded-full border border-black/30 px-4 py-2 text-sm font-medium text-black/70 transition-colors hover:border-black hover:bg-black hover:text-white";
+  "inline-flex shrink-0 items-center rounded-full border border-white/30 px-4 py-2 text-sm font-medium text-white/70 transition-colors hover:border-white hover:bg-white hover:text-black";
 
 const SPLASH_LABELS: Record<PortfolioId, string> = {
   ...LABELS,
@@ -214,13 +211,11 @@ export default function AgentIntro({
     season: string | null;
   } | null>(null);
   const [typed, setTyped] = useState(0);
-  const [done, setDone] = useState(false);
   // Whether characters are appearing *right now*. Distinct from "not finished
   // yet": the counter sits still through the rest after the greeting, and the
   // blob has to settle in that gap for the start/stop to read.
   const [talking, setTalking] = useState(false);
   const talkingRef = useRef(false);
-  const skipRef = useRef(false);
 
   // Hold the whole sequence until the lookup answers (or fails), so the first
   // sentence isn't rewritten under the cursor mid-type. Capped, because a
@@ -267,7 +262,6 @@ export default function AgentIntro({
   const stops = useRef<number[]>([]);
   // The subset of `stops` that rest before typing on.
   const pauses = useRef<number[]>([]);
-  const highlights = useRef<(PortfolioId | undefined)[]>([]);
   if (beats) {
     const ends: number[] = [];
     const rests: number[] = [];
@@ -293,17 +287,12 @@ export default function AgentIntro({
     });
     stops.current = ends;
     pauses.current = rests;
-    highlights.current = beats.map((b) => b.highlight);
   }
 
   useEffect(() => {
     if (!script) return;
-    if (
-      skipRef.current ||
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    ) {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       setTyped(script.length);
-      setDone(true);
       return;
     }
     let raf = 0;
@@ -313,16 +302,6 @@ export default function AgentIntro({
     let lastN = 0;
     let lastAdvance = -Infinity; // not "advanced at navigation start"
     const tick = (now: number) => {
-      // Skip has to stop the loop, not just jump the counter: the next frame
-      // would otherwise write its own progress straight back over the top and
-      // the caption would carry on typing from where it was.
-      if (skipRef.current) {
-        setTyped(script.length);
-        setDone(true);
-        talkingRef.current = false;
-        setTalking(false);
-        return;
-      }
       if (!t0) t0 = now;
       const ms = now - t0 - held;
       let n = ms <= 0 ? 0 : Math.floor((ms / 1000) * CHARS_PER_SEC);
@@ -372,7 +351,6 @@ export default function AgentIntro({
       setTyped(n);
       if (n < script.length) raf = requestAnimationFrame(tick);
       else {
-        setDone(true);
         talkingRef.current = false;
         setTalking(false);
       }
@@ -381,12 +359,6 @@ export default function AgentIntro({
     return () => cancelAnimationFrame(raf);
   }, [script]);
 
-  const skip = () => {
-    skipRef.current = true;
-    setTyped(script.length);
-    setDone(true);
-  };
-
   const speaking = talking;
 
   // The segment the typing has reached — where the measuring marker goes.
@@ -394,13 +366,6 @@ export default function AgentIntro({
   for (let i = 0; i < segments.length; i++) {
     if (typed >= segments[i].start) caretSegment = i;
   }
-
-  /** Which sentence is being typed right now (-1 once finished). */
-  const activeBeat = done
-    ? -1
-    : stops.current.findIndex((end) => typed <= end);
-  const lit =
-    activeBeat >= 0 ? highlights.current[activeBeat] ?? null : null;
 
   // Centre-until-it-wraps. `text-align` can't be animated between values, so
   // the paragraph is always left-aligned and nudged right by half its slack
@@ -443,15 +408,12 @@ export default function AgentIntro({
     );
   }, [typed, script, width]);
 
-  // Not a fixed index any more: with no weather read there's no weather
-  // sentence, so the question moves up one.
-  const askBeat = beats ? beats.findIndex((b) => b.asks) : -1;
-
-  // Each row of buttons arrives with the sentence that offers it.
-  const past = (beat: number) =>
-    done || (stops.current.length > beat && typed >= stops.current[beat]);
-  const showPortfolios = askBeat >= 0 && past(askBeat);
-  const showSecondary = done;
+  // Both rows ease in with the first character rather than waiting for the
+  // sentence that offers them. The script is no longer skippable, so holding
+  // the links back would keep the way out of the landing hidden for its whole
+  // run — and a visitor who already knows where they're going shouldn't have
+  // to sit through an introduction to leave.
+  const showLinks = typed > 0;
 
   const rowIn = (shown: boolean): React.CSSProperties => ({
     opacity: shown ? 1 : 0,
@@ -501,7 +463,7 @@ export default function AgentIntro({
   return (
     <div
       data-splash
-      className="fixed inset-x-0 top-0 isolate z-[80] w-full overflow-hidden bg-white text-black"
+      className="fixed inset-x-0 top-0 isolate z-[80] w-full overflow-hidden bg-black text-white"
       style={{
         height,
         opacity: hiding ? 0 : 1,
@@ -520,7 +482,7 @@ export default function AgentIntro({
             style={{ fontSize: NAME_SIZE, ...arrive(0) }}
           />
           <LogoMark
-            className="shrink-0 text-black"
+            className="shrink-0 text-white"
             style={{
               height: `calc(${NAME_SIZE} * ${CAP_RATIO} * 1.6)`,
               width: "auto",
@@ -620,14 +582,14 @@ export default function AgentIntro({
         <footer className="shrink-0 px-6 pb-8 sm:px-10 sm:pb-10">
           <div
             className="flex flex-wrap items-center justify-center gap-3"
-            style={rowIn(showPortfolios)}
+            style={rowIn(showLinks)}
           >
             {PORTFOLIO_IDS.map((id) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => onChoose(id)}
-                className={`${PILL} ${lit === id ? "bg-black text-white" : ""}`}
+                className={PILL}
               >
                 {SPLASH_LABELS[id]}
               </button>
@@ -635,9 +597,9 @@ export default function AgentIntro({
           </div>
           <div
             className="mx-auto mt-5 flex max-w-xs items-center gap-4"
-            style={rowIn(showSecondary)}
+            style={rowIn(showLinks)}
           >
-            <span className="h-px flex-1 bg-black/15" />
+            <span className="h-px flex-1 bg-white/20" />
             <span className="flex flex-wrap items-center justify-center gap-2">
               <button type="button" onClick={() => onOpenInfo("resume")} className={PILL_QUIET}>
                 Resumé
@@ -646,22 +608,11 @@ export default function AgentIntro({
                 Contact
               </button>
             </span>
-            <span className="h-px flex-1 bg-black/15" />
+            <span className="h-px flex-1 bg-white/20" />
           </div>
         </footer>
       </div>
 
-      {/* Nobody should be held hostage by a typing animation on their second
-          visit. Disappears the moment it has nothing left to skip. */}
-      {!done && (
-        <button
-          type="button"
-          onClick={skip}
-          className="absolute bottom-5 right-5 z-10 rounded-full px-3 py-1.5 text-xs font-medium text-black/40 transition-colors hover:text-black"
-        >
-          Skip
-        </button>
-      )}
     </div>
   );
 }

@@ -81,9 +81,11 @@ void main(){
   col = mix(col, mint,  smoothstep(0.38, 0.92, f2));
   col = mix(col, blush, smoothstep(0.46, 0.98, f3));
 
-  // Lift only the very middle toward white so the densest run of type has a
-  // quiet bed; the colour still reaches most of the shape.
-  col = mix(col, vec3(1.0), smoothstep(0.55, 0.0, r) * 0.34);
+  // Sink only the very middle toward black so the densest run of type has a
+  // quiet bed; the colour still reaches most of the shape. Black, not white,
+  // because the landing inverted: white caption type sits on this now, and a
+  // lifted centre would be the one place it stopped being readable.
+  col = mix(col, vec3(0.0), smoothstep(0.55, 0.0, r) * 0.34);
 
   gl_FragColor = vec4(col, mask);
 }
