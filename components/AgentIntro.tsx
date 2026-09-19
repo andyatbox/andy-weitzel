@@ -477,9 +477,14 @@ export default function AgentIntro({
       <div className="flex h-full w-full flex-col overflow-y-auto overscroll-contain">
         {/* Wordmark left, monogram right, across the top. */}
         <header className="flex shrink-0 items-start justify-between px-6 pt-6 sm:px-10 sm:pt-8">
+          {/* Nudged down to sit on the logo's baseline. The wheel's box is
+              taller than its type (it has to clear descenders as it rolls), so
+              aligning the two boxes at the top leaves the wordmark reading
+              high. Stated in em so it tracks the fluid type size rather than
+              overshooting once the wordmark shrinks on a phone. */}
           <NameWheel
             className="font-medium tracking-tighter"
-            style={{ fontSize: NAME_SIZE, ...arrive(0) }}
+            style={{ fontSize: NAME_SIZE, marginTop: "0.15em", ...arrive(0) }}
           />
           <LogoMark
             className="shrink-0 text-white"
