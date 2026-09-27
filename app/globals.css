@@ -15,9 +15,9 @@
 @font-face {
   font-family: "New Spirit";
   src:
-    url("/fonts/NewSpirit-Specials.woff2") format("woff2"),
-    url("/fonts/NewSpirit-Specials.woff") format("woff"),
-    url("/fonts/NewSpirit-Specials.otf") format("opentype");
+    url("/fonts/New-Spirit-Condensed-Specials.woff2") format("woff2"),
+    url("/fonts/New-Spirit-Condensed-Specials.woff") format("woff"),
+    url("/fonts/New-Spirit-Condensed-Specials.otf") format("opentype");
   font-weight: 500;
   font-style: normal;
   font-display: swap;

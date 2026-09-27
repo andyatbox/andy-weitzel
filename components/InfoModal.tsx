@@ -110,8 +110,8 @@ function ResumeBody() {
       <p className="mt-8 text-lg leading-relaxed text-black md:text-xl">
         Creative Director, full-stack developer, and visual artist with over two
         decades of experience at the intersection of design, brand strategy, and
-        emerging technology. Co-founded Box Creative in 2007 and serves as its
-        hands-on Creative Director and CCO, shipping award-winning campaigns,
+        emerging technology. Andy co-founded Box Creative in 2007 and serves as
+        its hands-on Creative Director and CCO, shipping award-winning campaigns,
         digital experiences, and branding solutions for Fortune 50 businesses and
         startups alike. Work spans identity systems, integrated marketing,
         immersive AR/AI/3D experiences, and application development — a rare
@@ -122,7 +122,7 @@ function ResumeBody() {
         <Job
           title="Chief Creative Officer, Creative Director & Co-founder"
           org="Box Creative"
-          meta="2007 — Present • www.box.biz"
+          meta="2007 — Present • Manhattan & Queens • www.box.biz"
         >
           <p>
             Co-founded and built Box Creative, an award-winning design firm and
@@ -155,7 +155,7 @@ function ResumeBody() {
         <Job
           title="Senior Designer, Associate Art Director"
           org="Asphalt Jungle"
-          meta="2005 — 2007"
+          meta="2005 — 2007 • Manhattan"
         >
           <p>
             Provided design, web development, production, illustration, and
@@ -167,7 +167,7 @@ function ResumeBody() {
         <Job
           title="Senior Designer"
           org="Flight Design Communications"
-          meta="2004 — 2005"
+          meta="2004 — 2005 • Queens"
         >
           <p>
             Designed and produced print, packaging, and point-of-sale work for
@@ -215,7 +215,7 @@ function ResumeBody() {
       </Section>
 
       <Section title="Awards">
-        <Award label="Webby Awards, 2026" title="E.L.F. Cosmetics’ elfnalysis.com">
+        <Award label="Webby Awards, 2026" title="E.L.F. Cosmetics elfnalysis.com">
           <p>Award: Webby winner, People’s Voice winner, Nominee (AR)</p>
           <p>Agency: Movement Strategy</p>
           <p>
@@ -231,7 +231,7 @@ function ResumeBody() {
           </p>
         </Award>
         <Award label="Webby Awards, 2021" title="VMAs Burger King x Lil Yachty">
-          <p>Agencies: Coffee Labs, Paramount</p>
+          <p>Agency: Coffee Labs</p>
           <p>MTV VMAs AR Burger King x Lil Yachty webapp</p>
         </Award>
       </Section>
