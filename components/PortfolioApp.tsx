@@ -7,9 +7,11 @@ import { useViewport } from "@/lib/useViewport";
 import Menu from "./Menu";
 import Gallery from "./Gallery";
 import ProjectModal, { type ActiveProject } from "./project/ProjectModal";
+import ProjectStrip from "./project/ProjectStrip";
 import InfoModal, { type InfoKind } from "./InfoModal";
 import PsychedelicFX from "./PsychedelicFX";
 import AgentIntro from "./AgentIntro";
+import Cursor from "./Cursor";
 
 const DRAG_MULTIPLIER = 1.6;
 const FLING_MULTIPLIER = 14;
@@ -229,25 +231,35 @@ export default function PortfolioApp() {
     [closeProject, selectPortfolio]
   );
 
-  // Prev/next within the open project's portfolio (wraps at the ends). The
-  // modal fades out on the project change while the engine slides the
-  // full-screen teaser behind it to the new item, then the content fades in.
+  // Go to another project in the open project's portfolio. The modal fades
+  // out on the project change while the engine slides the full-screen teaser
+  // behind it to the new item, then the content fades in. Used by prev/next
+  // and by the teaser strip along the bottom.
+  const goToProject = useCallback(
+    (index: number) => {
+      const item = itemsRef.current[index];
+      const cur = activeProjectRef.current;
+      if (!item || !cur || item.slug === cur.slug) return;
+      setActiveProject({
+        slug: item.slug,
+        title: item.title,
+        category: CATEGORY[portfolioRef.current],
+      });
+      engine.scrollToIndex(index);
+    },
+    [engine]
+  );
+
+  // Prev/next (wraps at the ends).
   const navigateProject = useCallback(
     (dir: 1 | -1) => {
       const list = itemsRef.current;
       const cur = activeProjectRef.current;
       if (!cur || list.length < 2) return;
       const idx = list.findIndex((it) => it.slug === cur.slug);
-      const next = ((idx < 0 ? 0 : idx) + dir + list.length) % list.length;
-      const item = list[next];
-      setActiveProject({
-        slug: item.slug,
-        title: item.title,
-        category: CATEGORY[portfolioRef.current],
-      });
-      engine.scrollToIndex(next);
+      goToProject(((idx < 0 ? 0 : idx) + dir + list.length) % list.length);
     },
-    [engine]
+    [goToProject]
   );
 
   const openInfo = useCallback((kind: InfoKind) => {
@@ -285,8 +297,7 @@ export default function PortfolioApp() {
         e.deltaMode === 1 ? e.deltaY * 16
         : e.deltaMode === 2 ? e.deltaY * window.innerHeight
         : e.deltaY;
-      engine.target += delta;
-      engine.notifyInput();
+      engine.input(delta);
     };
 
     const onPointerDown = (e: PointerEvent) => {
@@ -318,6 +329,7 @@ export default function PortfolioApp() {
         axis = isTouch && Math.abs(totalX) > Math.abs(totalY) ? "x" : "y";
         engine.setInputHeld(true);
         document.body.style.cursor = "grabbing";
+        document.body.classList.add("cursor-drag");
       }
       // Drag up (y) or swipe left (x) advances; the strip follows the finger.
       const d = axis === "x" ? lastX - e.clientX : lastY - e.clientY;
@@ -335,9 +347,10 @@ export default function PortfolioApp() {
       active = false;
       if (dragging) {
         dragging = false;
-        engine.target += flingVelocity * FLING_MULTIPLIER;
-        engine.setInputHeld(false);
+        // Land in one motion, carrying the fling's momentum.
+        engine.release(flingVelocity * FLING_MULTIPLIER);
         document.body.style.cursor = "";
+        document.body.classList.remove("cursor-drag");
       } else if (allowOpen && downOnGallery && !openedRef.current) {
         openProject();
       }
@@ -357,6 +370,7 @@ export default function PortfolioApp() {
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerCancel);
       document.body.style.cursor = "";
+      document.body.classList.remove("cursor-drag");
     };
   }, [engine, openProject, isTouch]);
 
@@ -384,8 +398,11 @@ export default function PortfolioApp() {
     let down = false;
     let overGallery = false;
 
+    // The pill shows beside the custom cursor, which swells into its teaser
+    // state while it does.
     const hide = () => {
       tip.style.opacity = "0";
+      document.body.classList.remove("cursor-teaser");
     };
     // Everything that suppresses the tooltip, checked fresh each frame.
     const suppressed = () =>
@@ -411,6 +428,7 @@ export default function PortfolioApp() {
       const label = `View ${item.title} Project`;
       if (tip.textContent !== label) tip.textContent = label;
       tip.style.opacity = "1";
+      document.body.classList.add("cursor-teaser");
     };
 
     repaintTip.current = paint;
@@ -419,10 +437,7 @@ export default function PortfolioApp() {
       if (e.pointerType === "touch") return;
       overGallery =
         !!galleryRef.current && galleryRef.current.contains(e.target as Node);
-      // Vertically centered on the cursor (the -50% resolves against the
-      // pill's own height); horizontally, the -100% (against its own width)
-      // pulls it fully to the left, with a 16px gap before the cursor.
-      tip.style.transform = `translate(calc(${e.clientX}px - 100% - 16px), calc(${e.clientY}px - 50%))`;
+      // Position is the cursor's job (it rides beside the trailing ring).
       paint();
     };
     const onDown = () => {
@@ -444,6 +459,7 @@ export default function PortfolioApp() {
     paint();
     return () => {
       repaintTip.current = null;
+      document.body.classList.remove("cursor-teaser");
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointerup", onUp);
@@ -640,17 +656,9 @@ export default function PortfolioApp() {
         </div>
       </div>
 
-      {/* Cursor-following teaser tooltip (non-touch only, z-30 — under the
-          project overlay). Positioned/filled imperatively from the pointer
-          effect above. */}
-      {!isTouch && (
-        <div
-          ref={tooltipRef}
-          aria-hidden
-          className="pointer-events-none fixed left-0 top-0 z-30 whitespace-nowrap rounded-full bg-white/80 px-3.5 py-1.5 text-sm font-medium text-black shadow-lg backdrop-blur-md"
-          style={{ opacity: 0, transition: "opacity 0.12s ease", willChange: "transform" }}
-        />
-      )}
+      {/* Custom cursor, with the gallery's "View … Project" pill riding beside
+          it (non-touch only). */}
+      {!isTouch && <Cursor tooltipRef={tooltipRef} />}
 
       {/* Scrollable project content overlay — below the close button (z-50). */}
       <ProjectModal
@@ -712,8 +720,12 @@ export default function PortfolioApp() {
 
       {/* Prev/next project navigation — top-right. Previous points up, Next
           points down; each expands circle-to-pill on hover to reveal its
-          label after the chevron. Unlike the other nav buttons these don't
-          invert color on hover — only the shape animates. */}
+          label after the chevron, opening exactly as wide as the label — the
+          label sits in a grid column that animates from 0fr to 1fr, which
+          (unlike a width transition) tracks the text's real width, so the
+          condensed face doesn't leave a tail of empty pill. Unlike the other
+          nav buttons these don't invert color on hover — only the shape
+          animates. */}
       <div
         className="fixed right-5 top-5 z-50 flex flex-col items-end gap-2 transition-opacity duration-300"
         style={{
@@ -721,53 +733,53 @@ export default function PortfolioApp() {
           pointerEvents: opened && items.length > 1 ? "auto" : "none",
         }}
       >
-        <button
-          type="button"
-          onClick={() => navigateProject(-1)}
-          aria-label="Previous project"
-          className="group flex h-11 w-11 items-center overflow-hidden whitespace-nowrap rounded-full bg-white pl-[13px] text-black shadow-lg ring-2 ring-inset ring-black transition-[width] duration-200 ease-out hover:w-[185px]"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#000000"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="shrink-0"
+        {([
+          { dir: -1, label: "Previous Project", points: "18 15 12 9 6 15" },
+          { dir: 1, label: "Next Project", points: "6 9 12 15 18 9" },
+        ] as const).map(({ dir, label, points }) => (
+          <button
+            key={dir}
+            type="button"
+            onClick={() => navigateProject(dir)}
+            aria-label={label}
+            className="group flex h-11 items-center overflow-hidden whitespace-nowrap rounded-full bg-white px-[13px] text-black shadow-lg ring-2 ring-inset ring-black"
           >
-            <polyline points="18 15 12 9 6 15" />
-          </svg>
-          <span className="ml-2 text-sm font-medium opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-            Previous Project
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => navigateProject(1)}
-          aria-label="Next project"
-          className="group flex h-11 w-11 items-center overflow-hidden whitespace-nowrap rounded-full bg-white pl-[13px] text-black shadow-lg ring-2 ring-inset ring-black transition-[width] duration-300 ease-out hover:w-[185px]"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#000000"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="shrink-0"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-          <span className="ml-2 text-sm font-medium opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            Next Project
-          </span>
-        </button>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#000000"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+            >
+              <polyline points={points} />
+            </svg>
+            <span className="grid grid-cols-[0fr] transition-[grid-template-columns] duration-300 ease-out group-hover:grid-cols-[1fr] group-focus-visible:grid-cols-[1fr]">
+              <span className="overflow-hidden">
+                <span className="block pl-2 text-[15px] font-medium opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+                  {label}
+                </span>
+              </span>
+            </span>
+          </button>
+        ))}
       </div>
+
+      {/* Every project in the portfolio as a looping strip of teasers along
+          the bottom, the open one centred (z-50, beside the nav). */}
+      <ProjectStrip
+        items={items}
+        activeIndex={activeProject ? items.findIndex((it) => it.slug === activeProject.slug) : -1}
+        visible={opened && items.length > 1}
+        isLandscape={isLandscape}
+        width={width}
+        height={height}
+        isTouch={isTouch}
+        onSelect={goToProject}
+      />
 
       {/* Opening gate (z-80): pick a portfolio, then the intro reveal runs
           with that one already loaded. It also repeats the Resumé/Contact

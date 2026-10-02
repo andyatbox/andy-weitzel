@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { LABELS, PORTFOLIO_IDS, type PortfolioId } from "@/lib/portfolios";
 import LogoMark from "./LogoMark";
 import NameWheel from "./NameWheel";
-import AgentBlob from "./AgentBlob";
+import IntroCube from "./IntroCube";
 
 /**
  * A sentence, as pieces rather than a string, so a phrase inside it can be
@@ -121,19 +121,8 @@ function buildBeats(
     beats.push({ ...line("Hello!"), pause: true });
   }
 
+  // The question closes the script; the portfolio buttons below answer it.
   beats.push(line("Which portfolio would you like to start with?"));
-  beats.push({
-    parts: [
-      { text: "Interactive Experiences", link: "interactive" },
-      { text: " include apps and digital experiences, activations, and rich media." },
-    ],
-  });
-  beats.push({
-    parts: [
-      { text: "Branding", link: "branding" },
-      { text: " includes logo/identity and print works." },
-    ],
-  });
   return beats;
 }
 
@@ -141,10 +130,10 @@ function buildBeats(
 // interval, which can't be trusted below ~16ms.
 const CHARS_PER_SEC = 60;
 const BEAT_PAUSE = 1150; // ms of silence after the greeting (see Beat.pause)
-// How long after the last character the blob still counts as talking.
+// How long after the last character the agent still counts as talking.
 const TALK_GRACE_MS = 110;
-// How far *before* a sentence ends the blob starts settling. The idle ramp
-// takes about this long, so beginning it here means the blob arrives at rest
+// How far *before* a sentence ends the agent starts settling. The idle ramp
+// takes about this long, so beginning it here means the scene arrives at rest
 // as the last character lands, instead of carrying on afterwards.
 const LEAD_OUT_MS = 380;
 
@@ -155,7 +144,7 @@ const MIN_CAP_FIT = 0.6;
 const CAP_RATIO = 0.717;
 
 const PILL =
-  "inline-flex shrink-0 items-center rounded-full border border-white px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white hover:text-black min-[992px]:text-base";
+  "inline-flex shrink-0 items-center rounded-full border-2 border-white px-7 py-3 text-xl font-medium text-white transition-colors hover:bg-white hover:text-black min-[992px]:px-10 min-[992px]:py-4 min-[992px]:text-[28px]";
 const PILL_QUIET =
   "inline-flex shrink-0 items-center rounded-full border border-white/30 px-4 py-2 text-sm font-medium text-white/70 transition-colors hover:border-white hover:bg-white hover:text-black";
 
@@ -183,7 +172,7 @@ export default function AgentIntro({
   width: number;
   height: number;
 }) {
-  // The lockup and the blob arrive before the agent speaks. Held until the
+  // The lockup arrives before the agent speaks. Held until the
   // webfonts settle, so the wordmark doesn't reflow from the fallback face
   // mid-fade; capped so a stalled font can't strand the page.
   const [revealed, setRevealed] = useState(false);
@@ -213,7 +202,7 @@ export default function AgentIntro({
   const [typed, setTyped] = useState(0);
   // Whether characters are appearing *right now*. Distinct from "not finished
   // yet": the counter sits still through the rest after the greeting, and the
-  // blob has to settle in that gap for the start/stop to read.
+  // scene has to settle in that gap for the start/stop to read.
   const [talking, setTalking] = useState(false);
   const talkingRef = useRef(false);
 
@@ -331,7 +320,7 @@ export default function AgentIntro({
       lastN = n;
       // Start settling before the typing stops. Only a rest or the finish
       // counts: sentences otherwise run straight on, and settling at every
-      // full stop would dip the blob while characters were still appearing.
+      // full stop would settle the scene while characters were still appearing.
       // The lead is capped to a share of the run's own length, or a short one
       // ("Hello!") would be entirely inside the lead and never animate at all.
       const si = pauses.current.findIndex((e) => e >= n);
@@ -374,16 +363,6 @@ export default function AgentIntro({
   // without a transition while still centred, so growing text stays centred
   // instead of chasing its own easing.
   const mainRef = useRef<HTMLElement>(null);
-  const [mainH, setMainH] = useState(0);
-  useEffect(() => {
-    const el = mainRef.current;
-    if (!el) return;
-    const measure = () => setMainH(el.clientHeight);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
   const capRef = useRef<HTMLParagraphElement>(null);
   const typedRef = useRef<HTMLSpanElement>(null);
   // Zero-width marker sitting immediately after the last typed character. The
@@ -392,7 +371,13 @@ export default function AgentIntro({
   const caretRef = useRef<HTMLSpanElement>(null);
   const [centreShift, setCentreShift] = useState(0);
   const [multiLine, setMultiLine] = useState(false);
-  useEffect(() => {
+  // A layout effect, not a passive one: it measures the DOM and feeds the
+  // result straight back into layout, on every character typed. As a passive
+  // effect that was a setState-after-render chain once per frame for the
+  // whole script, which React eventually flags as a runaway loop ("Maximum
+  // update depth exceeded"); it could also paint a frame with the previous
+  // centring before correcting it. Layout effects resolve before paint.
+  useLayoutEffect(() => {
     const box = capRef.current;
     const run = typedRef.current;
     const mark = caretRef.current;
@@ -424,9 +409,11 @@ export default function AgentIntro({
 
   const isPhone = width < 640;
   // Width-driven ideal size. Height is handled separately, by measurement.
+  // Sized up once the script lost its two portfolio sentences: there's room
+  // now, and the shrink-to-fit below still guards short windows.
   const capBase = isPhone
-    ? "clamp(21px, 5.6vw, 30px)"
-    : "clamp(26px, 2.9vw, 46px)";
+    ? "clamp(25px, 6.8vw, 36px)"
+    : "clamp(32px, 3.8vw, 62px)";
 
   // Shrink-to-fit against the region the copy actually has. A width-only size
   // is fine until the window is short, where the finished paragraph runs into
@@ -457,8 +444,6 @@ export default function AgentIntro({
   }, [script, width, height, capFit]);
 
   const capSize = `calc(${capBase} * ${capFit.toFixed(3)})`;
-  // Keep the blob inside the same region, so it can't bleed past the lockup.
-  const blobSize = Math.round(Math.min(width * 0.98, mainH * 1.02, 1040));
 
   return (
     <div
@@ -471,10 +456,23 @@ export default function AgentIntro({
         transition: "opacity 0.4s ease",
       }}
     >
+      {/* The reel cube owns the whole viewport behind the copy — it isn't
+          boxed into the caption row the way the blob it replaced was. */}
+      <IntroCube speaking={speaking} visible={!hiding} />
+
+      {/* A quiet bed for the copy. The reel is bright and busy — white type
+          straight over it loses whole phrases whenever a pale frame comes up.
+          A scrim between the two keeps the cube's own colour intact rather
+          than dimming the scene itself. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-[5] bg-black/45"
+      />
+
       {/* Short viewports scroll rather than clip; auto margins on the middle
           row keep it centred without pushing the top out of reach once the
           content overflows (justify-center would). */}
-      <div className="flex h-full w-full flex-col overflow-y-auto overscroll-contain">
+      <div className="relative z-10 flex h-full w-full flex-col overflow-y-auto overscroll-contain">
         {/* Wordmark left, monogram right, across the top. */}
         <header className="flex shrink-0 items-start justify-between px-6 pt-6 sm:px-10 sm:pt-8">
           {/* Nudged down to sit on the logo's baseline. The wheel's box is
@@ -496,34 +494,17 @@ export default function AgentIntro({
           />
         </header>
 
-        {/* Blob behind, captions on top. */}
+        {/* Captions ride over the cube. */}
         <main
           ref={mainRef}
           className="relative flex min-h-0 flex-1 items-center justify-center px-6 py-10 sm:px-10"
         >
-          <AgentBlob
-            speaking={speaking}
-            // Centring lives in the transform, not utility classes, so the
-            // arrival scale can compose with it.
-            className="pointer-events-none absolute left-1/2 top-1/2"
-            // Square, so the shader's circle isn't cropped into an ellipse by
-            // its own box. Copy overhangs the sides slightly, which reads as
-            // deliberate; the alternative is a blob wider than the screen.
-            style={{
-              width: blobSize,
-              height: blobSize,
-              opacity: revealed ? 1 : 0,
-              transform: `translate(-50%, -50%) scale(${revealed ? 1 : 0.82})`,
-              transition:
-                "opacity 0.9s ease 260ms, transform 0.9s cubic-bezier(0.22, 1, 0.36, 1) 260ms",
-            }}
-          />
           {/* Centred while the copy is still one line, then slid to its
               left-aligned home once it wraps. Done as a translate rather than
               text-align, which can't be animated — see `centreShift`. */}
           <p
             ref={capRef}
-            className="relative mx-auto max-w-3xl text-left font-medium leading-snug"
+            className="relative mx-auto max-w-3xl text-left font-medium leading-[1.12]"
             style={{
               fontSize: capSize,
               transform: `translateX(${centreShift}px)`,

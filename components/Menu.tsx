@@ -169,28 +169,11 @@ export default function Menu({
     return () => ro.disconnect();
   }, [isLandscape, viewport.width, viewport.height]);
 
-  // Landscape also docks the Resumé/Contact links in a bar across the bottom;
-  // measure it the same way so the list region sits between the two.
-  const linksBoxRef = useRef<HTMLDivElement>(null);
-  const [linksH, setLinksH] = useState(0);
-  useEffect(() => {
-    if (!isLandscape) {
-      setLinksH(0);
-      return;
-    }
-    const el = linksBoxRef.current;
-    if (!el) return;
-    const measure = () => setLinksH(el.offsetHeight);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [isLandscape, viewport.width, viewport.height]);
-
-  // The region is the space between the brand box (top) and the links bar
-  // (bottom); the list centers in it and dissolves symmetrically.
+  // The region is the space below the brand box, down to the bottom of the
+  // rail (Resumé/Contact sit in the brand block now, not in a bar at the
+  // bottom); the list centers in it and dissolves symmetrically.
   const regionTop = isLandscape ? brandH : 0;
-  const regionBottom = isLandscape ? linksH : 0;
+  const regionBottom = 0;
   const regionHeight = Math.max(
     baseRow * 2,
     viewport.height - regionTop - regionBottom
@@ -362,8 +345,8 @@ export default function Menu({
     ? isMedium ? "clamp(100px, 9vw, 160px)" : "clamp(72px, 7vw, 120px)"
     : isMedium ? "clamp(96px, 14vw, 140px)" : "clamp(72px, 15vw, 116px)";
   const nameSize = isLandscape
-    ? isXL ? "clamp(24px, 2vw, 32px)" : isLarge ? "clamp(18px, 1.8vw, 28px)" : isMedium ? "clamp(15px, 1.6vw, 20px)" : "clamp(13px, 1.35vw, 18px)"
-    : isMedium ? "clamp(16px, 3vw, 22px)" : "clamp(15px, 3vw, 19px)";
+    ? isXL ? "clamp(30px, 2.6vw, 44px)" : isLarge ? "clamp(24px, 2.4vw, 34px)" : isMedium ? "clamp(20px, 2.1vw, 26px)" : "clamp(17px, 1.8vw, 22px)"
+    : isMedium ? "clamp(21px, 3.9vw, 29px)" : "clamp(19px, 4.2vw, 25px)";
   const workSize = isXL ? "15px" : "clamp(11px, 1.05vw, 13px)";
 
   const introAnim = (delay: number): React.CSSProperties => ({
@@ -372,8 +355,8 @@ export default function Menu({
     transition: `opacity 0.38s ease ${delay}ms, transform 0.38s ease ${delay}ms`,
   });
 
-  // Resumé / Contact links. Portrait shows them inside the brand (below a
-  // divider); landscape docks them in a bar across the bottom of the rail.
+  // Resumé / Contact links, inside the brand block under the Work pills (below
+  // a divider) in both orientations.
   const links = (
     <div className="flex flex-wrap items-center gap-2">
       <Pill onClick={() => onOpenInfo("resume")} onHoverChange={onInfoHover}>
@@ -420,14 +403,8 @@ export default function Menu({
             </Pill>
           ))}
         </div>
-        {/* Portrait: links sit here under a grey divider. Landscape moves them
-            to the bottom bar (rendered separately). */}
-        {!isLandscape && (
-          <>
-            <div className="mt-1 h-px w-full bg-black/15" />
-            {links}
-          </>
-        )}
+        <div className="mt-1 h-px w-full bg-black/15" />
+        {links}
       </div>
     </div>
   );
@@ -464,7 +441,7 @@ export default function Menu({
         <span
           ref={(el) => void (titleRefs.current[node.key] = el)}
           data-on={Math.abs(p) < 0.5}
-          className="min-w-0 break-words px-2 transition-colors duration-150 data-[on=true]:bg-black data-[on=true]:text-white"
+          className="min-w-0 break-words rounded-[5px] px-2 transition-colors duration-150 data-[on=true]:bg-black data-[on=true]:text-white"
         >
           {items[node.item].title}
         </span>
@@ -488,7 +465,7 @@ export default function Menu({
   // the unmasked rows beneath it showed through at full strength. A mask
   // travels with the list, so no sibling's animation can undo it. Stops
   // mirror the old white → white/80 → clear ramp (mask alpha 0 → 0.2 → 1),
-  // and landscape also clips to nothing under the brand box and links bar.
+  // and landscape also clips to nothing under the brand box.
   const T = regionTop;
   const B = regionBottom;
   const listMask = isLandscape
@@ -524,8 +501,8 @@ export default function Menu({
     <aside data-menu className="h-full w-full bg-white text-black">
       {isLandscape ? (
         // Single column: list fills the whole panel. The brand floats over the
-        // top on an opaque white box (masking the top), and a bottom gradient
-        // dissolves the tail.
+        // top on an opaque white box (masking the top), and the list runs to
+        // the bottom edge, dissolving there.
         <div className="relative h-full w-full overflow-hidden">
           <div className="absolute inset-0" style={listLayer}>
             {listStrip}
@@ -533,16 +510,6 @@ export default function Menu({
           {stepper}
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
             <div ref={brandBoxRef} className="pointer-events-auto bg-white p-5 min-[992px]:p-7">{brand}</div>
-          </div>
-          {/* Resumé / Contact docked across the bottom of the rail, left-aligned. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
-            <div
-              ref={linksBoxRef}
-              className="pointer-events-auto bg-white px-5 pb-5 pt-3 min-[992px]:px-7 min-[992px]:pb-7"
-              style={introAnim(300)}
-            >
-              {links}
-            </div>
           </div>
         </div>
       ) : (

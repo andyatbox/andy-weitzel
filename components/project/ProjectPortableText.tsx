@@ -10,7 +10,7 @@ import { urlFor } from "@/lib/sanity";
 const makeComponents = (compact: boolean): PortableTextComponents => ({
   types: {
     image: ({ value }) => (
-      <figure className={compact ? "" : "my-10"}>
+      <figure data-reveal className={compact ? "" : "my-10"}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={urlFor(value).width(1200).auto("format").url()}
@@ -25,7 +25,7 @@ const makeComponents = (compact: boolean): PortableTextComponents => ({
       </figure>
     ),
     code: ({ value }) => (
-      <pre className="my-8 overflow-x-auto bg-neutral-950 p-6 font-mono text-sm text-neutral-100">
+      <pre data-reveal className="my-8 overflow-x-auto bg-neutral-950 p-6 font-mono text-sm text-neutral-100">
         {value.language && (
           <div className="mb-4 text-neutral-500">{value.language}</div>
         )}
@@ -34,13 +34,13 @@ const makeComponents = (compact: boolean): PortableTextComponents => ({
     ),
   },
   block: {
-    h1: ({ children }) => <h1 className="mt-16 mb-6 text-4xl">{children}</h1>,
-    h2: ({ children }) => <h2 className="mt-14 mb-5 text-xl md:text-3xl">{children}</h2>,
-    h3: ({ children }) => <h3 className="mt-10 mb-4 md:text-2xl">{children}</h3>,
-    h4: ({ children }) => <h4 className="mt-8 mb-3 text-base">{children}</h4>,
-    normal: ({ children }) => <p className="mb-6 leading-relaxed">{children}</p>,
+    h1: ({ children }) => <h1 data-reveal className="mt-16 mb-6 text-4xl md:text-5xl">{children}</h1>,
+    h2: ({ children }) => <h2 data-reveal className="mt-14 mb-5 text-2xl md:text-4xl">{children}</h2>,
+    h3: ({ children }) => <h3 data-reveal className="mt-10 mb-4 text-xl md:text-3xl">{children}</h3>,
+    h4: ({ children }) => <h4 data-reveal className="mt-8 mb-3 text-lg md:text-2xl">{children}</h4>,
+    normal: ({ children }) => <p data-reveal className="mb-6 leading-relaxed">{children}</p>,
     blockquote: ({ children }) => (
-      <blockquote className="my-8 border-l-2 border-black/15 pl-6 text-black/55 italic">
+      <blockquote data-reveal className="my-8 border-l-2 border-black/15 pl-6 text-black/55 italic">
         {children}
       </blockquote>
     ),
@@ -67,8 +67,8 @@ const makeComponents = (compact: boolean): PortableTextComponents => ({
     },
   },
   list: {
-    bullet: ({ children }) => <ul className="mb-6 list-disc space-y-2 pl-6">{children}</ul>,
-    number: ({ children }) => <ol className="mb-6 list-decimal space-y-2 pl-6">{children}</ol>,
+    bullet: ({ children }) => <ul data-reveal className="mb-6 list-disc space-y-2 pl-6">{children}</ul>,
+    number: ({ children }) => <ol data-reveal className="mb-6 list-decimal space-y-2 pl-6">{children}</ol>,
   },
   listItem: {
     bullet: ({ children }) => <li className="leading-relaxed">{children}</li>,

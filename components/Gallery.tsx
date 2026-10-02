@@ -8,6 +8,15 @@ import type { ScrollEngine } from "@/lib/ScrollEngine";
 import { applyCover, useItemTextures } from "@/lib/textures";
 import { driveTeaserPlayback, useTeaserVideo } from "@/lib/teaserVideo";
 import { useTeaserSlides } from "@/lib/teaserSlides";
+import {
+  MAX_RGB_SHIFT_RATIO,
+  MOUSE_CHROMA_RATIO,
+  MOUSE_EASE,
+  MOUSE_RADIUS_RATIO,
+  MOUSE_TWIST,
+  RGB_SHIFT_FACTOR,
+  detectTouch,
+} from "@/lib/pointerFx";
 
 const PLANE_SEGMENTS = 32;
 const BEND_FACTOR = 2.5;
@@ -17,8 +26,6 @@ const MAX_BEND_RATIO = 0.3;
 // direction). The red and blue channel layers slide apart along the motion
 // axis by this much; green stays centered. Additive blending sums the three
 // back to the exact source image at rest — no shader, no darkening.
-const RGB_SHIFT_FACTOR = 1.5;
-const MAX_RGB_SHIFT_RATIO = 0.025;
 
 // --- Pointer (mouse) distortion ---------------------------------------------
 // A localized swirl + chromatic split centered on the cursor: full strength
@@ -27,15 +34,7 @@ const MAX_RGB_SHIFT_RATIO = 0.025;
 // the twist, and the additive R/G/B channel layers (offset per-vertex) for the
 // split — so there is no ShaderMaterial and images never darken. Completely
 // disabled on touch-capable devices (see `detectTouch`).
-const MOUSE_RADIUS_RATIO = 0.3; // influence radius vs min(canvas w, h)
-const MOUSE_TWIST = 0.85; // peak swirl angle in radians (directly under cursor)
-const MOUSE_CHROMA_RATIO = 0.018; // peak channel separation vs min(canvas w, h)
-const MOUSE_EASE = 0.22; // strength lerp toward target each frame
-
-function detectTouch() {
-  if (typeof window === "undefined") return false;
-  return (navigator.maxTouchPoints || 0) > 0 || "ontouchstart" in window;
-}
+// The numbers live in lib/pointerFx.ts, shared with the landing blob.
 
 // "Pull back" amount. The camera is orthographic, so distance on Z has no
 // visual effect — zoom is the equivalent knob. 1 = current plane exactly

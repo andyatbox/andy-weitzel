@@ -91,3 +91,155 @@ body {
 ::selection {
   background: transparent;
 }
+
+/* ───────── Custom cursor (fine pointers only; see components/Cursor.tsx) ───────── */
+
+/* The native cursor is hidden everywhere the custom one is running, except over
+   text fields, where the caret beats any ring. */
+html.has-cursor,
+html.has-cursor * {
+  cursor: none !important;
+}
+html.has-cursor input,
+html.has-cursor textarea,
+html.has-cursor [contenteditable="true"] {
+  cursor: text !important;
+}
+
+.x-cursor {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 200;
+  pointer-events: none;
+  /* Inverts whatever is underneath: black over the white menu, white over the
+     black landing, a negative lens over images. */
+  mix-blend-mode: difference;
+  opacity: 0;
+  transition: opacity 0.25s;
+  will-change: transform;
+}
+.x-cursor.is-visible {
+  opacity: 1;
+}
+
+.x-cursor__ring {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  margin: -16px 0 0 -16px;
+  border-radius: 999px;
+  border: 1.5px solid #fff;
+  background: transparent;
+  transition:
+    width 0.5s var(--ease-out-expo),
+    height 0.5s var(--ease-out-expo),
+    margin 0.5s var(--ease-out-expo),
+    background-color 0.3s,
+    border-width 0.3s,
+    transform 0.3s var(--ease-out-expo);
+}
+
+.x-cursor__dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 999px;
+  background: #fff;
+  transition: transform 0.35s var(--ease-out-expo);
+}
+
+/* Pressed: the ring tightens. */
+.x-cursor.is-down .x-cursor__ring {
+  transform: scale(0.82);
+}
+
+/* Over anything clickable: a filled disc that inverts the link beneath it. */
+.x-cursor[data-state="link"] .x-cursor__ring {
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  background: #fff;
+}
+.x-cursor[data-state="link"] .x-cursor__dot {
+  transform: scale(0);
+}
+
+/* Over something that drags (the project slider, the teaser strip mid-drag,
+   the gallery mid-drag): a wider dashed ring. */
+.x-cursor[data-state="drag"] .x-cursor__ring,
+body.cursor-drag .x-cursor .x-cursor__ring {
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border-style: dashed;
+  background: transparent;
+}
+
+/* Over a gallery teaser, while its name shows: a big negative lens. */
+body.cursor-teaser .x-cursor .x-cursor__ring {
+  width: 104px;
+  height: 104px;
+  margin: -52px 0 0 -52px;
+  background: #fff;
+}
+body.cursor-teaser .x-cursor .x-cursor__dot {
+  transform: scale(0);
+}
+
+/* Over text fields the native caret takes over. */
+.x-cursor[data-state="native"] {
+  opacity: 0 !important;
+}
+
+/* ───────── Reveal on scroll (open projects; see lib/useReveal.ts) ───────── */
+
+/* The hidden starting state only applies under .reveal-on, which the hook adds
+   once it's running, so content is never stuck invisible without it. No
+   will-change here on purpose: it would make each block a containing block for
+   `position: fixed`, and the project slider's full-screen view is a fixed
+   element inside one of them. `transform: none` once in, for the same reason. */
+.reveal-on [data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 40px, 0);
+  transition:
+    opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 1.1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal-on [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal-on [data-reveal] {
+    transform: none;
+    transition: opacity 0.3s ease;
+  }
+}
+
+/* ───────── Logo stripe slide (components/LogoMark.tsx) ───────── */
+
+/* Rests on the monogram for 6s, then slides the stripes left by exactly five
+   (312.9721 user units) in 1.5s at constant speed — no easing — and loops.
+   The last frame matches the first, so the restart is invisible. Cycle is
+   7.5s; 6s of it (80%) is the rest. Lengths on an SVG element's transform
+   are in the SVG's own units, so the px here are viewBox units. */
+@keyframes logo-slide {
+  0%,
+  80% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-312.9721px);
+  }
+}
+.logo-slide {
+  animation: logo-slide 7.5s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-slide {
+    animation: none;
+  }
+}

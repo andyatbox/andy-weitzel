@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useProject } from "@/lib/portfolios";
+import { useReveal } from "@/lib/useReveal";
+import { useSmoothScroll } from "@/lib/useSmoothScroll";
 import ProjectPortableText from "./ProjectPortableText";
 import ProjectColumns from "./ProjectColumns";
 import ProjectGallery from "./ProjectGallery";
@@ -58,8 +60,15 @@ export default function ProjectModal({
   // so it can only cover the project nav (z-50) if the sheet itself outranks
   // it. Reset on close so a project opened later starts normally.
   const [galleryExpanded, setGalleryExpanded] = useState(false);
+  const galleryExpandedRef = useRef(false);
+  galleryExpandedRef.current = galleryExpanded;
   const [settled, setSettled] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Eased wheel scrolling for the sheet, standing down while the slider's
+  // full-screen view has the wheel. Keyed on `project` because the scroll
+  // container only exists once there is one (see the early return below).
+  const smooth = useSmoothScroll(scrollRef, !!project, galleryExpandedRef);
 
   // Reveal after the full-screen open transition; hide immediately on close.
   // On prev/next navigation (project change while open) this also fades the
@@ -67,7 +76,7 @@ export default function ProjectModal({
   useEffect(() => {
     if (opened && project) {
       setWaited(false);
-      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+      smooth.current.jumpTo(0);
       const t = setTimeout(() => setWaited(true), revealDelay);
       return () => clearTimeout(t);
     }
@@ -90,12 +99,23 @@ export default function ProjectModal({
   // and then held there.
   const revealed = waited && settled;
 
+  // Each block animates in as it scrolls into view; hiding the sheet (close,
+  // prev/next) rearms them for the next project.
+  useReveal(scrollRef, revealed, content);
+
+  // Take keyboard focus as the sheet appears, so Page Down / Space / arrows
+  // scroll it straight away rather than only after a click inside it.
+  useEffect(() => {
+    if (revealed) scrollRef.current?.focus({ preventScroll: true });
+  }, [revealed]);
+
   if (!project) return null;
 
   return (
     <div
       ref={scrollRef}
-      className={`fixed inset-0 overflow-y-auto overscroll-contain ${
+      tabIndex={-1}
+      className={`fixed inset-0 overflow-y-auto overscroll-contain outline-none ${
         galleryExpanded ? "z-[60]" : "z-40"
       }`}
       style={{
@@ -113,18 +133,21 @@ export default function ProjectModal({
         className="pointer-events-none fixed inset-0 bg-white/60 backdrop-blur-[25px]"
       />
 
-      {/* Content rides above the scrim. Base copy steps up at >=768px (headings
-          keep their own explicit sizes). Its floor is the measured window
-          height, not min-h-screen — that resolves to 100vh, which is the large
-          viewport and so overshoots whenever mobile chrome is showing. */}
+      {/* Content rides above the scrim. Base copy steps up at >=768px and again
+          at >=1280px — the condensed face sets small for its size — while
+          headings keep their own explicit sizes. Bottom padding clears the
+          prev/next teaser strip fixed along the bottom of the window. Its
+          floor is the measured window height, not min-h-screen — that
+          resolves to 100vh, which is the large viewport and so overshoots
+          whenever mobile chrome is showing. */}
       <div
-        className="relative pb-24 text-base text-black md:text-lg"
+        className="relative pb-56 text-lg text-black md:text-xl xl:text-[22px]"
         style={{ minHeight: height }}
       >
         <header
           className={`mx-auto max-w-8xl text-center ${HEADER_TOP} ${GUTTER}`}
         >
-          <h1 className="text-3xl text-black md:text-5xl">{project.title}</h1>
+          <h1 data-reveal className="text-3xl text-black md:text-5xl">{project.title}</h1>
         </header>
 
         {!content ? (
@@ -135,7 +158,7 @@ export default function ProjectModal({
           <div className="pt-6">
             {/* No width cap: the slider runs as wide as the gutter allows. */}
             {content.gallery?.length ? (
-              <div className={`mx-auto mb-14 ${GUTTER}`}>
+              <div data-reveal className={`mx-auto mb-14 ${GUTTER}`}>
                 <ProjectGallery
                   images={content.gallery}
                   height={height}

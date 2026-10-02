@@ -13,9 +13,24 @@ content is being finished — remove both before public launch.
   switching, the open/close project animation state, the slide-reveal intro,
   window-level scroll/drag input, the hover tooltip, and mounts everything
   else.
+- **`components/AgentIntro.tsx`** — the landing gate: a typed greeting
+  (weather via `app/api/greeting`) over **`IntroCube.tsx`**, a full-bleed R3F
+  shape textured with the sizzle reel (HLS via `lib/hlsVideo.ts`). The shape
+  cycles cube → sphere → gooey blob on two shader dials (`u_sphere`, `u_goo`)
+  and follows/swirls under the pointer on desktop. `SplashIntro.tsx` is the
+  older static gate, kept as a revert path.
+- **`components/Cursor.tsx`** — custom cursor for fine pointers (ring + dot,
+  `mix-blend-mode: difference`), states via classes: link / drag / teaser
+  (`body.cursor-teaser`, set by the gallery tooltip, whose "View … Project"
+  pill rides beside the ring). Native cursor hidden except over text fields.
+- **`components/LogoMark.tsx`** — the AW monogram: stripes sliding through a
+  parallelogram clip (`.logo-slide` in globals.css). The slide is exactly five
+  stripes (312.9721 units), so the last frame equals the first and the loop is
+  seamless — keep that if the art changes.
 - **`components/Gallery.tsx`** — the R3F `<Canvas>` scene: infinite-scrolling
   image planes with bend distortion, additive-blended RGB shift, and a cursor
-  swirl/chroma effect (desktop only). Teasers show the project thumbnail; the
+  swirl/chroma effect (desktop only; its numbers live in `lib/pointerFx.ts`,
+  shared with the intro shape). Teasers show the project thumbnail; the
   active one swaps in a looping video (`lib/teaserVideo.ts`) or cycles the
   project's first gallery stills (`lib/teaserSlides.ts`), but only while the
   gallery is fully at rest. There are no titles in the canvas — project names
@@ -32,14 +47,26 @@ content is being finished — remove both before public launch.
   static JSX content mirroring the source PDF/docx, not fetched from Sanity.
 - **`components/project/`** — the full-screen project detail overlay
   (`ProjectModal`), its image/video slider (`ProjectGallery`), portable-text
-  rendering, and multi-column layout.
+  rendering, multi-column layout, and `ProjectStrip` — the looping prev/next
+  teaser strip fixed along the bottom (scroll/drag, recentres after 3s idle).
+  The sheet scrolls with eased wheel input (`lib/useSmoothScroll.ts`; touch
+  and keyboard stay native) and blocks marked `data-reveal` animate in on
+  entry (`lib/useReveal.ts`).
 - **`lib/ScrollEngine.ts`** — single source of truth for scroll position
   (`target`/`current`/`velocity`), shared by the WebGL gallery and the DOM
-  menu so they stay locked in sync. Snapping blends into the easing itself
-  (no separate setTimeout snap).
-- **`lib/portfolios.ts`** — Sanity queries + types. Three portfolios
-  (`interactive` / `branding` / `richmedia`) map to Sanity category values
-  `immersive-ux` / `branding-print` / `advertising-rich-media`.
+  menu so they stay locked in sync. Scrolls land on an item in one motion:
+  when input ends it plans a single quintic landing curve from the current
+  position *and speed* to the chosen item (zero speed on arrival) — no
+  coast-then-snap. Trackpad momentum tails are detected as they start and
+  absorbed. Wheel input goes through `engine.input(delta)`, drag release
+  through `engine.release(fling)`. It's plain TS with no DOM, so tune it by
+  feeding it input on a fake `performance.now()` and checking the
+  frame-by-frame speed (it should only fall after its peak), not by eye.
+- **`lib/portfolios.ts`** — Sanity queries + types. Two portfolios
+  (`interactive` / `branding`) map to Sanity category values `immersive-ux` /
+  `branding-print`; `advertising-rich-media` projects are dropped. Gallery
+  `imagesSlide` entries (multi-image uploads) are flattened into single slides
+  here, so nothing downstream knows about them.
 - **`lib/videoEmbed.ts`** — resolves a pasted Vimeo/Gumlet URL or full embed
   code to a player src, plus postMessage helpers for detecting playback end
   across both providers' cross-origin iframes.
@@ -72,6 +99,13 @@ content is being finished — remove both before public launch.
   new dev port or deploy domain there before testing.
 
 ## Known gotchas worth remembering
+
+- **Shaders live in JS template literals** — a backtick in a GLSL comment ends
+  the string and breaks the build. Write names in comments without them.
+- **R3F may copy a `uniforms` prop onto the material**, so mutating your own
+  object later reaches nothing (a silent black mesh). Build the
+  `ShaderMaterial` yourself (or drive it through a ref) and write its
+  uniforms directly — see `IntroCube`.
 
 - **Teaser video is HLS-only.** Gumlet publishes no usable MP4 (every variant
   401/403s), so playback needs `hls.js` — except on WebKit, which renders an
