@@ -117,9 +117,20 @@ export interface HlsHandle {
 export async function attachHls(
   video: HTMLVideoElement,
   src: string,
-  opts: { maxHeight?: number; bufferSeconds?: number; rate?: number } = {}
+  opts: {
+    maxHeight?: number;
+    bufferSeconds?: number;
+    rate?: number;
+    /**
+     * Bandwidth (bits/s) to assume before any has been measured. hls.js
+     * otherwise guesses low and opens on its smallest rendition, climbing
+     * only once a few segments have been timed — seconds of a soft picture
+     * on a surface that's shown large.
+     */
+    assumeBandwidth?: number;
+  } = {}
 ): Promise<HlsHandle | null> {
-  const { maxHeight = 720, bufferSeconds = 8, rate = 1 } = opts;
+  const { maxHeight = 720, bufferSeconds = 8, rate = 1, assumeBandwidth } = opts;
   const canNative = !!video.canPlayType("application/vnd.apple.mpegurl");
   const hasMse = typeof window !== "undefined" && "MediaSource" in window;
   const Hls = hasMse ? (await import("hls.js")).default : null;
@@ -132,6 +143,7 @@ export async function attachHls(
       maxMaxBufferLength: bufferSeconds * 1.5 * rate,
       capLevelToPlayerSize: false,
       enableWorker: true,
+      ...(assumeBandwidth ? { abrEwmaDefaultEstimate: assumeBandwidth } : {}),
     });
     instance.on(Hls.Events.MANIFEST_PARSED, () => {
       // Let ABR adapt to the connection, but never above the height this

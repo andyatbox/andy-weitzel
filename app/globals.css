@@ -243,3 +243,128 @@ body.cursor-teaser .x-cursor .x-cursor__dot {
     animation: none;
   }
 }
+
+/* Landing weather graphics (components/WeatherPanel.tsx).
+   Draw-on: every stroke has pathLength=1, so one dash pattern fits them all.
+   The dash is 1 and the gap 2, and the hidden offset sits just past 1, so no
+   dash end touches the path while hidden — a round cap would otherwise leave
+   a dot showing. Selected by element, not by [pathLength]: Chrome matched the
+   mixed-case SVG attribute on first style but missed it when .wx-on was
+   added later, so the strokes stayed undrawn. */
+.wx-draw path,
+.wx-draw circle {
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.001;
+  transition: stroke-dashoffset 1s cubic-bezier(0.65, 0, 0.35, 1) var(--wx-delay, 0ms);
+}
+.wx-on .wx-draw path,
+.wx-on .wx-draw circle {
+  stroke-dashoffset: 0;
+}
+/* Ambient loops, kept small enough to read as alive rather than busy. */
+.wx-spin {
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+  animation: wx-spin 48s linear infinite;
+}
+.wx-drift {
+  animation: wx-drift 5s ease-in-out infinite alternate;
+}
+.wx-drift--back {
+  animation-direction: alternate-reverse;
+}
+.wx-fall > * {
+  animation: wx-fall 1.5s linear infinite;
+}
+.wx-fall > :nth-child(3n + 2) {
+  animation-delay: -0.5s;
+}
+.wx-fall > :nth-child(3n) {
+  animation-delay: -1s;
+}
+.wx-fall--slow > * {
+  animation-duration: 3s;
+}
+.wx-flash {
+  animation: wx-flash 4.5s ease-in-out infinite;
+}
+.wx-twinkle {
+  animation: wx-twinkle 3.5s ease-in-out infinite alternate;
+}
+.wx-gust {
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+  animation: wx-gust 2.6s ease-in-out infinite alternate;
+}
+@keyframes wx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes wx-drift {
+  from {
+    transform: translateX(-0.9px);
+  }
+  to {
+    transform: translateX(0.9px);
+  }
+}
+@keyframes wx-fall {
+  0% {
+    transform: translateY(-1.5px);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(2.5px);
+    opacity: 0;
+  }
+}
+@keyframes wx-flash {
+  0%,
+  84%,
+  100% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 0.2;
+  }
+  91% {
+    opacity: 1;
+  }
+  94% {
+    opacity: 0.35;
+  }
+}
+@keyframes wx-twinkle {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+@keyframes wx-gust {
+  from {
+    transform: rotate(-6deg);
+  }
+  to {
+    transform: rotate(6deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wx-draw path,
+  .wx-draw circle {
+    transition: none;
+  }
+  .wx-spin,
+  .wx-drift,
+  .wx-fall > *,
+  .wx-flash,
+  .wx-twinkle,
+  .wx-gust {
+    animation: none;
+  }
+}

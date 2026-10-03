@@ -13,12 +13,23 @@ content is being finished — remove both before public launch.
   switching, the open/close project animation state, the slide-reveal intro,
   window-level scroll/drag input, the hover tooltip, and mounts everything
   else.
-- **`components/AgentIntro.tsx`** — the landing gate: a typed greeting
-  (weather via `app/api/greeting`) over **`IntroCube.tsx`**, a full-bleed R3F
-  shape textured with the sizzle reel (HLS via `lib/hlsVideo.ts`). The shape
-  cycles cube → sphere → gooey blob on two shader dials (`u_sphere`, `u_goo`)
-  and follows/swirls under the pointer on desktop. `SplashIntro.tsx` is the
-  older static gate, kept as a revert path.
+- **`components/AgentIntro.tsx`** — the landing gate: a row of location and
+  weather data graphics (`WeatherPanel.tsx`; data from `app/api/greeting`,
+  Open-Meteo + Vercel's geo headers) above a typed "Hello." and the portfolio
+  question, over **`IntroCube.tsx`** — the sizzle reel (HLS via
+  `lib/hlsVideo.ts`) twice: as a shape cycling cube → sphere → gooey blob on
+  two shader dials (`u_sphere`, `u_goo`) that follows/swirls under the
+  pointer, and as a half-skybox behind it that the pointer turns. The sky is
+  a full-screen shader, stereographic both for the wrap and for its lens, so
+  at rest it shows the picture flat at a chosen framing (`DOME_FRAME`) and
+  turning bends it like a dome; a normal rectilinear camera could only show
+  a sliver of a 180° sky. One stream feeds both (`EMBED`; any proportions —
+  the shape takes a centred square); the sky's soft focus scales with how far
+  the picture is enlarged, so a sharp source stays sharp (the 1080p reel
+  shows near 1:1). Replacing a Gumlet asset in place regenerated only its
+  DASH output, leaving the HLS ladder on the old video — upload a new asset
+  and swap the id instead. `SplashIntro.tsx` is the older static gate, kept
+  as a revert path.
 - **`components/Cursor.tsx`** — custom cursor for fine pointers (ring + dot,
   `mix-blend-mode: difference`), states via classes: link / drag / teaser
   (`body.cursor-teaser`, set by the gallery tooltip, whose "View … Project"
@@ -102,6 +113,9 @@ content is being finished — remove both before public launch.
 
 - **Shaders live in JS template literals** — a backtick in a GLSL comment ends
   the string and breaks the build. Write names in comments without them.
+- **Don't select SVG attributes by name in CSS** (`[pathLength]`): Chrome
+  matched it on first style but missed it when an ancestor class changed
+  later, leaving the weather icons undrawn. Select by element or class.
 - **R3F may copy a `uniforms` prop onto the material**, so mutating your own
   object later reaches nothing (a silent black mesh). Build the
   `ShaderMaterial` yourself (or drive it through a ref) and write its

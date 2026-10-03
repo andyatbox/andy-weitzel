@@ -5,6 +5,8 @@ import { LABELS, PORTFOLIO_IDS, type PortfolioId } from "@/lib/portfolios";
 import LogoMark from "./LogoMark";
 import NameWheel from "./NameWheel";
 import IntroCube from "./IntroCube";
+import WeatherPanel from "./WeatherPanel";
+import type { Greeting } from "@/app/api/greeting/route";
 
 /**
  * A sentence, as pieces rather than a string, so a phrase inside it can be
@@ -17,119 +19,28 @@ interface Beat {
   pause?: boolean;
 }
 
-/** Visitor's own clock — the one variable that is never wrong. */
-function timeOfDay(d = new Date()): string {
-  const h = d.getHours();
-  if (h < 5) return "night";
-  if (h < 12) return "morning";
-  if (h < 17) return "afternoon";
-  if (h < 21) return "evening";
-  return "night";
-}
-
 /**
- * The weather sentence, one per condition. Each is a whole line rather than a
- * template with a sign-off bolted on, so it can be phrased however it wants —
- * a stormy afternoon and a clear night don't want the same shape.
- *
- * Location and temperature are both optional (a VPN hides one, a partial
- * upstream reply the other), so every line is assembled rather than
- * interpolated blind — no "in undefined", no stray double spaces.
+ * The script. The weather and place used to be a sentence here; they're drawn
+ * as a row of data graphics above it now (WeatherPanel), so the copy itself
+ * is the same for everyone.
  */
-/**
- * "a 76°F" but "an 80°F" — the article follows how the number is *said*, and
- * eight, eleven and eighteen all open on a vowel sound.
- */
-function tempArticle(temp: string | null): string {
-  if (!temp) return "a";
-  const n = parseInt(temp, 10);
-  if (Number.isNaN(n)) return "a";
-  const an = n === 8 || n === 11 || n === 18 || (n >= 80 && n <= 89);
-  return an ? "an" : "a";
-}
-
-function weatherLine(
-  cond: string,
-  temp: string | null,
-  season: string,
-  tod: string,
-  place: string | null
-): string {
-  const at = place ? ` in ${place}` : "";
-  const t = temp ? `${temp} ` : "";
-  switch (cond) {
-    case "stormy":
-      return `Looks like a stormy ${t}${season} ${tod}.${
-        place ? ` Stay dry in ${place}!` : " Stay dry!"
-      }`;
-    case "snowy":
-      return `Looks like a snowy ${t}${season} ${tod}${at}. Stay in and get cozy!`;
-    case "rainy":
-    case "drizzly":
-      return `Looks like a rainy ${t}${season} ${tod}${at}. Stay dry!`;
-    case "foggy":
-      return `Looks like a foggy ${t}${season} ${tod}${at}. Hoping for minimal travel.`;
-    case "frigid":
-      return `Looks like a frigid ${t}${season} ${tod}${at}. Stay warm and cozy!`;
-    case "cold":
-    case "cool":
-      return `Looks like a chilly ${t}${season} ${tod}${at}. Time to get cozy!`;
-    case "soon-to-be rainy":
-      return `Could be rainy ${t}${season}${at} later. Stay dry!`;
-    case "hot":
-      return `It's ${tempArticle(temp)} ${t}hot ${season}${at}. Stay cool!`;
-    case "humid":
-      return `Looks like a humid ${t}${season} ${tod}${at}. Stay cool!`;
-    case "sunny":
-      return `Clear blue ${season} skies${at} this ${tod}.${
-        temp ? ` Enjoy the ${temp} day!` : " Enjoy the day!"
-      }`;
-    case "clear":
-      return `Clear ${season} skies tonight${at}. Perfect for star-gazing!`;
-    case "partly cloudy":
-      return `It's a partly cloudy ${season} ${tod}${at}. Pretty nice!`;
-    case "overcast":
-      // No sun to hope for after dark — the line just stops there.
-      return `It's an overcast ${season} ${tod}.${
-        tod === "night" ? "" : " Hope the sun breaks through for you!"
-      }`;
-    default: // mild, warm
-      return `It's ${tempArticle(temp)} ${t}${season} ${tod}${at}. Nice!`;
-  }
-}
-
-/**
- * The scripted beats. With no weather read there is nothing true to say about
- * where the visitor is, so the greeting drops the time of day too and simply
- * says hello rather than performing a familiarity it doesn't have.
- */
-function buildBeats(
-  place: string | null,
-  weather: string | null,
-  temp: string | null,
-  season: string | null
-): Beat[] {
-  const tod = timeOfDay();
+function buildBeats(): Beat[] {
   const line = (text: string): Beat => ({ parts: [{ text }] });
-  const beats: Beat[] = [];
-
-  if (weather && season) {
-    beats.push(line(tod === "night" ? "Good evening!" : `Good ${tod}!`));
-    // The script's one rest: let the greeting land before the pitch starts.
-    beats.push({ ...line(weatherLine(weather, temp, season, tod, place)), pause: true });
-  } else {
-    beats.push({ ...line("Hello!"), pause: true });
-  }
-
-  // The question closes the script; the portfolio buttons below answer it.
-  beats.push(line("Which portfolio would you like to start with?"));
-  return beats;
+  return [
+    // The script's one rest: let the greeting land before the question.
+    { ...line("Hello."), pause: true },
+    // The question closes the script; the portfolio buttons below answer it.
+    line("Which portfolio would you like to start with?"),
+  ];
 }
 
 // Typing. Driven from elapsed time in a rAF loop rather than a per-character
 // interval, which can't be trusted below ~16ms.
 const CHARS_PER_SEC = 60;
 const BEAT_PAUSE = 1150; // ms of silence after the greeting (see Beat.pause)
+// When there's weather to show, the panel starts arriving first and the
+// typing follows partway through its entrance.
+const PANEL_LEAD_MS = 700;
 // How long after the last character the agent still counts as talking.
 const TALK_GRACE_MS = 110;
 // How far *before* a sentence ends the agent starts settling. The idle ramp
@@ -144,9 +55,9 @@ const MIN_CAP_FIT = 0.6;
 const CAP_RATIO = 0.717;
 
 const PILL =
-  "inline-flex shrink-0 items-center rounded-full border-2 border-white px-7 py-3 text-xl font-medium text-white transition-colors hover:bg-white hover:text-black min-[992px]:px-10 min-[992px]:py-4 min-[992px]:text-[28px]";
+  "inline-flex shrink-0 items-center rounded-full border-2 border-white px-5 py-2.5 text-lg font-medium text-white transition-colors hover:bg-white hover:text-black min-[992px]:px-8 min-[992px]:py-3 min-[992px]:text-[22px]";
 const PILL_QUIET =
-  "inline-flex shrink-0 items-center rounded-full border border-white/30 px-4 py-2 text-sm font-medium text-white/70 transition-colors hover:border-white hover:bg-white hover:text-black";
+  "inline-flex shrink-0 items-center rounded-full border border-white/30 px-5 py-2 text-base font-medium text-white/70 transition-colors hover:border-white hover:bg-white hover:text-black";
 
 const SPLASH_LABELS: Record<PortfolioId, string> = {
   ...LABELS,
@@ -193,12 +104,7 @@ export default function AgentIntro({
     transition: `opacity 0.6s ease ${delay}ms, transform 0.6s ease ${delay}ms`,
   });
 
-  const [greeting, setGreeting] = useState<{
-    place: string | null;
-    weather: string | null;
-    temp: string | null;
-    season: string | null;
-  } | null>(null);
+  const [greeting, setGreeting] = useState<Greeting | null>(null);
   const [typed, setTyped] = useState(0);
   // Whether characters are appearing *right now*. Distinct from "not finished
   // yet": the counter sits still through the rest after the greeting, and the
@@ -206,36 +112,32 @@ export default function AgentIntro({
   const [talking, setTalking] = useState(false);
   const talkingRef = useRef(false);
 
-  // Hold the whole sequence until the lookup answers (or fails), so the first
-  // sentence isn't rewritten under the cursor mid-type. Capped, because a
-  // stalled request must not strand the landing.
+  // Hold the whole sequence until the lookup answers (or fails), so the
+  // panel and the copy arrive together rather than the panel landing late
+  // above copy that's already typing. Capped, because a stalled request must
+  // not strand the landing.
   useEffect(() => {
     let alive = true;
-    const settle = (g: {
-      place: string | null;
-      weather: string | null;
-      temp: string | null;
-      season: string | null;
-    }) => {
+    const none: Greeting = { place: null, weather: null };
+    const settle = (g: Greeting) => {
       if (alive) setGreeting((prev) => prev ?? g);
     };
-    const cap = setTimeout(
-      () => settle({ place: null, weather: null, temp: null, season: null }),
-      2500
-    );
+    const cap = setTimeout(() => settle(none), 2500);
     fetch("/api/greeting")
-      .then((r) => (r.ok ? r.json() : { place: null, weather: null, temp: null, season: null }))
+      .then((r) => (r.ok ? (r.json() as Promise<Greeting>) : none))
       .then(settle)
-      .catch(() => settle({ place: null, weather: null, temp: null, season: null }));
+      .catch(() => settle(none));
     return () => {
       alive = false;
       clearTimeout(cap);
     };
   }, []);
 
-  const beats = greeting
-    ? buildBeats(greeting.place, greeting.weather, greeting.temp, greeting.season)
-    : null;
+  const beats = greeting ? buildBeats() : null;
+  // Anything to draw above the copy. Without it the copy is alone and keeps
+  // its centre-until-it-wraps behaviour; with it, it sits left under the
+  // panel from the first character.
+  const hasPanel = !!(greeting && (greeting.place || greeting.weather));
 
   // Flatten the beats to one run of segments carrying their absolute offset in
   // the script, so typing stays a single counter while the markup stays rich.
@@ -290,8 +192,9 @@ export default function AgentIntro({
     let lastStop = -1;
     let lastN = 0;
     let lastAdvance = -Infinity; // not "advanced at navigation start"
+    const startAfter = hasPanel ? PANEL_LEAD_MS : 0;
     const tick = (now: number) => {
-      if (!t0) t0 = now;
+      if (!t0) t0 = now + startAfter;
       const ms = now - t0 - held;
       let n = ms <= 0 ? 0 : Math.floor((ms / 1000) * CHARS_PER_SEC);
       // Rest at the end of the greeting before starting the next sentence.
@@ -322,7 +225,7 @@ export default function AgentIntro({
       // counts: sentences otherwise run straight on, and settling at every
       // full stop would settle the scene while characters were still appearing.
       // The lead is capped to a share of the run's own length, or a short one
-      // ("Hello!") would be entirely inside the lead and never animate at all.
+      // ("Hello.") would be entirely inside the lead and never animate at all.
       const si = pauses.current.findIndex((e) => e >= n);
       const end = si === -1 ? script.length : pauses.current[si];
       const from = si <= 0 ? 0 : pauses.current[si - 1] + 1;
@@ -346,7 +249,7 @@ export default function AgentIntro({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [script]);
+  }, [script, hasPanel]);
 
   const speaking = talking;
 
@@ -364,6 +267,8 @@ export default function AgentIntro({
   // instead of chasing its own easing.
   const mainRef = useRef<HTMLElement>(null);
   const capRef = useRef<HTMLParagraphElement>(null);
+  // The weather panel and the copy together — what has to fit.
+  const colRef = useRef<HTMLDivElement>(null);
   const typedRef = useRef<HTMLSpanElement>(null);
   // Zero-width marker sitting immediately after the last typed character. The
   // run itself can't be measured directly — it also contains the transparent
@@ -382,6 +287,11 @@ export default function AgentIntro({
     const run = typedRef.current;
     const mark = caretRef.current;
     if (!box || !run || !mark || !typed) return;
+    if (hasPanel) {
+      setMultiLine(false);
+      setCentreShift(0);
+      return;
+    }
     const first = run.getClientRects()[0];
     if (!first) return;
     const at = mark.getBoundingClientRect();
@@ -391,7 +301,7 @@ export default function AgentIntro({
     setCentreShift(
       wrapped ? 0 : Math.max(0, (box.clientWidth - (at.left - first.left)) / 2)
     );
-  }, [typed, script, width]);
+  }, [typed, script, width, hasPanel]);
 
   // Both rows ease in with the first character rather than waiting for the
   // sentence that offers them. The script is no longer skippable, so holding
@@ -416,24 +326,25 @@ export default function AgentIntro({
     : "clamp(32px, 3.8vw, 62px)";
 
   // Shrink-to-fit against the region the copy actually has. A width-only size
-  // is fine until the window is short, where the finished paragraph runs into
+  // is fine until the window is short, where the panel and paragraph run into
   // the wordmark above or the buttons below. The paragraph is always laid out
   // at its finished size (the transparent tail sees to that), so this measures
-  // the same height from the first frame rather than growing as it types.
+  // the same height from the first frame rather than growing as it types. The
+  // panel scales by the same factor, so the two shrink as one.
   const [capFit, setCapFit] = useState(1);
   // Start from the full size again whenever the box or the copy changes, so
   // the loop below only ever has to shrink.
   useEffect(() => setCapFit(1), [script, width, height]);
   useEffect(() => {
     const box = mainRef.current;
-    const para = capRef.current;
-    if (!box || !para) return;
+    const col = colRef.current;
+    if (!box || !col) return;
     const pad = getComputedStyle(box);
     const avail =
       box.clientHeight -
       parseFloat(pad.paddingTop) -
       parseFloat(pad.paddingBottom);
-    const used = para.scrollHeight;
+    const used = col.scrollHeight;
     if (avail <= 0 || used <= 0 || used <= avail) return;
     // Scale the *current* size by how much it overshot, and repeat until it
     // fits. Solving it in one pass assumes height falls off linearly with font
@@ -441,9 +352,10 @@ export default function AgentIntro({
     // shrinks, so a single ratio left it still overlapping on short windows.
     const next = Math.max(MIN_CAP_FIT, capFit * (avail / used) * 0.985);
     if (next < capFit - 0.004) setCapFit(next);
-  }, [script, width, height, capFit]);
+  }, [script, width, height, capFit, hasPanel]);
 
   const capSize = `calc(${capBase} * ${capFit.toFixed(3)})`;
+  const panelSize = `calc(${isPhone ? "clamp(20px, 5.6vw, 24px)" : "clamp(22px, 2.3vw, 36px)"} * ${capFit.toFixed(3)})`;
 
   return (
     <div
@@ -499,69 +411,81 @@ export default function AgentIntro({
           ref={mainRef}
           className="relative flex min-h-0 flex-1 items-center justify-center px-6 py-10 sm:px-10"
         >
-          {/* Centred while the copy is still one line, then slid to its
-              left-aligned home once it wraps. Done as a translate rather than
-              text-align, which can't be animated — see `centreShift`. */}
-          <p
-            ref={capRef}
-            className="relative mx-auto max-w-3xl text-left font-medium leading-[1.12]"
-            style={{
-              fontSize: capSize,
-              transform: `translateX(${centreShift}px)`,
-              transition: multiLine ? "transform 0.55s ease" : "none",
-            }}
-          >
-            {/* The finished sentence for assistive tech, so a half-typed
-                paragraph never reaches a screen reader. */}
-            <span className="sr-only">{script}</span>
-            <span aria-hidden ref={typedRef}>
-              {segments.map((seg, i) => {
-                const shown = Math.max(0, Math.min(typed - seg.start, seg.text.length));
-                const vis = seg.text.slice(0, shown);
-                const rest = seg.text.slice(shown);
-                const isCaret = i === caretSegment;
-                return (
-                  <span key={i}>
-                    {seg.link ? (
-                      <span
-                        role="button"
-                        tabIndex={vis ? 0 : -1}
-                        onClick={() => vis && onChoose(seg.link!)}
-                        onKeyDown={(e) => {
-                          if (vis && (e.key === "Enter" || e.key === " ")) onChoose(seg.link!);
-                        }}
-                        className="cursor-pointer underline decoration-2 underline-offset-4 transition-opacity hover:opacity-60"
-                      >
-                        {vis}
-                      </span>
-                    ) : seg.brk ? (
-                      // The greeting stands apart from the pitch that follows.
-                      // Drawn from the first frame, like the transparent tail,
-                      // so the gap never pops in and reflows the paragraph.
-                      <span className="block" style={{ height: "0.5em" }} />
-                    ) : (
-                      vis
-                    )}
-                    {isCaret && (
-                      // Full line-height, not a zero-height box: an empty
-                      // inline sits *on* the baseline, so its top lands most
-                      // of a line below the line box and every measurement
-                      // read as "already wrapped".
-                      <span
-                        ref={caretRef}
-                        className="inline-block w-0 align-baseline"
-                        style={{ height: "1em" }}
-                      />
-                    )}
-                    {/* Transparent tail: holds the paragraph at its finished
-                        size and final wrapping from the first frame, so the
-                        composition never reflows as sentences accumulate. */}
-                    {!seg.brk && <span className="opacity-0">{rest}</span>}
-                  </span>
-                );
-              })}
-            </span>
-          </p>
+          <div ref={colRef} className="mx-auto w-full max-w-3xl">
+            {greeting && hasPanel && (
+              <div className="mb-8 md:mb-12">
+                <WeatherPanel
+                  place={greeting.place}
+                  weather={greeting.weather}
+                  shown={revealed}
+                  size={panelSize}
+                />
+              </div>
+            )}
+            {/* Alone, centred while the copy is still one line, then slid to
+                its left-aligned home once it wraps. Done as a translate rather
+                than text-align, which can't be animated — see `centreShift`. */}
+            <p
+              ref={capRef}
+              className="relative text-left font-medium leading-[1.12]"
+              style={{
+                fontSize: capSize,
+                transform: `translateX(${centreShift}px)`,
+                transition: multiLine ? "transform 0.55s ease" : "none",
+              }}
+            >
+              {/* The finished sentence for assistive tech, so a half-typed
+                  paragraph never reaches a screen reader. */}
+              <span className="sr-only">{script}</span>
+              <span aria-hidden ref={typedRef}>
+                {segments.map((seg, i) => {
+                  const shown = Math.max(0, Math.min(typed - seg.start, seg.text.length));
+                  const vis = seg.text.slice(0, shown);
+                  const rest = seg.text.slice(shown);
+                  const isCaret = i === caretSegment;
+                  return (
+                    <span key={i}>
+                      {seg.link ? (
+                        <span
+                          role="button"
+                          tabIndex={vis ? 0 : -1}
+                          onClick={() => vis && onChoose(seg.link!)}
+                          onKeyDown={(e) => {
+                            if (vis && (e.key === "Enter" || e.key === " ")) onChoose(seg.link!);
+                          }}
+                          className="cursor-pointer underline decoration-2 underline-offset-4 transition-opacity hover:opacity-60"
+                        >
+                          {vis}
+                        </span>
+                      ) : seg.brk ? (
+                        // The greeting stands apart from the pitch that follows.
+                        // Drawn from the first frame, like the transparent tail,
+                        // so the gap never pops in and reflows the paragraph.
+                        <span className="block" style={{ height: "0.5em" }} />
+                      ) : (
+                        vis
+                      )}
+                      {isCaret && (
+                        // Full line-height, not a zero-height box: an empty
+                        // inline sits *on* the baseline, so its top lands most
+                        // of a line below the line box and every measurement
+                        // read as "already wrapped".
+                        <span
+                          ref={caretRef}
+                          className="inline-block w-0 align-baseline"
+                          style={{ height: "1em" }}
+                        />
+                      )}
+                      {/* Transparent tail: holds the paragraph at its finished
+                          size and final wrapping from the first frame, so the
+                          composition never reflows as sentences accumulate. */}
+                      {!seg.brk && <span className="opacity-0">{rest}</span>}
+                    </span>
+                  );
+                })}
+              </span>
+            </p>
+          </div>
         </main>
 
         {/* Portfolios first, then the secondary pair, separated. */}
@@ -582,7 +506,7 @@ export default function AgentIntro({
             ))}
           </div>
           <div
-            className="mx-auto mt-5 flex max-w-xs items-center gap-4"
+            className="mx-auto mt-5 flex max-w-sm items-center gap-4"
             style={rowIn(showLinks)}
           >
             <span className="h-px flex-1 bg-white/20" />

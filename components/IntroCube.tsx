@@ -17,11 +17,16 @@ import {
   detectTouch,
 } from "@/lib/pointerFx";
 
-// The sizzle reel every face of the cube plays.
-const EMBED = "https://play.gumlet.io/embed/6ab95e853518a22dd8b7e5bd";
-// The cube is background, not subject: one decode shared by six faces, capped
-// height, and uploads gated well below the source's frame rate.
-const MAX_VIDEO_HEIGHT = 720;
+// The reel the shape and the sky both play — one stream feeds both. Any
+// proportions work: the sky wraps the whole picture, the shape takes a
+// centred square of it.
+const EMBED = "https://play.gumlet.io/embed/6ac0ee1dd6a6ba7c2cbf0b19";
+// One decode shared by the shape's six faces and the sky, capped in height,
+// with uploads gated well below the source's frame rate. Desktops get up to
+// 1080p, which the sky shows near 1:1; touch devices, where both decode and
+// upload cost more, stop at 720p.
+const MAX_VIDEO_HEIGHT = 1080;
+const MAX_VIDEO_HEIGHT_TOUCH = 720;
 const MAX_TEXTURE_FPS = 30;
 // How far the goo can swell past the pillowed shape, in half-widths. Shared
 // by the shader and the frame clamp, which has to allow for the worst case.
@@ -66,8 +71,11 @@ function useReelTexture(enabled: boolean) {
       texRef.current = tex;
 
       const handle = await attachHls(video, src, {
-        maxHeight: MAX_VIDEO_HEIGHT,
+        maxHeight: detectTouch() ? MAX_VIDEO_HEIGHT_TOUCH : MAX_VIDEO_HEIGHT,
         bufferSeconds: 10,
+        // Open on the top rendition rather than climbing to it: the sky
+        // shows the picture large from the first frame.
+        assumeBandwidth: 6_000_000,
       });
       if (!alive) {
         handle?.destroy();
@@ -285,6 +293,9 @@ precision highp float;
 precision mediump float;
 #endif
 uniform sampler2D u_map;
+// Share of the picture each face shows, per axis: a centred square of it, so
+// a wide reel isn't squashed onto the square faces.
+uniform vec2 u_crop;
 varying vec2 vUv;
 varying float vDisp;
 
@@ -292,6 +303,7 @@ void main() {
   // The picture slides with the swell underneath it, so the reel reads as
   // painted on the goo rather than projected onto a rigid box.
   vec2 uv = vUv + vec2(vDisp * 0.07, -vDisp * 0.055);
+  uv = 0.5 + (uv - 0.5) * u_crop;
   gl_FragColor = vec4(texture2D(u_map, uv).rgb, 1.0);
 }
 `;
@@ -348,6 +360,7 @@ function Cube({ speaking, texture }: { speaking: boolean; texture: THREE.VideoTe
     const geometry = new THREE.BoxGeometry(1, 1, 1, 40, 40, 40);
     const shared = {
       u_map: { value: null as THREE.Texture | null },
+      u_crop: { value: new THREE.Vector2(1, 1) },
       u_time: { value: 0 },
       // How far each face centre bows out, in half-widths of the cube.
       u_inflate: { value: 0.32 },
@@ -446,6 +459,9 @@ function Cube({ speaking, texture }: { speaking: boolean; texture: THREE.VideoTe
     shared.u_sphere.value = shape.sphere;
     shared.u_goo.value = shape.goo;
     if (shared.u_map.value !== texture) shared.u_map.value = texture;
+    const video = texture?.image as HTMLVideoElement | undefined;
+    const va = (video?.videoWidth || 1) / (video?.videoHeight || 1);
+    shared.u_crop.value.set(Math.min(1, 1 / va), Math.min(1, va));
 
     // The teasers' swirl: same radius, twist and easing as the gallery.
     const minDim = Math.min(size.width, size.height);
@@ -466,11 +482,276 @@ function Cube({ speaking, texture }: { speaking: boolean; texture: THREE.VideoTe
 }
 
 /**
+ * The reel again, as a half skybox: the picture wrapped round the viewer,
+ * which the visitor looks around by moving the pointer. The same texture as
+ * the shape (one decode feeds both), so the shape reads as a piece of the
+ * world behind it, pulled forward.
+ *
+ * The wrap and the lens are both stereographic — the projection planetarium
+ * dome content is made in. Using one projection for both means that looking
+ * straight ahead shows the picture flat and undistorted, framed however
+ * DOME_FRAME says; turning bends it smoothly (circles stay circles), opening
+ * up the side turned toward. An ordinary rectilinear lens can't do this: it
+ * can only take in a small window of a dome before its edges smear, which
+ * left the first version showing barely a tenth of the reel, hugely
+ * magnified.
+ *
+ * Past the picture's edges the sky carries on as its mirror image, so a turn
+ * can never reach a rim. The reel is only 600px square, so a soft-focus blur
+ * turns its upscaling into depth of field; the shape in front stays sharp.
+ */
+// How much of the picture fills the screen at rest, along whichever axis is
+// the tighter fit (the screen's long side, for a square reel). Lower shows
+// more of the picture, smaller, and leaves less of it to turn toward.
+const DOME_FRAME = 0.82;
+// How far past the picture's edge a full turn may reach into the mirrored
+// sky beyond it, as a share of the picture's half-width. Kept to a sliver:
+// the reel is full of type, and mirrored type reads as a mistake.
+const DOME_SPILL = 0.03;
+// Most the view tilts up or down.
+const DOME_PITCH_CAP = THREE.MathUtils.degToRad(30);
+// Multiplier on the picture. The backdrop is darker than the shape so the
+// shape stays the subject even though they show the same footage.
+const DOME_DIM = 0.55;
+// Soft focus, there to hide upscaling: its radius in texels of the video is
+// DOME_BLUR_PER × how far past 1:1 the picture is enlarged, up to
+// DOME_BLUR_MAX. A source with pixels to spare stays sharp; the 600px stand-in
+// reel, enlarged about fourfold, gets the full blur.
+const DOME_BLUR_PER = 0.7;
+const DOME_BLUR_MAX = 2.4;
+
+const DOME_VERT = `
+varying vec2 vNdc;
+void main() {
+  vNdc = position.xy;
+  // A full-screen quad, at the back of the depth range.
+  gl_Position = vec4(position.xy, 0.999, 1.0);
+}
+`;
+
+// Like the shape, the picture is sampled as stored and written out unchanged
+// (just dimmed), so the two match exactly.
+const DOME_FRAG = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform sampler2D u_map;
+uniform float u_dim;
+// Half-extent of the screen on the lens's projection plane.
+uniform vec2 u_scale;
+// Where the view is turned: rotates a view ray into the sky's frame.
+uniform mat3 u_look;
+// Projection plane to texture: the picture's longer side spans -1..1.
+uniform vec2 u_fit;
+// Blur radius in texture coordinates, per axis.
+uniform vec2 u_blur;
+varying vec2 vNdc;
+
+// Mirrored repeat, so the sky past the picture's edges is its reflection.
+vec3 tap(vec2 uv) {
+  return texture2D(u_map, 1.0 - abs(1.0 - mod(uv, 2.0))).rgb;
+}
+
+void main() {
+  // Screen point to view ray: the inverse stereographic projection, with
+  // straight ahead along -z.
+  vec2 q = vNdc * u_scale;
+  float r2 = dot(q, q);
+  vec3 ray = vec3(2.0 * q, r2 - 1.0) / (1.0 + r2);
+  ray = u_look * ray;
+  // Ray to the picture: the stereographic projection again, in the sky's
+  // frame. Unturned, this undoes the line above exactly.
+  vec2 p = ray.xy / (1.0 - ray.z);
+  vec2 uv = 0.5 + 0.5 * p * u_fit;
+
+  // Soft focus: a disc of taps on a golden-angle spiral, which covers the
+  // disc evenly without the ringing a regular grid of taps leaves.
+  vec3 sum = tap(uv);
+  float a = 0.0;
+  for (int i = 1; i <= 12; i++) {
+    a += 2.39996;
+    float r = sqrt(float(i) / 12.0);
+    sum += tap(uv + vec2(cos(a), sin(a)) * r * u_blur);
+  }
+  gl_FragColor = vec4(sum / 13.0 * u_dim, 1.0);
+}
+`;
+
+// Points around the screen's border (in -1..1), checked to keep a turn from
+// carrying any of the frame past the picture: corners, edge midpoints and the
+// quarter points between them.
+const DOME_EDGE = [-1, -0.5, 0, 0.5, 1].flatMap((a) => [
+  [a, -1],
+  [a, 1],
+  [-1, a],
+  [1, a],
+]);
+
+/**
+ * How far out the screen's border lands on the picture for a given turn, as
+ * a multiple of the picture's half-extent (1 = exactly at its edge). The same
+ * maths as the shader, on the CPU, for a handful of points.
+ */
+function domeReach(
+  yaw: number,
+  pitch: number,
+  sx: number,
+  sy: number,
+  ex: number,
+  ey: number,
+  m: THREE.Matrix4,
+  mb: THREE.Matrix4,
+  v: THREE.Vector3
+) {
+  m.makeRotationY(yaw).multiply(mb.makeRotationX(pitch));
+  let worst = 0;
+  for (const [nx, ny] of DOME_EDGE) {
+    const qx = nx * sx;
+    const qy = ny * sy;
+    const r2 = qx * qx + qy * qy;
+    v.set(2 * qx, 2 * qy, r2 - 1).divideScalar(1 + r2).applyMatrix4(m);
+    const w = Math.max(1e-6, 1 - v.z);
+    worst = Math.max(worst, Math.abs(v.x / w) / ex, Math.abs(v.y / w) / ey);
+  }
+  return worst;
+}
+
+function Dome({ texture }: { texture: THREE.VideoTexture | null }) {
+  const { size } = useThree();
+  const isTouch = useMemo(detectTouch, []);
+  const target = useRef({ x: 0, y: 0 }); // pointer, -1..1, y up
+  const look = useRef({ yaw: 0, pitch: 0 });
+
+  const { geometry, material, uniforms, m4, m4b, v3 } = useMemo(() => {
+    const geometry = new THREE.PlaneGeometry(2, 2);
+    const uniforms = {
+      u_map: { value: null as THREE.Texture | null },
+      u_dim: { value: DOME_DIM },
+      u_scale: { value: new THREE.Vector2(1, 1) },
+      u_look: { value: new THREE.Matrix3() },
+      u_fit: { value: new THREE.Vector2(1, 1) },
+      u_blur: { value: new THREE.Vector2(0, 0) },
+    };
+    const material = new THREE.ShaderMaterial({
+      vertexShader: DOME_VERT,
+      fragmentShader: DOME_FRAG,
+      uniforms,
+      // Always behind: drawn first, and never occluding the shape.
+      depthWrite: false,
+      depthTest: false,
+    });
+    return {
+      geometry,
+      material,
+      uniforms,
+      m4: new THREE.Matrix4(),
+      m4b: new THREE.Matrix4(),
+      v3: new THREE.Vector3(),
+    };
+  }, []);
+
+  useEffect(
+    () => () => {
+      geometry.dispose();
+      material.dispose();
+    },
+    [geometry, material]
+  );
+
+  // Desktop: the pointer turns the sky. Touch has no hover to read, so the
+  // sky drifts on its own instead (see the frame loop).
+  useEffect(() => {
+    if (isTouch) return;
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      target.current.x = (e.clientX / window.innerWidth) * 2 - 1;
+      target.current.y = -((e.clientY / window.innerHeight) * 2 - 1);
+    };
+    window.addEventListener("pointermove", onMove);
+    return () => window.removeEventListener("pointermove", onMove);
+  }, [isTouch]);
+
+  useFrame((state, delta) => {
+    // The picture's extent on the projection plane: its longer side spans
+    // -1..1, the shorter side in proportion.
+    const video = texture?.image as HTMLVideoElement | undefined;
+    const va = (video?.videoWidth || 1) / (video?.videoHeight || 1);
+    const ex = va >= 1 ? 1 : va;
+    const ey = va >= 1 ? 1 / va : 1;
+
+    // Frame the screen inside the picture: the screen's half-extents on the
+    // plane, k·(aspect, 1), at DOME_FRAME of the tightest fit.
+    const aspect = size.width / size.height;
+    const k = DOME_FRAME * Math.min(ex / aspect, ey);
+    const sx = k * aspect;
+    const sy = k;
+
+    // How far the view may turn straight sideways or straight up: until the
+    // screen's edge, which sits 2·atan(s) off-centre, reaches the picture's
+    // edge (plus the allowed spill into its mirror image) at 2·atan(e).
+    const yawMax = Math.max(0, 2 * Math.atan(ex * (1 + DOME_SPILL)) - 2 * Math.atan(sx));
+    const pitchMax = Math.min(
+      DOME_PITCH_CAP,
+      Math.max(0, 2 * Math.atan(ey * (1 + DOME_SPILL)) - 2 * Math.atan(sy))
+    );
+
+    const t = state.clock.elapsedTime;
+    const d = Math.min(delta, 0.05);
+    const tx = isTouch ? drift(t, 0.05, 0.13, 0.31) * 0.7 : target.current.x;
+    const ty = isTouch ? drift(t, 0.04, 0.11, 0.27) * 0.5 : target.current.y;
+    const kk = 1 - Math.exp(-d * 2.2);
+    const L = look.current;
+    // Look toward the pointer: right turns the view right, up tilts it up.
+    let wantYaw = -tx * yawMax;
+    let wantPitch = ty * pitchMax;
+    // Turning both ways at once swings the screen's corners out further than
+    // either turn alone, which carried mirrored footage into view. Pull a
+    // diagonal turn back along its own direction until the frame fits again,
+    // so straight turns keep their full range.
+    const limit = 1 + DOME_SPILL;
+    if (domeReach(wantYaw, wantPitch, sx, sy, ex, ey, m4, m4b, v3) > limit) {
+      let lo = 0;
+      let hi = 1;
+      for (let i = 0; i < 8; i++) {
+        const mid = (lo + hi) / 2;
+        if (domeReach(wantYaw * mid, wantPitch * mid, sx, sy, ex, ey, m4, m4b, v3) > limit) hi = mid;
+        else lo = mid;
+      }
+      wantYaw *= lo;
+      wantPitch *= lo;
+    }
+    L.yaw += (wantYaw - L.yaw) * kk;
+    L.pitch += (wantPitch - L.pitch) * kk;
+    // A view ray is tilted, then turned: Ry(yaw)·Rx(pitch).
+    m4.makeRotationY(L.yaw).multiply(m4b.makeRotationX(L.pitch));
+    uniforms.u_look.value.setFromMatrix4(m4);
+    uniforms.u_scale.value.set(sx, sy);
+    uniforms.u_fit.value.set(1 / ex, 1 / ey);
+    // Enlargement at the centre of the screen: device pixels per video pixel.
+    // The picture's half-width (ex on the plane) is vw/2 video pixels; the
+    // screen's (sx) is width·dpr/2 device pixels.
+    const vw = video?.videoWidth || 1;
+    const vh = video?.videoHeight || 1;
+    const mag = (size.width * state.viewport.dpr * ex) / (sx * vw);
+    const blur = Math.min(DOME_BLUR_MAX, Math.max(0, (mag - 1) * DOME_BLUR_PER));
+    uniforms.u_blur.value.set(blur / vw, blur / vh);
+    if (uniforms.u_map.value !== texture) uniforms.u_map.value = texture;
+  });
+
+  return (
+    <mesh geometry={geometry} material={material} renderOrder={-1} frustumCulled={false} />
+  );
+}
+
+/**
  * The landing's backdrop: a gooey, always-shifting mass of the sizzle reel,
- * turning behind the copy until a portfolio is chosen. Full-bleed — it owns
- * the viewport rather than sitting in a box, which is what the blob it
- * replaced did. On desktop the cursor swirls its shape, as it does the
- * gallery teasers.
+ * turning behind the copy until a portfolio is chosen, in front of the same
+ * reel wrapped round a half-dome (see Dome). Full-bleed — it owns the
+ * viewport rather than sitting in a box, which is what the blob it replaced
+ * did. On desktop the cursor swirls the shape, as it does the gallery
+ * teasers, and turns the dome.
  */
 function IntroCube({
   speaking,
@@ -502,6 +783,7 @@ function IntroCube({
         style={{ position: "absolute", inset: 0 }}
       >
         <color attach="background" args={["#000000"]} />
+        <Dome texture={texture} />
         <Cube speaking={speaking} texture={texture} />
       </Canvas>
     </div>
