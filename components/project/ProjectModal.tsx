@@ -101,7 +101,7 @@ export default function ProjectModal({
 
   // Each block animates in as it scrolls into view; hiding the sheet (close,
   // prev/next) rearms them for the next project.
-  useReveal(scrollRef, revealed, content);
+  useReveal(scrollRef, revealed);
 
   // Take keyboard focus as the sheet appears, so Page Down / Space / arrows
   // scroll it straight away rather than only after a click inside it.
@@ -118,11 +118,15 @@ export default function ProjectModal({
       className={`fixed inset-0 overflow-y-auto overscroll-contain outline-none ${
         galleryExpanded ? "z-[60]" : "z-40"
       }`}
-      style={{
-        opacity: revealed ? 1 : 0,
-        pointerEvents: revealed ? "auto" : "none",
-        transition: "opacity 0.32s ease",
-      }}
+      style={
+        {
+          opacity: revealed ? 1 : 0,
+          pointerEvents: revealed ? "auto" : "none",
+          transition: "opacity 0.32s ease",
+          // Cap for images in the body and columns (ProjectPortableText).
+          "--body-img-max": `${Math.round(height * 0.9)}px`,
+        } as React.CSSProperties
+      }
     >
       {/* Frosted scrim over the full-screen WebGL teaser. Deliberately `fixed`
           rather than a background on the sheet itself: the blur then rasterises

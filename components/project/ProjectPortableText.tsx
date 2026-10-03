@@ -12,10 +12,14 @@ const makeComponents = (compact: boolean): PortableTextComponents => ({
     image: ({ value }) => (
       <figure data-reveal className={compact ? "" : "my-10"}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
+        {/* Never taller than 90% of the window (--body-img-max, set on the
+            sheet from the measured height — vh is wrong on mobile). A tall
+            image scales down whole and centres in the full-width box;
+            anything shorter than the cap is unaffected. */}
         <img
           src={urlFor(value).width(1200).auto("format").url()}
           alt={value.alt || ""}
-          className="w-full object-cover"
+          className="h-auto max-h-[var(--body-img-max)] w-full object-contain"
         />
         {value.caption && (
           <figcaption className="mt-3 text-center text-sm text-black/60">
@@ -76,6 +80,14 @@ const makeComponents = (compact: boolean): PortableTextComponents => ({
   },
 });
 
+// Built once, not per render. These are component types to React: a fresh set
+// on every render makes every block a different component each time, so the
+// whole body unmounts and remounts whenever the sheet re-renders — which threw
+// away the elements the reveal-on-scroll had started watching and left their
+// replacements invisible.
+const COMPONENTS = makeComponents(false);
+const COMPONENTS_COMPACT = makeComponents(true);
+
 export default function ProjectPortableText({
   value,
   compact = false,
@@ -84,5 +96,5 @@ export default function ProjectPortableText({
   compact?: boolean;
 }) {
   if (!value) return null;
-  return <PortableText value={value} components={makeComponents(compact)} />;
+  return <PortableText value={value} components={compact ? COMPONENTS_COMPACT : COMPONENTS} />;
 }

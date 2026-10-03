@@ -17,15 +17,12 @@ const MAX_STAGGER_STEPS = 6;
  *
  * `active` is the sheet being shown. Hiding it rearms everything, so the next
  * project — or the same one reopened — animates in again rather than
- * appearing already in place. `contentKey` changes when new content mounts
- * while shown (the project's data arriving after its title), so the new
- * elements get watched without replaying the ones already in.
+ * appearing already in place. Elements that mount while shown (the project's
+ * data arriving after its title, or anything re-rendered into new nodes) are
+ * picked up as they're added, so nothing is left in its hidden state just
+ * because it wasn't in the DOM when watching began.
  */
-export function useReveal(
-  rootRef: RefObject<HTMLElement | null>,
-  active: boolean,
-  contentKey: unknown
-) {
+export function useReveal(rootRef: RefObject<HTMLElement | null>, active: boolean) {
   // Rearm when the sheet hides. It's fading out by then, so nothing is seen
   // dropping back to its starting state.
   useEffect(() => {
@@ -66,9 +63,26 @@ export function useReveal(
       { rootMargin: ROOT_MARGIN, threshold: 0 }
     );
 
-    root
-      .querySelectorAll<HTMLElement>("[data-reveal]:not(.is-in)")
-      .forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, [active, contentKey, rootRef]);
+    const watch = (el: HTMLElement) => {
+      if (!el.classList.contains("is-in")) io.observe(el);
+    };
+    root.querySelectorAll<HTMLElement>("[data-reveal]").forEach(watch);
+
+    // Anything added later gets watched too.
+    const mo = new MutationObserver((records) => {
+      for (const r of records) {
+        r.addedNodes.forEach((n) => {
+          if (!(n instanceof HTMLElement)) return;
+          if (n.matches("[data-reveal]")) watch(n);
+          n.querySelectorAll<HTMLElement>("[data-reveal]").forEach(watch);
+        });
+      }
+    });
+    mo.observe(root, { childList: true, subtree: true });
+
+    return () => {
+      io.disconnect();
+      mo.disconnect();
+    };
+  }, [active, rootRef]);
 }
