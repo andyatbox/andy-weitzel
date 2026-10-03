@@ -31,6 +31,11 @@ const PROJECT_CLOSE_MS = 500;
 // Landing fade-out (must match the transition duration in AgentIntro). The
 // gallery intro only starts once this has finished.
 const SPLASH_FADE = 400;
+// How long after the teaser reaches full screen the bottom teaser strip comes
+// up: past the project sheet's own fade-in (ProjectModal waits 340ms, then
+// fades over 320ms) plus a beat, so opening a project reads as the project
+// first and the way onward second.
+const STRIP_DELAY_MS = 1200;
 
 /** Resolves once the image is loaded (or errored) — used to warm the cache. */
 function preloadImage(url: string) {
@@ -50,6 +55,8 @@ export default function PortfolioApp() {
   // True only once the teaser has finished growing to full screen; gates the
   // project sheet's reveal.
   const [expandDone, setExpandDone] = useState(false);
+  // The bottom teaser strip, held back until STRIP_DELAY_MS after expandDone.
+  const [stripUp, setStripUp] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
   const [intro, setIntro] = useState(false);
@@ -555,6 +562,18 @@ export default function PortfolioApp() {
     // otherwise the canvas would never get its imperative size.
   }, [opened, viewport, anim, ready]);
 
+  // Only the first arrival waits: prev/next and the strip's own thumbs change
+  // the project without touching `opened` or `expandDone`, so the strip stays
+  // up while browsing. Closing drops it straight away.
+  useEffect(() => {
+    if (!opened || !expandDone) {
+      setStripUp(false);
+      return;
+    }
+    const t = setTimeout(() => setStripUp(true), STRIP_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [opened, expandDone]);
+
   if (!viewport || !portfolios) return null;
 
   const { width, height, isLandscape } = viewport;
@@ -773,7 +792,7 @@ export default function PortfolioApp() {
       <ProjectStrip
         items={items}
         activeIndex={activeProject ? items.findIndex((it) => it.slug === activeProject.slug) : -1}
-        visible={opened && items.length > 1}
+        visible={opened && stripUp && items.length > 1}
         isLandscape={isLandscape}
         width={width}
         height={height}

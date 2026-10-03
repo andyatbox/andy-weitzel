@@ -321,7 +321,7 @@ export default function ProjectStrip({
     <nav
       aria-label="Projects in this portfolio"
       aria-hidden={!visible}
-      className="fixed inset-x-0 bottom-0 z-50 select-none bg-white/70 backdrop-blur-xl transition-opacity duration-300"
+      className="fixed inset-x-0 bottom-0 z-50 select-none backdrop-blur-2xl transition-opacity duration-300"
       style={{
         opacity: visible ? 1 : 0,
         pointerEvents: visible ? "auto" : "none",
