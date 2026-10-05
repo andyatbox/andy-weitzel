@@ -73,9 +73,13 @@ content is being finished — remove both before public launch.
   coast-then-snap. Trackpad momentum tails are detected as they start and
   absorbed. Moving on to the next item takes intent — a wheel notch (its
   first event is notch-sized; trackpads ramp up from tiny deltas) or ~20% of
-  an item of travel; anything less settles back, and doesn't interrupt a
-  landing in flight. Interrupting landings for stray input once ratcheted the
-  gallery an item per event. Wheel input goes through `engine.input(delta)`, drag release
+  an item of travel; anything less settles back. A fresh nudge doesn't
+  interrupt a landing in flight; a gesture still going after a hesitation
+  resumes 1:1 from where the motion is. Interrupting landings by jumping the
+  target to the landing's item once ratcheted the gallery an item per event.
+  Check changes against the old engine on the full gesture set (taps, notch
+  spins at several rates, swipes, a pause mid-scroll, a push over momentum,
+  reversals) — each fix here has broken a different one of those. Wheel input goes through `engine.input(delta)`, drag release
   through `engine.release(fling)`. It's plain TS with no DOM, so tune it by
   feeding it input on a fake `performance.now()` and checking the
   frame-by-frame speed (it should only fall after its peak), not by eye.

@@ -192,6 +192,9 @@ export class ScrollEngine {
     // accounts for. A delta that grows, turns round, or arrives after a pause
     // is a fresh push.
     if (this.absorbing && now - this.lastInputTime > GESTURE_GAP_MS) this.absorbing = false;
+    // A new push landing on a momentum tail still running: it adds to where
+    // that momentum was taking the scroll.
+    let overMomentum = false;
     if (this.absorbing) {
       if (dir === this.dir && a <= this.lastAbs * 1.15 + 0.5) {
         this.lastAbs = a;
@@ -199,16 +202,27 @@ export class ScrollEngine {
         return;
       }
       this.absorbing = false;
+      overMomentum = true;
     }
     const fresh = now - this.lastInputTime > GESTURE_GAP_MS || dir !== this.dir;
 
-    // Input during a landing. Until it means to move on — the same bar as in
-    // plan(): a wheel notch, or INTENT_TRAVEL of an item — the landing carries
-    // on untouched. Breaking it for every stray event handed the motion to the
+    // A new input during a landing (a fresh tap, or a notch). Until it means
+    // to move on — the same bar as in plan(): a wheel notch, or INTENT_TRAVEL
+    // of an item — the landing carries on untouched. Breaking it for every stray event handed the motion to the
     // chase, which closes on the item far faster than the landing was moving;
     // the next plan read that speed as too fast to stop and carried on a whole
     // item. A slowly-clicked wheel or a trackpad's leftover events walked the
     // gallery on an item at a time that way.
+    // A trackpad gesture still going while a landing runs. Pushed on top of
+    // a momentum tail, it adds to where that momentum was headed. Carried on
+    // after a mere hesitation (a pause long enough to start a landing), it
+    // picks up from where the motion is now, 1:1 under the finger: jumping
+    // the target to the landing's item instead raced the chase ahead and
+    // over-carried, and holding the landing left the scroll stuck.
+    if (this.landing && !fresh && a < NOTCH_PX) {
+      this.target = overMomentum ? this.landing.x1 : this.current;
+      this.landing = null;
+    }
     if (this.landing) {
       if (fresh) this.held = 0;
       // Judged from the first event since this landing began, so each notch
