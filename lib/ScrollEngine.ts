@@ -59,11 +59,23 @@ const GLIDE_SLOPE = 2.4;
 // Landing duration bounds (s).
 const T_MIN = 0.45;
 const T_MAX = 1.2;
-// A gesture that moves at least this share of an item, but not far enough to
-// reach the next one, still goes to the next one. Otherwise a single wheel
-// notch (100px against ~640px items) or a short trackpad push wobbled forward
-// and sprang back to where it started. Below it is treated as jitter.
-const MIN_INTENT = 0.08;
+// When a gesture that doesn't reach the next item still means to go there,
+// rather than being a nudge that should settle back where it was. Either:
+// - it travels INTENT_TRAVEL of an item, counting momentum still to come, or
+// - it's a mouse-wheel notch: its very first event is already NOTCH_PX or
+//   more. A wheel delivers a whole notch at once (~100px, against ~950px
+//   items on a desktop), while a trackpad always ramps up from small deltas —
+//   so a light tap on a trackpad can't pass for one.
+// Distance alone can't separate the two: a slight trackpad tap travels about
+// as far as one notch, and with a low enough bar for the notch every tap
+// moved on to the next teaser.
+const INTENT_TRAVEL = 0.2;
+const NOTCH_PX = 40;
+// Below this speed (items per second) a landing that can't glide to rest in
+// T_MIN just settles there; only above it does it carry on to the next item.
+// Without a floor the rule fired on any motion at all — 22px/s over the last
+// 3px counted as "too fast to stop" — and sent the gallery a whole item on.
+const CARRY_MIN_SPEED = 1.5;
 
 /**
  * Landing curve: quintic in normalised time s (0..1) from x0 — moving at v0
@@ -135,6 +147,12 @@ export class ScrollEngine {
   private dir = 0;
   private absorbing = false; // momentum tail being swallowed after planning
   private gestureStart = 0; // where the scroll was headed when this gesture began
+  private gestureFirst = 0; // size of the gesture's first wheel event (0 for drags)
+  // Wheel input that arrived during a landing without meaning to move on
+  // (see input()), and the size of its first event.
+  private held = 0;
+  private heldFirst = 0;
+  private heldFresh = false; // the held input began a new gesture
 
   setLayout(spacing: number, count: number) {
     if (spacing > 0 && this.spacing > 0 && spacing !== this.spacing) {
@@ -182,15 +200,50 @@ export class ScrollEngine {
       }
       this.absorbing = false;
     }
-    // New input during a landing: hand back to the chase, heading for where
-    // the landing was going plus this push.
+    const fresh = now - this.lastInputTime > GESTURE_GAP_MS || dir !== this.dir;
+
+    // Input during a landing. Until it means to move on — the same bar as in
+    // plan(): a wheel notch, or INTENT_TRAVEL of an item — the landing carries
+    // on untouched. Breaking it for every stray event handed the motion to the
+    // chase, which closes on the item far faster than the landing was moving;
+    // the next plan read that speed as too fast to stop and carried on a whole
+    // item. A slowly-clicked wheel or a trackpad's leftover events walked the
+    // gallery on an item at a time that way.
     if (this.landing) {
-      this.target = this.landing.x1;
+      if (fresh) this.held = 0;
+      // Judged from the first event since this landing began, so each notch
+      // of a spinning wheel counts — not just the first of the gesture.
+      if (this.held === 0) {
+        this.heldFirst = a;
+        this.heldFresh = fresh;
+      }
+      this.held += delta;
+      this.dir = dir;
+      this.lastAbs = a;
+      this.lastInputTime = now;
+      if (Math.abs(this.held) < INTENT_TRAVEL * this.spacing && this.heldFirst < NOTCH_PX) return;
+      // It means it: hand back to the chase, heading for where the landing
+      // was going plus this input. A new gesture starts from that item; one
+      // that's still going (a wheel spun steadily) keeps its own start, so
+      // its notches add up as one scroll rather than an item apiece.
+      const from = this.landing.x1;
       this.landing = null;
+      if (this.heldFresh) {
+        this.gestureStart = from;
+        this.gestureFirst = this.heldFirst;
+      }
+      this.target = from + this.held;
+      this.held = 0;
+      this.peak = a;
+      this.decayRun = 0;
+      this.ratios = [];
+      this.needsLanding = true;
+      return;
     }
 
-    if (now - this.lastInputTime > GESTURE_GAP_MS || dir !== this.dir) {
+    if (fresh) {
       this.gestureStart = this.target;
+      this.gestureFirst = a;
       this.peak = 0;
       this.decayRun = 0;
       this.ratios = [];
@@ -239,6 +292,7 @@ export class ScrollEngine {
     this.lastInputTime = performance.now();
     if (held) {
       this.gestureStart = this.landing ? this.landing.x1 : this.target;
+      this.gestureFirst = 0;
       if (this.landing) this.target = this.current;
       this.landing = null;
       this.absorbing = false;
@@ -266,6 +320,7 @@ export class ScrollEngine {
    */
   private plan(projected: number, snap: boolean) {
     this.needsLanding = false;
+    this.held = 0;
     const sp = this.spacing;
     if (sp <= 0) return;
     const t0 = this.lastUpdate || performance.now();
@@ -281,12 +336,18 @@ export class ScrollEngine {
     let x1: number;
     if (snap) {
       let idx = Math.round(projected / sp + dir * FORWARD_BIAS);
-      // Deliberate but short: on to the neighbouring item rather than back.
       const from = Math.round(this.gestureStart / sp);
       const moved = projected - this.gestureStart;
-      if (idx === from && Math.abs(moved) > MIN_INTENT * sp) idx = from + Math.sign(moved);
-      // Never land behind a scroll that's still moving forward.
-      if (dir !== 0 && Math.sign(idx * sp - x0) === -dir) {
+      const meant =
+        Math.abs(moved) >= INTENT_TRAVEL * sp || this.gestureFirst >= NOTCH_PX;
+      // Deliberate but short: on to the neighbouring item rather than back.
+      if (idx === from && meant && Math.abs(moved) > 0.5) idx = from + Math.sign(moved);
+      // Once it's moving on, never land behind a scroll that's still moving
+      // forward. A nudge that isn't moving on settles back to where it
+      // started instead — this rule used to apply to it too, and since any
+      // input has carried the scroll a few px past its item by the time the
+      // landing is planned, every touch counted as a move to the next one.
+      if (idx !== from && dir !== 0 && Math.sign(idx * sp - x0) === -dir) {
         idx = dir > 0 ? Math.floor(x0 / sp) + 1 : Math.ceil(x0 / sp) - 1;
       }
       x1 = idx * sp;
@@ -308,11 +369,13 @@ export class ScrollEngine {
       const target = x1 + step * dir * sp;
       const D = Math.abs(target - x0);
       const toward = dir !== 0 && Math.sign(target - x0) === dir;
-      if (toward && (GLIDE_SLOPE * D) / v <= T_MAX) {
+      // Too fast to stop here, so go further — but only when it's really
+      // moving. Slow enough, a short T_MIN settle stops it gently anyway.
+      const longest = (GLIDE_SLOPE * D) / Math.max(v, 1e-6);
+      if (toward && longest < T_MIN && v > CARRY_MIN_SPEED * sp && step < 3) continue;
+      if (toward && longest >= T_MIN && longest <= T_MAX) {
         // A glide: the speed alone carries it there. Take the longest clean
         // curve, keeping the deceleration it already had.
-        const longest = (GLIDE_SLOPE * D) / v;
-        if (longest < T_MIN) continue; // too fast to stop here: go further
         for (const a of [a0, 0]) {
           for (let T = longest; T >= T_MIN && !best; T *= 0.92) {
             const L = makeLanding(x0, target, v0, a, T, t0);
@@ -322,8 +385,9 @@ export class ScrollEngine {
         }
       } else {
         // Too slow to glide there (a nudge carried to the next item), at
-        // rest, or moving away: a settle that speeds up and eases in, timed
-        // by distance. Nothing to carry over — it isn't slowing to a stop.
+        // rest, moving away, or nearly there and barely moving: a settle that
+        // eases in, timed by distance. Nothing to carry over — it isn't
+        // slowing to a stop.
         const T = Math.min(T_MAX, Math.max(T_MIN, 0.5 + (D / sp) * 0.4));
         best = makeLanding(x0, target, v0, 0, T, t0);
       }

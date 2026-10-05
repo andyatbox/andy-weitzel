@@ -27,6 +27,110 @@ interface MenuProps {
   onOpenInfo: (kind: "resume" | "contact") => void;
   // Hovering the logo or the four pills toggles the post-process effect.
   onInfoHover: (active: boolean) => void;
+  // A quick, clean tap/click on the logo: back to the landing.
+  onHome: () => void;
+  // Press-and-hold on the logo: the post-process effect for as long as it's
+  // held (the only way to reach it on touch, which has no hover).
+  onLogoHold: (held: boolean) => void;
+}
+
+// Logo gestures: held this long it's a hold, not a tap; moved this far it's
+// a drag (which scrolls the gallery, as anywhere else on the page).
+const LOGO_HOLD_MS = 350;
+const LOGO_MOVE_PX = 8;
+
+/**
+ * The logo, as a button that tells a tap from a hold or a drag. Only a quick,
+ * clean tap/click goes home; holding plays the effect until release (and the
+ * release then does nothing); a drag cancels both.
+ */
+function LogoButton({
+  width,
+  hoverFx,
+  onHome,
+  onHold,
+}: {
+  width: number | string;
+  hoverFx: { onMouseEnter: () => void; onMouseLeave: () => void };
+  onHome: () => void;
+  onHold: (held: boolean) => void;
+}) {
+  const g = useRef<{
+    id: number;
+    x: number;
+    y: number;
+    timer: ReturnType<typeof setTimeout> | undefined;
+    held: boolean;
+    void: boolean;
+  } | null>(null);
+
+  const end = (go: boolean) => {
+    const s = g.current;
+    if (!s) return;
+    g.current = null;
+    clearTimeout(s.timer);
+    if (s.held) onHold(false);
+    else if (go && !s.void) onHome();
+  };
+  // Unmounting mid-hold (the menu going away) mustn't leave the effect on.
+  const onHoldRef = useRef(onHold);
+  onHoldRef.current = onHold;
+  useEffect(
+    () => () => {
+      const s = g.current;
+      if (!s) return;
+      clearTimeout(s.timer);
+      if (s.held) onHoldRef.current(false);
+    },
+    []
+  );
+
+  return (
+    <button
+      type="button"
+      aria-label="Andy Weitzel — back to the start"
+      className="inline-block touch-manipulation select-none"
+      style={{ WebkitTouchCallout: "none" }}
+      {...hoverFx}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        end(false);
+        const s = { id: e.pointerId, x: e.clientX, y: e.clientY, timer: undefined as ReturnType<typeof setTimeout> | undefined, held: false, void: false };
+        s.timer = setTimeout(() => {
+          s.held = true;
+          onHold(true);
+        }, LOGO_HOLD_MS);
+        g.current = s;
+      }}
+      onPointerMove={(e) => {
+        const s = g.current;
+        if (!s || e.pointerId !== s.id || s.void) return;
+        if (Math.hypot(e.clientX - s.x, e.clientY - s.y) > LOGO_MOVE_PX) {
+          s.void = true;
+          clearTimeout(s.timer);
+          if (s.held) {
+            s.held = false;
+            onHold(false);
+          }
+        }
+      }}
+      onPointerUp={(e) => {
+        if (g.current?.id === e.pointerId) end(true);
+      }}
+      onPointerCancel={() => end(false)}
+      onPointerLeave={(e) => {
+        // A mouse pressed on the logo and dragged off it isn't a click.
+        if (e.pointerType === "mouse") end(false);
+      }}
+      // Keyboard activation only (detail 0) — pointer clicks are decided above.
+      onClick={(e) => {
+        if (e.detail === 0) onHome();
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <LogoMark className="h-auto shrink-0 text-black" style={{ width }} />
+    </button>
+  );
 }
 
 // Half-window (in item steps) used to size the row pitch and how many copies
@@ -134,6 +238,8 @@ export default function Menu({
   onStepItem,
   onOpenInfo,
   onInfoHover,
+  onHome,
+  onLogoHold,
 }: MenuProps) {
   const hoverFx = {
     onMouseEnter: () => onInfoHover(true),
@@ -375,12 +481,7 @@ export default function Menu({
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2.5">
         <div style={introAnim(0)}>
-          <span className="inline-block" {...hoverFx}>
-            <LogoMark
-              className="h-auto shrink-0 text-black"
-              style={{ width: logoWidth }}
-            />
-          </span>
+          <LogoButton width={logoWidth} hoverFx={hoverFx} onHome={onHome} onHold={onLogoHold} />
         </div>
         <div className="leading-tight tracking-tighter" style={introAnim(160)}>
           <NameWheel className="font-medium" style={{ fontSize: nameSize }} />

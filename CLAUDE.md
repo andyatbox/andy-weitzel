@@ -47,7 +47,9 @@ content is being finished — remove both before public launch.
   gallery is fully at rest. There are no titles in the canvas — project names
   live only in the DOM menu.
 - **`components/Menu.tsx`** — the DOM nav/menu panel (logo, name, role
-  ticker, portfolio pills, infinite scrolling item list). Landscape and
+  ticker, portfolio pills, infinite scrolling item list). A quick tap/click
+  on the logo returns to the landing (`returnToLanding` in PortfolioApp);
+  holding it plays the psychedelic effect instead, and a drag does neither. Landscape and
   portrait are materially different layouts, not just a CSS breakpoint.
 - **`components/PsychedelicFX.tsx`** — a *real* second WebGL context that
   samples the rendered gallery canvas as a texture and distorts it (swirl,
@@ -69,7 +71,11 @@ content is being finished — remove both before public launch.
   when input ends it plans a single quintic landing curve from the current
   position *and speed* to the chosen item (zero speed on arrival) — no
   coast-then-snap. Trackpad momentum tails are detected as they start and
-  absorbed. Wheel input goes through `engine.input(delta)`, drag release
+  absorbed. Moving on to the next item takes intent — a wheel notch (its
+  first event is notch-sized; trackpads ramp up from tiny deltas) or ~20% of
+  an item of travel; anything less settles back, and doesn't interrupt a
+  landing in flight. Interrupting landings for stray input once ratcheted the
+  gallery an item per event. Wheel input goes through `engine.input(delta)`, drag release
   through `engine.release(fling)`. It's plain TS with no DOM, so tune it by
   feeding it input on a fake `performance.now()` and checking the
   frame-by-frame speed (it should only fall after its peak), not by eye.

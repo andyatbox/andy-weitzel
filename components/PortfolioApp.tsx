@@ -74,6 +74,8 @@ export default function PortfolioApp() {
   // having their modal open).
   const [infoModal, setInfoModal] = useState<InfoKind | null>(null);
   const [infoHover, setInfoHover] = useState(false);
+  // Press-and-hold on the menu logo: the effect, on any device.
+  const [logoHeld, setLogoHeld] = useState(false);
   // The gallery's WebGL canvas, sampled by the post-process distortion.
   const [galleryCanvas, setGalleryCanvas] = useState<HTMLCanvasElement | null>(null);
   const introFired = useRef(false);
@@ -191,6 +193,28 @@ export default function PortfolioApp() {
     },
     [engine, splashHiding]
   );
+
+  // The menu logo, tapped: back to the landing. The landing fades in over the
+  // gallery; once it covers everything, the gallery's own intro is rearmed
+  // out of sight, so choosing a portfolio again plays it as on first arrival.
+  const returnToLanding = useCallback(() => {
+    if (openedRef.current || switchingRef.current || splashOpenRef.current) return;
+    splashOpenRef.current = true;
+    setInfoHover(false);
+    setLogoHeld(false);
+    // Mount hidden, then fade in on the next frame (AgentIntro's opacity
+    // transition needs a frame at 0 to run from).
+    setSplashHiding(true);
+    setStarted(false);
+    clearTimeout(splashTimer.current);
+    requestAnimationFrame(() => requestAnimationFrame(() => setSplashHiding(false)));
+    splashTimer.current = setTimeout(() => {
+      introFired.current = false;
+      setIntro(false);
+      setSlideIn(false);
+      setIntroLogo(true);
+    }, SPLASH_FADE + 50);
+  }, []);
 
   const selectItem = useCallback(
     (index: number) => {
@@ -580,7 +604,7 @@ export default function PortfolioApp() {
 
   // Post-process shows while hovering the pills (non-touch only) or with a
   // modal open.
-  const halftone = (!isTouch && infoHover) || infoModal !== null;
+  const halftone = (!isTouch && infoHover) || infoModal !== null || logoHeld;
 
   // Menu docks in its corner; the layout effect slides it off via transform.
   const menuRect = isLandscape
@@ -638,6 +662,8 @@ export default function PortfolioApp() {
             onStepItem={stepItem}
             onOpenInfo={openInfo}
             onInfoHover={setInfoHover}
+            onHome={returnToLanding}
+            onLogoHold={setLogoHeld}
           />
         </div>
 
