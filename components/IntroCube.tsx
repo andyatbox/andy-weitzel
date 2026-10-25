@@ -29,7 +29,8 @@ const MAX_VIDEO_HEIGHT = 1080;
 const MAX_VIDEO_HEIGHT_TOUCH = 720;
 const MAX_TEXTURE_FPS = 30;
 // How far the goo can swell past the pillowed shape, in half-widths. Shared
-// by the shader and the frame clamp, which has to allow for the worst case.
+// by the shader and the idle wander, which sizes itself off the shape's
+// widest possible reach.
 const MORPH = 0.55;
 
 /**
@@ -435,22 +436,17 @@ function Cube({ speaking, texture }: { speaking: boolean; texture: THREE.VideoTe
     g.rotation.y += d * (0.26 + 0.07 * Math.sin(t * 0.23 + 1.1));
     g.rotation.z += d * 0.045;
 
-    // Travel: pointer target plus its own drift, clamped so the shape can
-    // never leave the frame. The extent is the corner radius plus the most
-    // the goo can swell it, measured at the shape's *nearest* point: R3F's
-    // `viewport` describes z=0, and the near side sits closer to the camera
-    // where the visible area is smaller.
+    // Travel: the shape rides the cursor. The pointer's -1..1 maps straight
+    // onto the visible world at z=0 — which is exactly what R3F's `viewport`
+    // measures — so the centre lands under the cursor rather than inside a
+    // shrunken safe box. Deliberately unclamped: at the edges of the window
+    // the shape hangs off the frame, and that's the point.
     const half = (scale * (Math.sqrt(3) + MORPH)) / 2;
-    const cam = state.camera as THREE.PerspectiveCamera;
-    const nearDist = Math.max(0.1, cam.position.z - half);
-    const halfH = Math.tan((cam.fov * Math.PI) / 360) * nearDist;
-    const halfW = halfH * (viewport.width / viewport.height);
-    const limitX = Math.max(0, halfW - half);
-    const limitY = Math.max(0, halfH - half);
-    const wantX = target.current.x * limitX + drift(t, 0.11, 0.27, 0.53) * limitX * 0.25;
-    const wantY = target.current.y * limitY + drift(t, 0.09, 0.21, 0.44) * limitY * 0.25;
-    g.position.x += (THREE.MathUtils.clamp(wantX, -limitX, limitX) - g.position.x) * d * 1.8;
-    g.position.y += (THREE.MathUtils.clamp(wantY, -limitY, limitY) - g.position.y) * d * 1.8;
+    const wander = half * 0.18; // idle wobble, so a still pointer isn't a dead shape
+    const wantX = (target.current.x * viewport.width) / 2 + drift(t, 0.11, 0.27, 0.53) * wander;
+    const wantY = (target.current.y * viewport.height) / 2 + drift(t, 0.09, 0.21, 0.44) * wander;
+    g.position.x += (wantX - g.position.x) * d * 3;
+    g.position.y += (wantY - g.position.y) * d * 3;
 
     speak.current += ((speaking ? 1 : 0) - speak.current) * d * 3;
     phase.current += d * (1 + 0.6 * speak.current);
@@ -750,8 +746,9 @@ function Dome({ texture }: { texture: THREE.VideoTexture | null }) {
  * turning behind the copy until a portfolio is chosen, in front of the same
  * reel wrapped round a half-dome (see Dome). Full-bleed — it owns the
  * viewport rather than sitting in a box, which is what the blob it replaced
- * did. On desktop the cursor swirls the shape, as it does the gallery
- * teasers, and turns the dome.
+ * did. On desktop the shape rides the cursor — off the edge of the frame at
+ * the edges of the window — and the cursor also swirls it, as it does the
+ * gallery teasers, and turns the dome.
  */
 function IntroCube({
   speaking,
