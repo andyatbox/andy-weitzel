@@ -51,6 +51,49 @@ const VIDEO_STILL_MS = 220;
 const ITEM_GAP_LANDSCAPE = 36;
 const ITEM_GAP_PORTRAIT = 6;
 
+// Teaser corner radius, in plane px. A plane is sized in canvas px, so this is
+// screen px before the camera's zoom scales it down.
+const CORNER_RADIUS = 28;
+// Resolution ceiling for the corner mask. A soft curve is the only thing in
+// it, so a half-size mask filtered back up is indistinguishable from an exact
+// one — and the filtering is what makes the edge smooth.
+const CORNER_MASK_MAX = 1024;
+
+/**
+ * A rounded-rectangle alpha mask, sized to the plane's aspect.
+ *
+ * The corners can't come from the geometry — a plane is a flat 32x32 grid and
+ * every one of its vertices is already spoken for by the bend and the swirl —
+ * and they can't come from a fragment shader without giving up the additive
+ * channel trick that keeps images from darkening. A mask in UV space costs one
+ * small texture, applies to all four layers alike, and rides along with every
+ * distortion the vertices do, so the corners stay rounded while the plane
+ * bends.
+ *
+ * Built per aspect rather than square-and-stretched: a square mask on a
+ * 16:9 plane gives elliptical corners.
+ */
+function makeCornerMask(w: number, h: number): THREE.CanvasTexture | null {
+  if (typeof document === "undefined" || w <= 0 || h <= 0) return null;
+  const scale = Math.min(1, CORNER_MASK_MAX / Math.max(w, h));
+  const cw = Math.max(2, Math.round(w * scale));
+  const ch = Math.max(2, Math.round(h * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const r = Math.min(CORNER_RADIUS * scale, cw / 2, ch / 2);
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.roundRect(0, 0, cw, ch, r);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  // A mask, not a picture: no sRGB decode, or the ramp at the curve shifts.
+  tex.colorSpace = THREE.NoColorSpace;
+  return tex;
+}
+
 // How far off-centre (in item steps) a plane can be and still touch the
 // screen. At CAMERA_ZOOM the visible half-extent is spacing/(2·zoom) and a
 // plane's own half-extent is spacing/2, so anything past ~1.2 steps is fully
@@ -221,6 +264,13 @@ function GalleryScene({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length]);
+  // One mask for every plane: they all share a size.
+  const cornerMask = useMemo(
+    () => makeCornerMask(planeWidth, planeHeight),
+    [planeWidth, planeHeight]
+  );
+  useEffect(() => () => void cornerMask?.dispose(), [cornerMask]);
+
   const basePositions = useMemo(
     () =>
       geoms.mains[0]
@@ -638,6 +688,7 @@ function GalleryScene({
             geomRed={geoms.reds[i]}
             geomBlue={geoms.blues[i]}
             texture={texAt(i)}
+            mask={cornerMask}
             width={planeWidth}
             height={planeHeight}
             backingRef={(el) => void (backingRefs.current[i] = el)}
@@ -665,6 +716,7 @@ function ChannelPlanes({
   geomRed,
   geomBlue,
   texture,
+  mask,
   width,
   height,
   backingRef,
@@ -676,6 +728,8 @@ function ChannelPlanes({
   geomRed: THREE.PlaneGeometry;
   geomBlue: THREE.PlaneGeometry;
   texture: THREE.Texture | undefined;
+  /** Rounded-corner alpha mask, shared by all four layers. */
+  mask: THREE.Texture | null;
   width: number;
   height: number;
   backingRef: (el: THREE.Mesh | null) => void;
@@ -687,8 +741,8 @@ function ChannelPlanes({
 
   if (!texture) {
     return (
-      <mesh ref={backingRef} geometry={geomMain} scale={scale}>
-        <meshBasicMaterial color="#1a1a1a" />
+      <mesh ref={backingRef} geometry={geomMain} scale={scale} renderOrder={-1}>
+        <meshBasicMaterial color="#1a1a1a" alphaMap={mask} transparent />
       </mesh>
     );
   }
@@ -711,6 +765,7 @@ function ChannelPlanes({
     <meshBasicMaterial
       key={kind}
       map={texture}
+      alphaMap={mask}
       color={color}
       toneMapped={false}
       transparent
@@ -722,11 +777,19 @@ function ChannelPlanes({
 
   return (
     <>
-      {/* Opaque black backing: the additive channels sum on top of this, so
-          the image renders correctly even though the canvas clears to a light
-          gray. Shares the main (twisted) geometry so it tracks the planes. */}
-      <mesh ref={backingRef} geometry={geomMain} scale={scale}>
-        <meshBasicMaterial color="#000000" toneMapped={false} />
+      {/* Black backing: the additive channels sum on top of this, so the
+          image renders correctly even though the canvas clears to a light
+          gray. Shares the main (twisted) geometry so it tracks the planes.
+          The corner mask makes it transparent rather than opaque, which moves
+          it into the sorted transparent pass — hence the explicit renderOrder,
+          so it can never be drawn after the channels it has to sit behind. */}
+      <mesh ref={backingRef} geometry={geomMain} scale={scale} renderOrder={-1}>
+        <meshBasicMaterial
+          color="#000000"
+          alphaMap={mask}
+          transparent
+          toneMapped={false}
+        />
       </mesh>
       <mesh ref={redRef} geometry={geomRed} scale={scale} renderOrder={0}>
         {channel("#ff0000")}
