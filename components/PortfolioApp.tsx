@@ -5,6 +5,7 @@ import { CATEGORY, LABELS, PORTFOLIO_IDS, usePortfolios, type PortfolioId } from
 import { ScrollEngine } from "@/lib/ScrollEngine";
 import { useViewport } from "@/lib/useViewport";
 import Menu from "./Menu";
+import { railWidth } from "@/lib/rail";
 import Gallery from "./Gallery";
 import ProjectModal, { type ActiveProject } from "./project/ProjectModal";
 import ProjectStrip from "./project/ProjectStrip";
@@ -524,8 +525,11 @@ export default function PortfolioApp() {
   useLayoutEffect(() => {
     if (!viewport) return;
     const { width, height, isLandscape } = viewport;
+    // The rail is a quarter of the window plus whatever inset a wide display
+    // earns, so the canvas is simply what's left — not a fixed three quarters.
+    const rail = railWidth(width, isLandscape);
     const closed = isLandscape
-      ? { left: width * 0.25, top: 0, width: width * 0.75, height }
+      ? { left: rail, top: 0, width: width - rail, height }
       : { left: 0, top: 0, width, height: height * 0.6 };
     const open = { left: 0, top: 0, width, height };
     const target = opened ? 1 : 0;
@@ -607,8 +611,10 @@ export default function PortfolioApp() {
   const halftone = (!isTouch && infoHover) || infoModal !== null || logoHeld;
 
   // Menu docks in its corner; the layout effect slides it off via transform.
+  const rail = railWidth(width, isLandscape);
+  const canvasW = width - rail;
   const menuRect = isLandscape
-    ? { left: 0, top: 0, width: width * 0.25, height }
+    ? { left: 0, top: 0, width: rail, height }
     : { left: 0, top: height * 0.6, width, height: height * 0.4 };
 
   // Intro: push the whole panel off by the canvas size so the menu parks at the
@@ -616,10 +622,10 @@ export default function PortfolioApp() {
   const slideTransform = slideIn
     ? "none"
     : isLandscape
-      ? `translateX(${width * 0.75}px)`
+      ? `translateX(${canvasW}px)`
       : `translateY(${-(height * 0.6)}px)`;
   const heroRect: React.CSSProperties = isLandscape
-    ? { left: 0, top: 0, width: width * 0.75, height }
+    ? { left: 0, top: 0, width: canvasW, height }
     : { left: 0, top: height * 0.4, width, height: height * 0.6 };
 
   return (

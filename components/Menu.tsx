@@ -11,6 +11,7 @@ import type { ScrollEngine } from "@/lib/ScrollEngine";
 import type { ViewportState } from "@/lib/useViewport";
 import LogoMark from "./LogoMark";
 import NameWheel from "./NameWheel";
+import { railMetrics } from "@/lib/rail";
 
 interface MenuProps {
   portfolio: PortfolioId;
@@ -248,7 +249,12 @@ export default function Menu({
   const isXL = viewport.width >= 1200;
   const isLarge = viewport.width >= 992;
   const isMedium = viewport.width >= 768;
-  const fontSize = isXL ? 21 : isLarge ? 18 : isMedium ? 16 : 14;
+  // Wide displays: the rail is wider than a flat quarter and spends the extra
+  // on a left inset, so everything anchored to its left edge moves in by the
+  // same amount and the content column keeps its width. See lib/rail.
+  const rail = railMetrics(viewport.width, isLandscape);
+  const railPad = (isLarge ? 28 : 20) + rail.inset;
+  const fontSize = (isXL ? 21 : isLarge ? 18 : isMedium ? 16 : 14) + rail.fontBump;
   const baseRow = Math.round(fontSize * 1.95);
   // Vertical breathing space added to each row's measured (possibly wrapped)
   // height in portrait, so multi-line items still separate cleanly.
@@ -293,13 +299,13 @@ export default function Menu({
   // Active item (p=0) sits at the region center in landscape, panel center in
   // portrait.
   const listTop = isLandscape ? `${centerY}px` : "50%";
-  const listPadLeft = isLandscape ? (isLarge ? 28 : 20) : 8;
+  const listPadLeft = isLandscape ? railPad : 8;
   // Prev/next chevrons dock at the list's right edge, centred on the active
   // row. Rows reserve `chevGutter` on that side so a wrapped title can never
   // run underneath them — in portrait the list column is only half the panel,
   // so there isn't room to let the two overlap.
   const chevSize = isLarge ? 34 : 30;
-  const chevInset = isLandscape ? (isLarge ? 14 : 10) : 6;
+  const chevInset = isLandscape ? (isLarge ? 14 : 10) + rail.chevInset : 6;
   const chevGutter = chevSize + chevInset + 8;
 
   const n = items.length;
@@ -610,7 +616,15 @@ export default function Menu({
           </div>
           {stepper}
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
-            <div ref={brandBoxRef} className="pointer-events-auto bg-white p-5 min-[992px]:p-7">{brand}</div>
+            {/* paddingLeft matches the list's, so the brand block and the
+                titles below it share one left edge at every width. */}
+            <div
+              ref={brandBoxRef}
+              className="pointer-events-auto bg-white p-5 min-[992px]:p-7"
+              style={{ paddingLeft: railPad }}
+            >
+              {brand}
+            </div>
           </div>
         </div>
       ) : (
