@@ -12,14 +12,18 @@ const makeComponents = (compact: boolean): PortableTextComponents => ({
     image: ({ value }) => (
       <figure data-reveal className={compact ? "" : "my-10"}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {/* Never taller than 90% of the window (--body-img-max, set on the
-            sheet from the measured height — vh is wrong on mobile). A tall
-            image scales down whole and centres in the full-width box;
-            anything shorter than the cap is unaffected. */}
+        {/* Capped two ways and stretched by neither. `fit("max")` is load
+            bearing: a bare width() upscales on the CDN, so a 290px asset came
+            back as a genuine 1200px file and nothing downstream could tell it
+            had been blown up. With it, the request is a ceiling and a small
+            asset arrives at its own size. Then max-w-full keeps a large image
+            inside the column while leaving a small one alone, and
+            --body-img-max (the measured window height — vh is wrong on
+            mobile) keeps a tall one on screen. */}
         <img
-          src={urlFor(value).width(1200).auto("format").url()}
+          src={urlFor(value).width(1200).fit("max").auto("format").url()}
           alt={value.alt || ""}
-          className="h-auto max-h-[var(--body-img-max)] w-full object-contain"
+          className="mx-auto h-auto max-h-[var(--body-img-max)] max-w-full"
         />
         {value.caption && (
           <figcaption className="mt-3 text-center text-sm text-black/60">
