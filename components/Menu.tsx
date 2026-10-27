@@ -135,8 +135,8 @@ function LogoButton({
 }
 
 // Half-window (in item steps) used to size the row pitch and how many copies
-// of the list to render. The top/bottom dissolve is now done with static white
-// gradient overlays, not per-item opacity changes.
+// of the list to render. Landscape's top/bottom dissolve is a mask on the list
+// layer, not per-item opacity; portrait has no dissolve at all.
 const FADE_ZERO = 6;
 
 /** Nearest-wrap placement of node `k` against continuous scroll `progress`. */
@@ -435,7 +435,13 @@ export default function Menu({
         // of visible items), independent of the variable pixel spacing.
         const stepP = place(k, progress, total);
         el.style.transform = `translateY(calc(-50% + ${pPx}px))`;
-        el.style.pointerEvents = Math.abs(stepP) > FADE_ZERO * 0.7 ? "none" : "auto";
+        // Landscape dissolves rows toward the panel edges, so the ones the
+        // mask has taken away must stop answering clicks. Portrait shows
+        // every row inside the panel at full strength and lets the column's
+        // own overflow crop the rest, which already takes them out of hit
+        // testing — gating there would have left live-looking rows dead.
+        el.style.pointerEvents =
+          isLandscape && Math.abs(stepP) > FADE_ZERO * 0.7 ? "none" : "auto";
         const title = titleRefs.current[k];
         if (title) title.dataset.on = String(Math.abs(stepP) < 0.5);
       }
@@ -565,19 +571,25 @@ export default function Menu({
   // top fade). 0.42 of the region leaves a centered clear band.
   const fadeH = Math.round(regionHeight * 0.42);
 
-  // The list dissolves at its top and bottom through a mask on the list layer
-  // itself, not white gradients laid over it. Overlays only hid rows while
-  // everything above them was opaque: the Resumé/Contact bar fades in with
-  // opacity on the intro and on every portfolio switch, and for those frames
-  // the unmasked rows beneath it showed through at full strength. A mask
-  // travels with the list, so no sibling's animation can undo it. Stops
+  // Landscape dissolves the list at its top and bottom through a mask on the
+  // list layer itself, not white gradients laid over it. Overlays only hid
+  // rows while everything above them was opaque: the Resumé/Contact bar fades
+  // in with opacity on the intro and on every portfolio switch, and for those
+  // frames the unmasked rows beneath it showed through at full strength. A
+  // mask travels with the list, so no sibling's animation can undo it. Stops
   // mirror the old white → white/80 → clear ramp (mask alpha 0 → 0.2 → 1),
-  // and landscape also clips to nothing under the brand box.
+  // and it also clips to nothing under the brand box.
+  //
+  // Portrait gets no mask at all. Its panel is two fifths of the window, so a
+  // ramp that read as an airy dissolve down the full-height rail was instead
+  // greying out most of the list — only three titles either side of the
+  // active one survived it. Every row inside the panel now reads at full
+  // strength and the column's own overflow crops the rest.
   const T = regionTop;
   const B = regionBottom;
   const listMask = isLandscape
     ? `linear-gradient(to bottom, transparent ${T}px, rgba(0,0,0,0.2) ${T + fadeH / 2}px, #000 ${T + fadeH}px, #000 calc(100% - ${B + fadeH}px), rgba(0,0,0,0.2) calc(100% - ${B + fadeH / 2}px), transparent calc(100% - ${B}px))`
-    : "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 21%, #000 42%, #000 58%, rgba(0,0,0,0.2) 79%, transparent 100%)";
+    : undefined;
   const listLayer: React.CSSProperties = {
     ...listFade,
     WebkitMaskImage: listMask,
