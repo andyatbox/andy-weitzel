@@ -27,10 +27,11 @@ interface Beat {
 function buildBeats(): Beat[] {
   const line = (text: string): Beat => ({ parts: [{ text }] });
   return [
-    // The script's one rest: let the greeting land before the question.
-    { ...line("Hello."), pause: true },
+    // One sentence, typed in two breaths: the script's one rest lets the
+    // greeting land before the question runs on after it, on the same line.
+    { ...line("Hello!"), pause: true },
     // The question closes the script; the portfolio buttons below answer it.
-    line("Which portfolio would you like to start with?"),
+    line("Which portfolio would you like to begin with?"),
   ];
 }
 
@@ -146,8 +147,6 @@ export default function AgentIntro({
     link?: PortfolioId;
     start: number;
     beat: number;
-    /** Join that follows a resting beat: drawn as a spaced line break. */
-    brk?: boolean;
   }[] = [];
   let script = "";
   const stops = useRef<number[]>([]);
@@ -161,12 +160,7 @@ export default function AgentIntro({
         // The join has to be a segment of its own, not just appended to the
         // script — anything not in a segment never gets rendered, and the
         // sentences ran together.
-        segments.push({
-          text: " ",
-          start: script.length,
-          beat: bi,
-          brk: !!beats[bi - 1].pause,
-        });
+        segments.push({ text: " ", start: script.length, beat: bi });
         script += " ";
       }
       for (const part of b.parts) {
@@ -225,7 +219,7 @@ export default function AgentIntro({
       // counts: sentences otherwise run straight on, and settling at every
       // full stop would settle the scene while characters were still appearing.
       // The lead is capped to a share of the run's own length, or a short one
-      // ("Hello.") would be entirely inside the lead and never animate at all.
+      // ("Hello!") would be entirely inside the lead and never animate at all.
       const si = pauses.current.findIndex((e) => e >= n);
       const end = si === -1 ? script.length : pauses.current[si];
       const from = si <= 0 ? 0 : pauses.current[si - 1] + 1;
@@ -457,11 +451,6 @@ export default function AgentIntro({
                         >
                           {vis}
                         </span>
-                      ) : seg.brk ? (
-                        // The greeting stands apart from the pitch that follows.
-                        // Drawn from the first frame, like the transparent tail,
-                        // so the gap never pops in and reflows the paragraph.
-                        <span className="block" style={{ height: "0.5em" }} />
                       ) : (
                         vis
                       )}
@@ -479,7 +468,7 @@ export default function AgentIntro({
                       {/* Transparent tail: holds the paragraph at its finished
                           size and final wrapping from the first frame, so the
                           composition never reflows as sentences accumulate. */}
-                      {!seg.brk && <span className="opacity-0">{rest}</span>}
+                      <span className="opacity-0">{rest}</span>
                     </span>
                   );
                 })}
