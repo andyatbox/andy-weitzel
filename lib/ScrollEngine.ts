@@ -20,7 +20,10 @@
  * it: the longest one that still runs only forward, so it eases out with a
  * long soft tail instead of braking. If even the shortest clean curve would
  * be too fast for the distance, it carries on to the next item — a hard flick
- * travels further rather than braking hard.
+ * travels further rather than braking hard. It may only do that while that
+ * next item is still within reach of where the input actually pointed:
+ * momentum rounds, it doesn't invent travel. Unchecked, that one rule turned
+ * most one-item scrolls into two.
  *
  * "The input ends" means different things per device:
  * - Mouse wheel: no notch for LANDING_IDLE_MS.
@@ -50,8 +53,9 @@ const DECAY_RUN = 5;
 const DECAY_FROM_PEAK = 0.75;
 const MIN_PEAK = 6;
 // Lean toward the next item when the scroll is headed between two: rounds
-// forward once it's 30% of the way past an item rather than 50%.
-const FORWARD_BIAS = 0.2;
+// forward once it's 40% of the way past an item rather than 50%. It used to
+// be twice this, which on its own turned a scroll of 1.3 items into 2.
+const FORWARD_BIAS = 0.1;
 // Gliding landings leave at up to this many times their average speed — the
 // longest, softest ease-out that still never runs backwards (a curve that
 // leaves at more than 2.5× overshoots and comes back).
@@ -76,6 +80,13 @@ const NOTCH_PX = 40;
 // Without a floor the rule fired on any motion at all — 22px/s over the last
 // 3px counted as "too fast to stop" — and sent the gallery a whole item on.
 const CARRY_MIN_SPEED = 1.5;
+// How fast the chase's speed ceiling lifts, per frame at 60fps, after a
+// landing hands back to it (see capChase).
+const CHASE_CAP_GROWTH = 1.12;
+// Floor on a landing's duration (s) when it has to stop where it is rather
+// than run on to the next item. Shorter than T_MIN: a firm stop on the
+// nearest item is better than skipping past it.
+const T_HARD = 0.24;
 
 /**
  * Landing curve: quintic in normalised time s (0..1) from x0 — moving at v0
@@ -124,6 +135,24 @@ function isMonotone(L: Landing) {
   return true;
 }
 
+/**
+ * The longest curve from x0 (at v0, a0) to x1 within [tMin, tMax] that never
+ * runs backwards — the softest ease-out that doesn't sail past the item and
+ * come back. Null when even the shortest one would.
+ */
+function cleanest(
+  x0: number, x1: number, v0: number, a0: number,
+  tMin: number, tMax: number, t0: number
+): Landing | null {
+  for (const a of [a0, 0]) {
+    for (let T = tMax; T >= tMin; T *= 0.92) {
+      const L = makeLanding(x0, x1, v0, a, T, t0);
+      if (isMonotone(L)) return L;
+    }
+  }
+  return null;
+}
+
 export class ScrollEngine {
   target = 0;
   current = 0;
@@ -138,6 +167,7 @@ export class ScrollEngine {
   private lastUpdate = 0;
   private lastDt = 1 / 60;
   private prevSpeed = 0; // px/s one frame earlier, for the hand-over deceleration
+  private chaseCap = Infinity; // px/s ceiling on the chase, after a hand-off
 
   // Current wheel gesture.
   private lastAbs = 0;
@@ -180,6 +210,21 @@ export class ScrollEngine {
     this.landing = null;
     this.needsLanding = false;
     this.absorbing = false;
+    this.chaseCap = Infinity;
+  }
+
+  /**
+   * A landing has just handed back to the chase. The chase closes CHASE of
+   * the remaining gap every frame, which is far faster than the landing was
+   * moving, so the motion lurches — and the next plan reads that lurch as
+   * real speed, decides it's going too fast to stop on the item it chose,
+   * and runs on to the next one. Holding the chase to the speed the motion
+   * actually had, and letting the ceiling lift from there, keeps the
+   * hand-over honest.
+   */
+  private capChase() {
+    const v = this.lastDt > 0 ? Math.abs(this.velocity / this.lastDt) : 0;
+    this.chaseCap = Math.max(v, this.spacing * 0.25);
   }
 
   /** Wheel / trackpad scroll by `delta` px. */
@@ -222,9 +267,20 @@ export class ScrollEngine {
     if (this.landing && !fresh && a < NOTCH_PX) {
       this.target = overMomentum ? this.landing.x1 : this.current;
       this.landing = null;
+      this.capChase();
     }
     if (this.landing) {
-      if (fresh) this.held = 0;
+      // A new gesture during a landing starts from where that landing is
+      // headed — recorded now rather than at the hand-back below, because
+      // the landing may well finish first. Left stale, the next plan
+      // measured this gesture's travel from the *previous* gesture's start,
+      // so a reversal just after a landing read as a short move forward and
+      // snapped back the way it had come.
+      if (fresh) {
+        this.held = 0;
+        this.gestureStart = this.landing.x1;
+        this.gestureFirst = a;
+      }
       // Judged from the first event since this landing began, so each notch
       // of a spinning wheel counts — not just the first of the gesture.
       if (this.held === 0) {
@@ -242,6 +298,7 @@ export class ScrollEngine {
       // its notches add up as one scroll rather than an item apiece.
       const from = this.landing.x1;
       this.landing = null;
+      this.capChase();
       if (this.heldFresh) {
         this.gestureStart = from;
         this.gestureFirst = this.heldFirst;
@@ -256,6 +313,7 @@ export class ScrollEngine {
     }
 
     if (fresh) {
+      this.chaseCap = Infinity;
       this.gestureStart = this.target;
       this.gestureFirst = a;
       this.peak = 0;
@@ -310,6 +368,7 @@ export class ScrollEngine {
       if (this.landing) this.target = this.current;
       this.landing = null;
       this.absorbing = false;
+      this.chaseCap = Infinity;
     } else {
       this.needsLanding = true;
     }
@@ -335,6 +394,7 @@ export class ScrollEngine {
   private plan(projected: number, snap: boolean) {
     this.needsLanding = false;
     this.held = 0;
+    this.chaseCap = Infinity;
     const sp = this.spacing;
     if (sp <= 0) return;
     const t0 = this.lastUpdate || performance.now();
@@ -376,6 +436,9 @@ export class ScrollEngine {
     }
 
     const v = Math.abs(v0);
+    // Rounding may already lean up to half an item past where the input was
+    // headed; momentum may not invent any travel beyond that.
+    const reach = (0.5 + FORWARD_BIAS) * sp;
     let best: Landing | null = null;
     // Momentum-chosen landings may carry on up to three items further when
     // the scroll is too fast to stop cleanly at the first.
@@ -383,29 +446,45 @@ export class ScrollEngine {
       const target = x1 + step * dir * sp;
       const D = Math.abs(target - x0);
       const toward = dir !== 0 && Math.sign(target - x0) === dir;
+      // Running on is only ever an option while the item after this one is
+      // still within reach of where the input pointed. Without that limit,
+      // any scroll moving quickly with a short way left to its item counted
+      // as too fast to stop and took a whole extra item — a one-item scroll
+      // routinely landed two on, which is what made this feel twitchy.
+      const mayCarry =
+        snap &&
+        step < 3 &&
+        (x1 + (step + 1) * dir * sp - projected) * (dir || 1) <= reach;
       // Too fast to stop here, so go further — but only when it's really
-      // moving. Slow enough, a short T_MIN settle stops it gently anyway.
+      // moving. Slow enough, a short settle stops it gently anyway.
       const longest = (GLIDE_SLOPE * D) / Math.max(v, 1e-6);
-      if (toward && longest < T_MIN && v > CARRY_MIN_SPEED * sp && step < 3) continue;
-      if (toward && longest >= T_MIN && longest <= T_MAX) {
+      if (toward && longest < T_MIN && v > CARRY_MIN_SPEED * sp && mayCarry) continue;
+      // When running on isn't allowed, the curve may go below T_MIN: a firm
+      // stop on the nearest item beats skipping to the next one.
+      const floor = mayCarry ? T_MIN : T_HARD;
+      if (toward && longest >= floor && longest <= T_MAX) {
         // A glide: the speed alone carries it there. Take the longest clean
         // curve, keeping the deceleration it already had.
-        for (const a of [a0, 0]) {
-          for (let T = longest; T >= T_MIN && !best; T *= 0.92) {
-            const L = makeLanding(x0, target, v0, a, T, t0);
-            if (isMonotone(L)) best = L;
-          }
-          if (best) break;
-        }
+        best = cleanest(x0, target, v0, a0, floor, longest, t0);
       } else {
         // Too slow to glide there (a nudge carried to the next item), at
         // rest, moving away, or nearly there and barely moving: a settle that
         // eases in, timed by distance. Nothing to carry over — it isn't
         // slowing to a stop.
         const T = Math.min(T_MAX, Math.max(T_MIN, 0.5 + (D / sp) * 0.4));
-        best = makeLanding(x0, target, v0, 0, T, t0);
+        const L = makeLanding(x0, target, v0, 0, T, t0);
+        // That timing assumes there's no real speed to shed. When there is
+        // — a fast scroll that isn't allowed to run on — the curve would
+        // sail past the item and come back, so shorten it until it doesn't.
+        // A settle that runs *against* the motion (a nudge falling back to
+        // where it started) reverses by design and is taken as it is.
+        best =
+          (toward && !isMonotone(L)
+            ? cleanest(x0, target, v0, 0, 0.1, T, t0)
+            : null) ?? L;
       }
     }
+    if (!best) best = cleanest(x0, x1, v0, 0, 0.1, T_MAX, t0);
     if (!best) best = makeLanding(x0, x1, v0, 0, T_MIN, t0);
 
     this.landing = best;
@@ -439,9 +518,14 @@ export class ScrollEngine {
         this.current = landingAt(L, s);
       }
     } else {
-      // Frame-rate independent form of "close CHASE of the gap per frame".
+      // Frame-rate independent form of "close CHASE of the gap per frame",
+      // held under the ceiling a hand-off left behind (see capChase).
       const k = 1 - Math.pow(1 - CHASE, dt * 60);
-      this.current += (this.target - this.current) * k;
+      let step = (this.target - this.current) * k;
+      const cap = this.chaseCap * dt;
+      if (Math.abs(step) > cap) step = Math.sign(step) * cap;
+      this.chaseCap *= Math.pow(CHASE_CAP_GROWTH, dt * 60);
+      this.current += step;
     }
 
     this.prevSpeed = speedBefore;
