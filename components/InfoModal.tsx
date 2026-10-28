@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 export type InfoKind = "resume" | "contact";
 
 const RESUME_FILE = "/Andrew-Weitzel-Resume.pdf";
+const PORTRAIT_FILE = "/andrew-weitzel-portrait.jpg";
 
 // Contact email kept out of the source/markup as base64, decoded at runtime —
 // a light deterrent against scraping bots. (App is client-only, so the plain
@@ -422,13 +423,29 @@ export default function InfoModal({
         <div className={`min-h-0 overflow-y-auto ${isResume ? "p-8 sm:p-12" : "p-8"}`}>
           {isResume ? (
             <>
-              <p className="font-label text-xs uppercase tracking-[0.2em] text-black">
-                Résumé — 2026
-              </p>
-              <h2 className={`mt-2 pr-12 ${NAME}`}>Andrew Weitzel</h2>
-              <p className="mt-3 text-lg font-medium text-black md:text-xl">
-                Creative Director • New York City
-              </p>
+              {/* Portrait beside the title block. The right padding moves
+                  from the heading to the whole row, since the row is now what
+                  runs under the close button. Stacked on a phone: the panel
+                  there is barely 280px of content, and a circle on the left of
+                  it left too little for "Andrew Weitzel" to hold one line. */}
+              <div className="flex flex-col gap-4 pr-12 sm:flex-row sm:items-center sm:gap-6">
+                <img
+                  src={PORTRAIT_FILE}
+                  alt="Andrew Weitzel"
+                  width={512}
+                  height={512}
+                  className="h-24 w-24 shrink-0 rounded-full object-cover sm:h-28 sm:w-28"
+                />
+                <div className="min-w-0">
+                  <p className="font-label text-xs uppercase tracking-[0.2em] text-black">
+                    Résumé — 2026
+                  </p>
+                  <h2 className={`mt-2 ${NAME}`}>Andrew Weitzel</h2>
+                  <p className="mt-3 text-lg font-medium text-black md:text-xl">
+                    Creative Director • New York City
+                  </p>
+                </div>
+              </div>
               <a
                 href={RESUME_FILE}
                 // Desktop honours `download` and saves the file. iOS Safari
