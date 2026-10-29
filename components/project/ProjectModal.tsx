@@ -7,6 +7,7 @@ import { useSmoothScroll } from "@/lib/useSmoothScroll";
 import ProjectPortableText from "./ProjectPortableText";
 import ProjectColumns from "./ProjectColumns";
 import ProjectGallery from "./ProjectGallery";
+import ScrollHint from "./ScrollHint";
 
 export interface ActiveProject {
   slug: string;
@@ -64,6 +65,7 @@ export default function ProjectModal({
   galleryExpandedRef.current = galleryExpanded;
   const [settled, setSettled] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // Eased wheel scrolling for the sheet, standing down while the slider's
   // full-screen view has the wheel. Keyed on `project` because the scroll
@@ -145,6 +147,7 @@ export default function ProjectModal({
           resolves to 100vh, which is the large viewport and so overshoots
           whenever mobile chrome is showing. */}
       <div
+        ref={contentRef}
         className="relative pb-56 text-lg text-black md:text-xl xl:text-[22px]"
         style={{ minHeight: height }}
       >
@@ -193,6 +196,16 @@ export default function ProjectModal({
           </div>
         )}
       </div>
+
+      {/* Down the left edge, in the gutter that keeps copy clear of the nav.
+          Stands down once the reader has scrolled, and on anything narrower
+          than md — there is no gutter to put it in there. */}
+      <ScrollHint
+        scrollRef={scrollRef}
+        contentRef={contentRef}
+        height={height}
+        active={revealed && !galleryExpanded}
+      />
     </div>
   );
 }
