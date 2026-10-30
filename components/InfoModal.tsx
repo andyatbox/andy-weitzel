@@ -6,6 +6,7 @@ export type InfoKind = "resume" | "contact";
 
 const RESUME_FILE = "/Andrew-Weitzel-Resume.pdf";
 const PORTRAIT_FILE = "/andrew-weitzel-portrait.jpg";
+const LINKEDIN_URL = "https://www.linkedin.com/in/andyweitzel/";
 
 // Contact email kept out of the source/markup as base64, decoded at runtime —
 // a light deterrent against scraping bots. (App is client-only, so the plain
@@ -434,7 +435,7 @@ export default function InfoModal({
                   alt="Andrew Weitzel"
                   width={512}
                   height={512}
-                  className="h-24 w-24 shrink-0 rounded-full object-cover sm:h-28 sm:w-28"
+                  className="h-28 w-28 shrink-0 rounded-full object-cover sm:h-36 sm:w-36"
                 />
                 <div className="min-w-0">
                   <p className="font-label text-xs uppercase tracking-[0.2em] text-black">
@@ -446,20 +447,32 @@ export default function InfoModal({
                   </p>
                 </div>
               </div>
-              <a
-                href={RESUME_FILE}
-                // Desktop honours `download` and saves the file. iOS Safari
-                // honours it too, but by opening its download preview in the
-                // *current* tab — `target` is ignored once `download` is set —
-                // which dropped visitors out of the site. So touch devices get
-                // a plain new tab, where the OS viewer offers share/save.
-                download={touch ? undefined : true}
-                target="_blank"
-                rel="noopener"
-                className="mt-6 inline-flex items-center rounded-full border border-black px-5 py-2 font-medium text-black transition-colors hover:bg-black hover:text-white"
-              >
-                Download Resumé
-              </a>
+              {/* Wraps rather than squeezing: at the narrowest the panel
+                  gets, the two pills together are wider than the content box. */}
+              <div className="mt-6 flex flex-wrap gap-3">
+                <a
+                  href={RESUME_FILE}
+                  // Desktop honours `download` and saves the file. iOS Safari
+                  // honours it too, but by opening its download preview in the
+                  // *current* tab — `target` is ignored once `download` is set —
+                  // which dropped visitors out of the site. So touch devices get
+                  // a plain new tab, where the OS viewer offers share/save.
+                  download={touch ? undefined : true}
+                  target="_blank"
+                  rel="noopener"
+                  className="inline-flex items-center rounded-full border border-black px-5 py-2 font-medium text-black transition-colors hover:bg-black hover:text-white"
+                >
+                  Download Resumé
+                </a>
+                <a
+                  href={LINKEDIN_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center rounded-full border border-black px-5 py-2 font-medium text-black transition-colors hover:bg-black hover:text-white"
+                >
+                  LinkedIn
+                </a>
+              </div>
               <ResumeBody />
             </>
           ) : (
@@ -475,6 +488,18 @@ export default function InfoModal({
                     {email}
                   </a>{" "}
                   or rock the fields below. Thanks!
+                </p>
+                <p className="mt-3">
+                  I&rsquo;m also on{" "}
+                  <a
+                    href={LINKEDIN_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium underline underline-offset-2"
+                  >
+                    LinkedIn
+                  </a>
+                  .
                 </p>
               </div>
               <ContactForm />
