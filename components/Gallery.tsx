@@ -46,6 +46,21 @@ const CAMERA_ZOOM = 0.8;
 // moment between two snaps never flickers a video in and out.
 const VIDEO_STILL_MS = 220;
 
+// How wide a teaser runs across the scroll axis, as a multiple of the canvas,
+// before the camera's pull-back. At CAMERA_ZOOM a canvas-sized plane is drawn
+// at 80% of the canvas, so a tenth of the canvas stayed empty on each side —
+// roughly 100px on a desktop rail, against a 29px gap between items along the
+// scroll. Dividing that pull-back back out, less 2.5% for a margin close to
+// the gap itself, fills the width instead; it's also the difference between a
+// boxy teaser and one nearer the landscape shape the picture actually is.
+// Landscape only: in portrait the cross axis is the short one, and filling it
+// would make a teaser more upright rather than less.
+const CROSS_FILL = 0.975 / CAMERA_ZOOM;
+// Ceiling on the aspect that may produce. Teasers are 16:9, and past that the
+// cover crop starts taking the top and bottom instead — the very trade the
+// fill is there to avoid. Only an ultra-wide canvas reaches it.
+const MAX_ASPECT = 16 / 9;
+
 // Gap between items in px, added along the scroll axis. Portrait uses a
 // tighter gap than the wider landscape rail.
 const ITEM_GAP_LANDSCAPE = 36;
@@ -172,8 +187,15 @@ function GalleryScene({
   onIndexChange,
 }: Omit<GalleryProps, "portfolio">) {
   const { size, camera, gl, scene } = useThree();
-  const planeWidth = size.width;
   const planeHeight = size.height;
+  // Only while closed: an open project fills the window exactly, and this is
+  // the resting value React writes to the mesh whenever the canvas resizes —
+  // which it does all through the open transition. Left wider there, it would
+  // fight the per-frame lerp below and crop the open project's sides.
+  const planeWidth =
+    isLandscape && !opened
+      ? Math.min(size.width * CROSS_FILL, size.height * MAX_ASPECT)
+      : size.width;
   const itemGap = isLandscape ? ITEM_GAP_LANDSCAPE : ITEM_GAP_PORTRAIT;
   const spacing = (isLandscape ? planeHeight : planeWidth) + itemGap;
 
@@ -330,8 +352,8 @@ function GalleryScene({
     // the frustum, buffer, plane scales and title from these values directly —
     // that's what makes the planes grow smoothly instead of snapping at the end.
     const animating = anim.animating;
-    const W = anim.w || planeWidth;
-    const H = anim.h || planeHeight;
+    const W = anim.w || size.width;
+    const H = anim.h || size.height;
     if (animating) {
       cam.left = -W / 2;
       cam.right = W / 2;
@@ -348,12 +370,18 @@ function GalleryScene({
         lastBuffer.current.h = dh;
         gl.setSize(W, H);
       }
-      const aspect = W / H;
+      // Across the scroll axis the resting plane is wider than the canvas
+      // (CROSS_FILL) while the open one fills it exactly, so blend the two on
+      // the same `t` that drives the zoom — otherwise the plane would snap to
+      // canvas width the instant a project started opening.
+      const restW = isLandscape ? Math.min(W * CROSS_FILL, H * MAX_ASPECT) : W;
+      const sw = THREE.MathUtils.lerp(restW, W, t);
+      const aspect = sw / H;
       for (let i = 0; i < items.length; i++) {
-        backingRefs.current[i]?.scale.set(W, H, 1);
-        redRefs.current[i]?.scale.set(W, H, 1);
-        greenRefs.current[i]?.scale.set(W, H, 1);
-        blueRefs.current[i]?.scale.set(W, H, 1);
+        backingRefs.current[i]?.scale.set(sw, H, 1);
+        redRefs.current[i]?.scale.set(sw, H, 1);
+        greenRefs.current[i]?.scale.set(sw, H, 1);
+        blueRefs.current[i]?.scale.set(sw, H, 1);
         // Titles are centred on the plane's own origin, so they need no
         // repositioning as it grows — the corner-anchored version did.
         // Re-crop the texture to the live aspect each frame, else the UVs stay
@@ -427,10 +455,10 @@ function GalleryScene({
     const chromaPx = minDim * MOUSE_CHROMA_RATIO;
     // Cursor in world px (orthographic: visible half-extent = size/(2·zoom)).
     const mouseWorldX = mouseOn
-      ? pointer.current.ndcX * (planeWidth / (2 * cam.zoom))
+      ? pointer.current.ndcX * (size.width / (2 * cam.zoom))
       : 0;
     const mouseWorldY = mouseOn
-      ? pointer.current.ndcY * (planeHeight / (2 * cam.zoom))
+      ? pointer.current.ndcY * (size.height / (2 * cam.zoom))
       : 0;
 
     // Infinite wrap + per-plane displacement. Each item is placed at its

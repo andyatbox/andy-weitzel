@@ -45,7 +45,13 @@ content is being finished — remove both before public launch.
   active one swaps in a looping video (`lib/teaserVideo.ts`) or cycles the
   project's first gallery stills (`lib/teaserSlides.ts`), but only while the
   gallery is fully at rest. There are no titles in the canvas — project names
-  live only in the DOM menu.
+  live only in the DOM menu. Across the scroll axis a teaser is drawn
+  `CROSS_FILL` wider than the canvas, cancelling the camera's pull-back so it
+  nearly fills that axis (landscape only, capped at 16:9); a canvas-sized
+  plane left a tenth of the canvas blank on each side. The open/close
+  animation lerps that extra width away, and the resting value React writes
+  drops it as soon as `opened` flips — an open project fills the window
+  exactly.
 - **`components/Menu.tsx`** — the DOM nav/menu panel (logo, name, role
   ticker, portfolio pills, infinite scrolling item list). A quick tap/click
   on the logo returns to the landing (`returnToLanding` in PortfolioApp);
