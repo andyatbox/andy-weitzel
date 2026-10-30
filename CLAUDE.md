@@ -140,6 +140,10 @@ content is being finished — remove both before public launch.
 
 - **Shaders live in JS template literals** — a backtick in a GLSL comment ends
   the string and breaks the build. Write names in comments without them.
+- **Tailwind's `scale-*`/`rotate-*` set the standalone `scale`/`rotate`
+  properties**, not `transform` — so `transition-[...,transform]` doesn't
+  animate them and the element jumps to size. Name the property itself
+  (`transition-[opacity,scale]`).
 - **Don't select SVG attributes by name in CSS** (`[pathLength]`): Chrome
   matched it on first style but missed it when an ancestor class changed
   later, leaving the weather icons undrawn. Select by element or class.

@@ -359,7 +359,7 @@ export default function ProjectStrip({
               aria-label={item.title}
               aria-current={active ? "page" : undefined}
               data-active={active}
-              className="group absolute left-1/2 text-left outline-none"
+              className="group absolute left-1/2 text-left outline-none hover:z-10 focus-visible:z-10"
               style={{ top: PAD_Y, width: h0 * ASPECT, visibility: "hidden" }}
               onClick={() => {
                 if (live.current.justDragged) return;
@@ -376,7 +376,14 @@ export default function ProjectStrip({
             >
               <span
                 ref={(el) => void (frameRefs.current[k] = el)}
-                className="relative block overflow-hidden rounded-[6px] border-2 border-transparent opacity-60 transition-[opacity,border-color] duration-200 group-hover:opacity-100 group-focus-visible:border-black/60 group-data-[active=true]:border-black group-data-[active=true]:opacity-100"
+                // Grows from its bottom edge under the pointer, so the row
+                // keeps its baseline and the extra height goes into the pad
+                // above it — 8% of the tallest thumb is 7px against 10px of
+                // pad, so nothing reaches the clip. The transition names
+                // `scale`, not `transform`: Tailwind's scale-* utilities set
+                // the standalone `scale` property, which a transform
+                // transition doesn't touch (the thumb jumped to size).
+                className="relative block origin-bottom overflow-hidden rounded-[6px] border-2 border-transparent opacity-60 transition-[opacity,border-color,scale] duration-200 group-hover:scale-[1.08] group-hover:opacity-100 group-focus-visible:scale-[1.08] group-focus-visible:border-black/60 group-data-[active=true]:border-black group-data-[active=true]:opacity-100"
                 style={{ height: h0 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
