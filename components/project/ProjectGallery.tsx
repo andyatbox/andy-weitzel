@@ -62,6 +62,21 @@ export default function ProjectGallery({
   const stripRef = useRef<HTMLDivElement>(null);
   const [stripW, setStripW] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
+  // Which slide the pointer is over, for the hint pill. The index rather than
+  // the label, so a video's hint follows its own play/pause state without a
+  // second piece of hover bookkeeping.
+  const [hoverSlide, setHoverSlide] = useState<number | null>(null);
+  const hintRef = useRef<HTMLDivElement>(null);
+  // The last thing the pill said, kept so it fades out reading the same as it
+  // did rather than emptying the instant the pointer leaves.
+  const lastHint = useRef("");
+  // Hint only where there's a pointer to hang it on. Touch gets the behaviour
+  // without the label — there's no hover to show it in.
+  const [finePointer, setFinePointer] = useState(false);
+
+  useEffect(() => {
+    setFinePointer(window.matchMedia?.("(pointer: fine)").matches ?? false);
+  }, []);
 
   // Watch every mounted player (iframes stay mounted across slides so swiping
   // never drops to a black frame): subscribe to each one's "ended" event when
@@ -154,6 +169,18 @@ export default function ProjectGallery({
     : height * MAX_HEIGHT;
   const stripH = Math.round(Math.min((stripW * 9) / 16, cap));
   const ink = fullscreen ? "text-white" : "text-black";
+  // Null when there's nothing to say: a lone still has nowhere to step on to.
+  const hint =
+    hoverSlide === null || dragging.current
+      ? null
+      : images[hoverSlide]._type === "videoSlide"
+        ? playingIndex === hoverSlide
+          ? "Pause"
+          : "Play"
+        : count > 1
+          ? "Next Slide"
+          : null;
+  if (hint) lastHint.current = hint;
 
   // Send play/pause to a player iframe — Vimeo's player protocol or Gumlet's
   // player.js protocol.
@@ -178,6 +205,28 @@ export default function ProjectGallery({
     setCurrent((index + count) % count);
     setDragOffset(0);
     setPlayingIndex(null);
+  };
+
+  // A click on a still steps the slider on; a click on a video plays or
+  // pauses it. Either way a release at the end of a drag isn't a click.
+  const tapped = (i: number) => {
+    if (lastDragAbs.current > 10) return;
+    if (images[i]._type === "videoSlide") toggleVideo(i);
+    else if (count > 1) goTo(current + 1);
+  };
+
+  // Follows the pointer rather than sitting in a corner of the slide: the
+  // media runs most of the window's width, and a label pinned to it would be
+  // nowhere near what the visitor is actually pointing at. Written straight
+  // to the DOM — a hint that re-rendered the slider on every mousemove would
+  // be doing that through nine mounted player iframes.
+  const moveHint = (e: React.MouseEvent) => {
+    const el = hintRef.current;
+    if (el) {
+      // Far enough right to clear the custom cursor's widest ring (the
+      // dashed drag state, 64px across) rather than sitting inside it.
+      el.style.transform = `translate(calc(${e.clientX}px + 46px), calc(${e.clientY}px - 50%))`;
+    }
   };
 
   // The iframe sits under a transparent overlay so swipes reach the slider
@@ -262,7 +311,13 @@ export default function ProjectGallery({
                 {/* Centered, contained media box: 16:9 at the strip height.
                     Clips its own corners so the rounding applies to the image,
                     the iframe and the poster/play overlay alike. */}
-                <div className="relative mx-auto aspect-video h-full max-w-full overflow-hidden rounded-xl">
+                <div
+                  className="relative mx-auto aspect-video h-full max-w-full overflow-hidden rounded-xl"
+                  onMouseEnter={() => setHoverSlide(i)}
+                  onMouseMove={moveHint}
+                  onMouseLeave={() => setHoverSlide(null)}
+                  onClick={() => tapped(i)}
+                >
                 {item._type === "videoSlide" ? (
                   videoSrc ? (
                     <div className="absolute inset-0">
@@ -274,16 +329,15 @@ export default function ProjectGallery({
                         allowFullScreen
                         className="pointer-events-none h-full w-full bg-black"
                       />
+                      {/* Labels the tap target and hides the provider's own
+                          play button; the click itself is handled by the media
+                          box above, which already tells a tap from a swipe. */}
                       <div
                         role="button"
                         aria-label={playingIndex === i ? "Pause video" : "Play video"}
                         className={`absolute inset-0 flex cursor-pointer items-center justify-center outline-none ${
                           playingIndex === i ? "" : "bg-black"
                         }`}
-                        onClick={() => {
-                          if (lastDragAbs.current > 10) return;
-                          toggleVideo(i);
-                        }}
                       >
                         {/* Our own cover until playback starts: the video's
                             poster (fetched via /api/video-poster) over an
@@ -435,6 +489,22 @@ export default function ProjectGallery({
         </button>
       </div>
       </div>
+
+      {/* What a click on the slide will do, riding beside the pointer. */}
+      {finePointer && (
+        <div
+          ref={hintRef}
+          aria-hidden
+          className="pointer-events-none fixed left-0 top-0 z-[70] whitespace-nowrap rounded-full bg-white/85 px-3.5 py-1.5 text-[15px] font-medium text-black shadow-lg backdrop-blur-md"
+          style={{
+            opacity: hint ? 1 : 0,
+            transition: "opacity 0.15s ease",
+            willChange: "transform",
+          }}
+        >
+          {hint ?? lastHint.current}
+        </div>
+      )}
     </div>
   );
 }
