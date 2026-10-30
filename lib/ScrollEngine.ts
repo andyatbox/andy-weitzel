@@ -14,9 +14,10 @@
  * the chase to the landing has no seam at all, not even a change in how hard
  * it's slowing.
  *
- * Where it rests is where the input was headed (plus the trackpad's or
- * fling's remaining momentum), leaning forward to the next item once it's
- * FORWARD_BIAS past halfway. The landing is then the gentlest clean curve to
+ * Where it rests is the item nearest where the input was headed (plus the
+ * trackpad's or fling's remaining momentum) — with one exception: a gesture
+ * deliberate enough to mean it always moves at least one item, however
+ * short. The landing is then the gentlest clean curve to
  * it: the longest one that still runs only forward, so it eases out with a
  * long soft tail instead of braking. If even the shortest clean curve would
  * be too fast for the distance, it carries on to the next item — a hard flick
@@ -52,10 +53,6 @@ const GESTURE_GAP_MS = 160;
 const DECAY_RUN = 5;
 const DECAY_FROM_PEAK = 0.75;
 const MIN_PEAK = 6;
-// Lean toward the next item when the scroll is headed between two: rounds
-// forward once it's 40% of the way past an item rather than 50%. It used to
-// be twice this, which on its own turned a scroll of 1.3 items into 2.
-const FORWARD_BIAS = 0.1;
 // Gliding landings leave at up to this many times their average speed — the
 // longest, softest ease-out that still never runs backwards (a curve that
 // leaves at more than 2.5× overshoots and comes back).
@@ -80,6 +77,11 @@ const NOTCH_PX = 40;
 // Without a floor the rule fired on any motion at all — 22px/s over the last
 // 3px counted as "too fast to stop" — and sent the gallery a whole item on.
 const CARRY_MIN_SPEED = 1.5;
+// How far the scroll may be pulled back on to the item it has already
+// crept past, as a share of an item — counting the ground the curve covers
+// going forward first. Past this it runs on to the next item instead, since
+// what would otherwise happen is a visible rubber band.
+const SETTLE_BACK = 0.25;
 // How fast the chase's speed ceiling lifts, per frame at 60fps, after a
 // landing hands back to it (see capChase).
 const CHASE_CAP_GROWTH = 1.12;
@@ -151,6 +153,24 @@ function cleanest(
     }
   }
   return null;
+}
+
+/** How far a curve runs on past its destination, measured along `dir`. */
+function overrun(L: Landing, dir: number) {
+  let m = 0;
+  for (let i = 0; i <= 32; i++) m = Math.max(m, (landingAt(L, i / 32) - L.x1) * dir);
+  return m;
+}
+
+/**
+ * The curve used when speed alone won't carry the scroll to `x1` — a nudge
+ * on to the next item, a settle back on to this one, or a stop from rest.
+ * Timed by distance; nothing to carry over, since it isn't already slowing
+ * to a stop.
+ */
+function settleCurve(x0: number, x1: number, v0: number, sp: number, t0: number) {
+  const T = Math.min(T_MAX, Math.max(T_MIN, 0.5 + (Math.abs(x1 - x0) / sp) * 0.4));
+  return makeLanding(x0, x1, v0, 0, T, t0);
 }
 
 export class ScrollEngine {
@@ -409,20 +429,27 @@ export class ScrollEngine {
 
     let x1: number;
     if (snap) {
-      let idx = Math.round(projected / sp + dir * FORWARD_BIAS);
+      let idx = Math.round(projected / sp);
       const from = Math.round(this.gestureStart / sp);
       const moved = projected - this.gestureStart;
       const meant =
         Math.abs(moved) >= INTENT_TRAVEL * sp || this.gestureFirst >= NOTCH_PX;
       // Deliberate but short: on to the neighbouring item rather than back.
       if (idx === from && meant && Math.abs(moved) > 0.5) idx = from + Math.sign(moved);
-      // Once it's moving on, never land behind a scroll that's still moving
-      // forward. A nudge that isn't moving on settles back to where it
-      // started instead — this rule used to apply to it too, and since any
-      // input has carried the scroll a few px past its item by the time the
-      // landing is planned, every touch counted as a move to the next one.
-      if (idx !== from && dir !== 0 && Math.sign(idx * sp - x0) === -dir) {
-        idx = dir > 0 ? Math.floor(x0 / sp) + 1 : Math.ceil(x0 / sp) - 1;
+      // The nearest item can be one the chase has already slipped past,
+      // because it keeps closing on the target through the quiet moment that
+      // ends the gesture. Settling back on to it is right as long as it's a
+      // short, soft pull; so measure the curve — how far it sails on before
+      // it comes back — and only when that's more than SETTLE_BACK of an item
+      // give up and run on to the next one. Refusing to land behind at all,
+      // as this used to, pushed every scroll whose chase had crept past its
+      // own item a whole item further; measuring instead is what stopped
+      // ordinary scrolls arriving one teaser late.
+      if (idx !== from && dir !== 0 && (idx * sp - x0) * dir < 0) {
+        const bounce = overrun(settleCurve(x0, idx * sp, v0, sp, t0), dir);
+        if (bounce > SETTLE_BACK * sp) {
+          idx = dir > 0 ? Math.floor(x0 / sp) + 1 : Math.ceil(x0 / sp) - 1;
+        }
       }
       x1 = idx * sp;
     } else {
@@ -438,7 +465,7 @@ export class ScrollEngine {
     const v = Math.abs(v0);
     // Rounding may already lean up to half an item past where the input was
     // headed; momentum may not invent any travel beyond that.
-    const reach = (0.5 + FORWARD_BIAS) * sp;
+    const reach = 0.5 * sp;
     let best: Landing | null = null;
     // Momentum-chosen landings may carry on up to three items further when
     // the scroll is too fast to stop cleanly at the first.
@@ -469,10 +496,9 @@ export class ScrollEngine {
       } else {
         // Too slow to glide there (a nudge carried to the next item), at
         // rest, moving away, or nearly there and barely moving: a settle that
-        // eases in, timed by distance. Nothing to carry over — it isn't
-        // slowing to a stop.
-        const T = Math.min(T_MAX, Math.max(T_MIN, 0.5 + (D / sp) * 0.4));
-        const L = makeLanding(x0, target, v0, 0, T, t0);
+        // eases in, timed by distance.
+        const L = settleCurve(x0, target, v0, sp, t0);
+        const T = L.T;
         // That timing assumes there's no real speed to shed. When there is
         // — a fast scroll that isn't allowed to run on — the curve would
         // sail past the item and come back, so shorten it until it doesn't.

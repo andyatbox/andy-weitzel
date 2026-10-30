@@ -78,6 +78,12 @@ content is being finished — remove both before public launch.
   reach an item the input was actually pointed at, and the chase is held to
   the speed a landing had when it handed back — without either guard the
   engine read its own lurch as speed and sent most one-item scrolls two on.
+  It rests on the item *nearest* where the input pointed — no forward lean —
+  and will settle back on to one the chase has already slipped past, but only
+  while the settle curve's own overshoot keeps that pull inside a quarter of
+  an item (`SETTLE_BACK`). Refusing to land behind at all, which is what it
+  used to do, pushed every scroll whose chase had crept past its item a whole
+  item further.
   A fresh nudge doesn't interrupt a landing in flight; a gesture still
   going after a hesitation resumes 1:1 from where the motion is.
   Interrupting landings by jumping the target to the landing's item once
