@@ -46,25 +46,53 @@ const CAMERA_ZOOM = 0.8;
 // moment between two snaps never flickers a video in and out.
 const VIDEO_STILL_MS = 220;
 
-// How wide a teaser runs across the scroll axis, as a multiple of the canvas,
-// before the camera's pull-back. At CAMERA_ZOOM a canvas-sized plane is drawn
-// at 80% of the canvas, so a tenth of the canvas stayed empty on each side —
-// roughly 100px on a desktop rail, against a 29px gap between items along the
-// scroll. Dividing that pull-back back out, less 2.5% for a margin close to
-// the gap itself, fills the width instead; it's also the difference between a
-// boxy teaser and one nearer the landscape shape the picture actually is.
-// Landscape only: in portrait the cross axis is the short one, and filling it
-// would make a teaser more upright rather than less.
-const CROSS_FILL = 0.975 / CAMERA_ZOOM;
-// Ceiling on the aspect that may produce. Teasers are 16:9, and past that the
-// cover crop starts taking the top and bottom instead — the very trade the
-// fill is there to avoid. Only an ultra-wide canvas reaches it.
-const MAX_ASPECT = 16 / 9;
-
-// Gap between items in px, added along the scroll axis. Portrait uses a
-// tighter gap than the wider landscape rail.
+// Gap between items in world px, added along the scroll axis — and, in
+// landscape, the margin across it as well, so a teaser sits in the same
+// gutter whichever way you measure. Portrait uses a tighter gap than the
+// wider landscape rail.
 const ITEM_GAP_LANDSCAPE = 36;
 const ITEM_GAP_PORTRAIT = 6;
+
+// The shape a landscape teaser is held to. The canvas is three quarters of
+// the window, so unless the display is very wide it comes out close to
+// square — and a teaser that took its full height came out nearly square
+// too, from 16:9 source, cropping the sides to do it. Capping the height
+// against the width keeps the picture landscape whatever the window does.
+const MIN_ASPECT = 1.45;
+// Ceiling on the aspect, for the opposite case. Teasers are 16:9, and past
+// that the cover crop starts taking the top and bottom instead — the very
+// trade MIN_ASPECT is there to avoid. Only an ultra-wide canvas reaches it.
+const MAX_ASPECT = 16 / 9;
+// Floor on a teaser's height as a share of the canvas. Height given up to
+// MIN_ASPECT comes back as more of the previous/next item showing above and
+// below — half of it each — so on a canvas near square the aspect has to
+// stop somewhere short. At the camera's pull-back alone a teaser covers 0.8
+// of the height; this is how far below that it may be pushed.
+const MIN_HEIGHT_FILL = 0.66;
+
+/**
+ * The resting size of a teaser, in world px, for a canvas of `W`x`H`.
+ *
+ * Landscape fills the width the camera actually shows (`W / CAMERA_ZOOM`,
+ * since at the pull-back a canvas-sized plane is drawn at 80% and left a
+ * tenth of the canvas empty on each side) less a gutter, then takes whatever
+ * height that width wants at MIN_ASPECT. Portrait is the canvas: its cross
+ * axis is the short one, and filling it would make a teaser more upright
+ * rather than less.
+ *
+ * Shared by the React props and the open/close lerp so the two agree at rest
+ * — a mismatch there snaps the mesh the instant a transition starts.
+ */
+function restSize(W: number, H: number, isLandscape: boolean) {
+  if (!isLandscape) return { w: W, h: H };
+  const w = Math.min(W / CAMERA_ZOOM - 2 * ITEM_GAP_LANDSCAPE, H * MAX_ASPECT);
+  const h = THREE.MathUtils.clamp(
+    w / MIN_ASPECT,
+    (MIN_HEIGHT_FILL * H) / CAMERA_ZOOM,
+    H
+  );
+  return { w, h };
+}
 
 // Teaser corner radius, in plane px. A plane is sized in canvas px, so this is
 // screen px before the camera's zoom scales it down.
@@ -187,15 +215,16 @@ function GalleryScene({
   onIndexChange,
 }: Omit<GalleryProps, "portfolio">) {
   const { size, camera, gl, scene } = useThree();
-  const planeHeight = size.height;
   // Only while closed: an open project fills the window exactly, and this is
   // the resting value React writes to the mesh whenever the canvas resizes —
-  // which it does all through the open transition. Left wider there, it would
-  // fight the per-frame lerp below and crop the open project's sides.
-  const planeWidth =
+  // which it does all through the open transition. Left at the teaser size
+  // there, it would fight the per-frame lerp below and crop the open project.
+  const rest =
     isLandscape && !opened
-      ? Math.min(size.width * CROSS_FILL, size.height * MAX_ASPECT)
-      : size.width;
+      ? restSize(size.width, size.height, true)
+      : { w: size.width, h: size.height };
+  const planeWidth = rest.w;
+  const planeHeight = rest.h;
   const itemGap = isLandscape ? ITEM_GAP_LANDSCAPE : ITEM_GAP_PORTRAIT;
   const spacing = (isLandscape ? planeHeight : planeWidth) + itemGap;
 
@@ -354,6 +383,14 @@ function GalleryScene({
     const animating = anim.animating;
     const W = anim.w || size.width;
     const H = anim.h || size.height;
+    // A resting teaser is smaller than the canvas on both axes while the open
+    // one fills it exactly, so blend the two on the same `t` that drives the
+    // zoom — otherwise the plane would snap to canvas size the instant a
+    // project started opening. Computed from the live, parent-eased canvas
+    // rather than React's `size`, which lags the resize by a few commits.
+    const liveRest = restSize(W, H, isLandscape);
+    const sw = THREE.MathUtils.lerp(liveRest.w, W, t);
+    const sh = THREE.MathUtils.lerp(liveRest.h, H, t);
     if (animating) {
       cam.left = -W / 2;
       cam.right = W / 2;
@@ -370,18 +407,12 @@ function GalleryScene({
         lastBuffer.current.h = dh;
         gl.setSize(W, H);
       }
-      // Across the scroll axis the resting plane is wider than the canvas
-      // (CROSS_FILL) while the open one fills it exactly, so blend the two on
-      // the same `t` that drives the zoom — otherwise the plane would snap to
-      // canvas width the instant a project started opening.
-      const restW = isLandscape ? Math.min(W * CROSS_FILL, H * MAX_ASPECT) : W;
-      const sw = THREE.MathUtils.lerp(restW, W, t);
-      const aspect = sw / H;
+      const aspect = sw / sh;
       for (let i = 0; i < items.length; i++) {
-        backingRefs.current[i]?.scale.set(sw, H, 1);
-        redRefs.current[i]?.scale.set(sw, H, 1);
-        greenRefs.current[i]?.scale.set(sw, H, 1);
-        blueRefs.current[i]?.scale.set(sw, H, 1);
+        backingRefs.current[i]?.scale.set(sw, sh, 1);
+        redRefs.current[i]?.scale.set(sw, sh, 1);
+        greenRefs.current[i]?.scale.set(sw, sh, 1);
+        blueRefs.current[i]?.scale.set(sw, sh, 1);
         // Titles are centred on the plane's own origin, so they need no
         // repositioning as it grows — the corner-anchored version did.
         // Re-crop the texture to the live aspect each frame, else the UVs stay
@@ -403,7 +434,13 @@ function GalleryScene({
     // centered while filling the screen — and prev/next navigation while open
     // slides the full-screen planes to the new project. The two modes agree at
     // t=0, so the switch is seamless.
-    const axis = isLandscape ? (animating ? H : planeHeight) : animating ? W : planeWidth;
+    const axis = isLandscape
+      ? animating
+        ? sh
+        : planeHeight
+      : animating
+        ? sw
+        : planeWidth;
     let spacingUsed: number;
     let currentUsed: number;
     if (t > 0.0001) {

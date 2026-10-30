@@ -45,13 +45,21 @@ content is being finished — remove both before public launch.
   active one swaps in a looping video (`lib/teaserVideo.ts`) or cycles the
   project's first gallery stills (`lib/teaserSlides.ts`), but only while the
   gallery is fully at rest. There are no titles in the canvas — project names
-  live only in the DOM menu. Across the scroll axis a teaser is drawn
-  `CROSS_FILL` wider than the canvas, cancelling the camera's pull-back so it
-  nearly fills that axis (landscape only, capped at 16:9); a canvas-sized
-  plane left a tenth of the canvas blank on each side. The open/close
-  animation lerps that extra width away, and the resting value React writes
-  drops it as soon as `opened` flips — an open project fills the window
-  exactly.
+  live only in the DOM menu. A teaser's resting size comes from `restSize`:
+  in landscape it fills the width the camera actually shows (a canvas-sized
+  plane is drawn at `CAMERA_ZOOM`, leaving a tenth of the canvas blank each
+  side) less one `ITEM_GAP_LANDSCAPE`, then takes the height that width wants
+  at `MIN_ASPECT` — the canvas is three quarters of the window, so without
+  that cap a full-height teaser came out nearly square from 16:9 source.
+  Height given up that way returns as more of the prev/next item showing,
+  half above and half below, which is what `MIN_HEIGHT_FILL` bounds; on a
+  canvas near square it, not the aspect, is what binds. The gap doubles as
+  the side margin so the gutter reads the same both ways. Portrait is the
+  canvas itself — its cross axis is the short one, and filling it would make
+  a teaser more upright rather than less. The open/close animation lerps
+  `restSize` to the full canvas on both axes, and the resting value React
+  writes drops to the canvas as soon as `opened` flips — an open project
+  fills the window exactly.
 - **`components/Menu.tsx`** — the DOM nav/menu panel (logo, name, role
   ticker, portfolio pills, infinite scrolling item list). A quick tap/click
   on the logo returns to the landing (`returnToLanding` in PortfolioApp);
