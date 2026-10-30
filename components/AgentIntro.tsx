@@ -31,7 +31,7 @@ function buildBeats(): Beat[] {
     // greeting land before the question runs on after it, on the same line.
     { ...line("Hello!"), pause: true },
     // The question closes the script; the portfolio buttons below answer it.
-    line("Which portfolio would you like to begin with?"),
+    line("Which portfolio would you like to start with?"),
   ];
 }
 
