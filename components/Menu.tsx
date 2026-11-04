@@ -152,19 +152,29 @@ function Pill({
   onClick,
   href,
   onHoverChange,
+  size,
   children,
 }: {
   active?: boolean;
   onClick?: () => void;
   href?: string;
   onHoverChange?: (active: boolean) => void;
+  /** Type size in px; padding is derived from it so the pill scales whole. */
+  size: number;
   children: React.ReactNode;
 }) {
-  const cls = `inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors min-[992px]:text-sm min-[1200px]:px-3.5 min-[1200px]:text-base ${
+  const cls = `inline-flex items-center rounded-full border font-medium transition-colors ${
     active
       ? "border-white bg-white text-black"
       : "border-white/30 text-white hover:border-white/70"
   }`;
+  // Driven from `size` rather than breakpoint utilities: the list type beside
+  // these already rides the wide-display ramp (railMetrics.fontBump), and
+  // pills pinned at text-base shrank against it on a very wide rail.
+  const style: React.CSSProperties = {
+    fontSize: size,
+    padding: `${Math.round(size * 0.42)}px ${Math.round(size * 0.95)}px`,
+  };
   const hover = onHoverChange
     ? {
         onMouseEnter: () => onHoverChange(true),
@@ -173,13 +183,13 @@ function Pill({
     : undefined;
   if (href) {
     return (
-      <a href={href} className={cls} {...hover}>
+      <a href={href} className={cls} style={style} {...hover}>
         {children}
       </a>
     );
   }
   return (
-    <button type="button" onClick={onClick} className={cls} {...hover}>
+    <button type="button" onClick={onClick} className={cls} style={style} {...hover}>
       {children}
     </button>
   );
@@ -460,12 +470,15 @@ export default function Menu({
   // Fluid sizes (clamp) scale continuously with the viewport so the brand
   // block stays proportioned instead of jumping at one breakpoint.
   const logoWidth = isLandscape
-    ? isMedium ? "clamp(100px, 9vw, 160px)" : "clamp(72px, 7vw, 120px)"
+    ? isMedium ? "clamp(88px, 7.8vw, 138px)" : "clamp(66px, 6.2vw, 106px)"
     : isMedium ? "clamp(96px, 14vw, 140px)" : "clamp(72px, 15vw, 116px)";
   const nameSize = isLandscape
     ? isXL ? "clamp(30px, 2.6vw, 44px)" : isLarge ? "clamp(24px, 2.4vw, 34px)" : isMedium ? "clamp(20px, 2.1vw, 26px)" : "clamp(17px, 1.8vw, 22px)"
     : isMedium ? "clamp(21px, 3.9vw, 29px)" : "clamp(19px, 4.2vw, 25px)";
   const workSize = isXL ? "15px" : "clamp(11px, 1.05vw, 13px)";
+  // Portfolio / Resumé / Contact pills. Same wide-display bump as the list
+  // type, so the brand block keeps its proportions as the rail grows.
+  const pillSize = (isXL ? 18 : isLarge ? 15 : isMedium ? 13 : 12) + rail.fontBump;
 
   const introAnim = (delay: number): React.CSSProperties => ({
     opacity: intro ? 1 : 0,
@@ -477,10 +490,10 @@ export default function Menu({
   // a divider) in both orientations.
   const links = (
     <div className="flex flex-wrap items-center gap-2">
-      <Pill onClick={() => onOpenInfo("resume")} onHoverChange={onInfoHover}>
+      <Pill onClick={() => onOpenInfo("resume")} onHoverChange={onInfoHover} size={pillSize}>
         Resumé
       </Pill>
-      <Pill onClick={() => onOpenInfo("contact")} onHoverChange={onInfoHover}>
+      <Pill onClick={() => onOpenInfo("contact")} onHoverChange={onInfoHover} size={pillSize}>
         Contact
       </Pill>
     </div>
@@ -511,6 +524,7 @@ export default function Menu({
               active={portfolio === id}
               onClick={() => onSelectPortfolio(id)}
               onHoverChange={onInfoHover}
+              size={pillSize}
             >
               {LABELS[id]}
             </Pill>
@@ -568,17 +582,30 @@ export default function Menu({
   };
   // Landscape: top and bottom fades share this height so the list dissolves
   // symmetrically about its center (the brand box covers everything above the
-  // top fade). 0.42 of the region leaves a centered clear band.
-  const fadeH = Math.round(regionHeight * 0.42);
+  // top fade).
+  //
+  // The ramp holds high for most of its length and only collapses over the
+  // last fifth. A straight ramp through alpha 0.2 at its midpoint — what this
+  // was — left the fourth row out from the active one at 0.16 and the fifth
+  // at 0.08: invisible, on a light page as much as a dark one. These stops
+  // put them near 0.70 and 0.52 while keeping both the gradation and the fade
+  // to nothing at the window edge, where there is no brand box to hide a row
+  // clipped mid-letter.
+  const FADE_SPAN = 0.38; // share of the region each end's dissolve covers
+  const FADE_IN = 0.45; // fraction along the ramp, and the alpha there
+  const FADE_IN_A = 0.8;
+  const FADE_OUT = 0.8;
+  const FADE_OUT_A = 0.5;
+  const fadeH = Math.round(regionHeight * FADE_SPAN);
 
   // Landscape dissolves the list at its top and bottom through a mask on the
   // list layer itself, not white gradients laid over it. Overlays only hid
   // rows while everything above them was opaque: the Resumé/Contact bar fades
   // in with opacity on the intro and on every portfolio switch, and for those
   // frames the unmasked rows beneath it showed through at full strength. A
-  // mask travels with the list, so no sibling's animation can undo it. Stops
-  // mirror the old white → white/80 → clear ramp (mask alpha 0 → 0.2 → 1),
-  // and it also clips to nothing under the brand box.
+  // mask travels with the list, so no sibling's animation can undo it. It
+  // also clips to nothing under the brand box. The stops are the FADE_*
+  // constants above.
   //
   // Portrait gets no mask at all. Its panel is two fifths of the window, so a
   // ramp that read as an airy dissolve down the full-height rail was instead
@@ -588,7 +615,7 @@ export default function Menu({
   const T = regionTop;
   const B = regionBottom;
   const listMask = isLandscape
-    ? `linear-gradient(to bottom, transparent ${T}px, rgba(0,0,0,0.2) ${T + fadeH / 2}px, #000 ${T + fadeH}px, #000 calc(100% - ${B + fadeH}px), rgba(0,0,0,0.2) calc(100% - ${B + fadeH / 2}px), transparent calc(100% - ${B}px))`
+    ? `linear-gradient(to bottom, transparent ${T}px, rgba(0,0,0,${FADE_OUT_A}) ${T + fadeH * (1 - FADE_OUT)}px, rgba(0,0,0,${FADE_IN_A}) ${T + fadeH * (1 - FADE_IN)}px, #000 ${T + fadeH}px, #000 calc(100% - ${B + fadeH}px), rgba(0,0,0,${FADE_IN_A}) calc(100% - ${B + fadeH * (1 - FADE_IN)}px), rgba(0,0,0,${FADE_OUT_A}) calc(100% - ${B + fadeH * (1 - FADE_OUT)}px), transparent calc(100% - ${B}px))`
     : undefined;
   const listLayer: React.CSSProperties = {
     ...listFade,
