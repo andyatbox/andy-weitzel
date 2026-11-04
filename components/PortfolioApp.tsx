@@ -66,7 +66,7 @@ export default function PortfolioApp() {
   // exposed empty area, then the panel slides home.
   const [slideIn, setSlideIn] = useState(false);
   const [introLogo, setIntroLogo] = useState(true);
-  // Splash gate: a full-page white overlay asks which portfolio to open in.
+  // Splash gate: a full-page black overlay asks which portfolio to open in.
   // `started` flips once the choice has been made and the splash has faded,
   // which is what releases the gallery intro below.
   const [started, setStarted] = useState(false);
@@ -630,7 +630,7 @@ export default function PortfolioApp() {
 
   return (
     <main
-      className="relative w-full overflow-hidden bg-[#f8f8f8] text-white"
+      className="relative w-full overflow-hidden bg-[#070707] text-white"
       style={{ height }}
     >
       {/* Hero logo centered in the exposed gap during the intro; the sliding
@@ -677,7 +677,7 @@ export default function PortfolioApp() {
             crossfade passes through gray rather than flashing the dark page. */}
         <div
           ref={galleryRef}
-          className="absolute touch-none overflow-hidden bg-[#f8f8f8]"
+          className="absolute touch-none overflow-hidden bg-[#070707]"
           style={{ opacity: intro ? 1 : 0, transition: "opacity 0.45s ease 60ms" }}
         >
           <div

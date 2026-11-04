@@ -129,7 +129,7 @@ function LogoButton({
       }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <LogoMark className="h-auto shrink-0 text-black" style={{ width }} />
+      <LogoMark className="h-auto shrink-0 text-white" style={{ width }} />
     </button>
   );
 }
@@ -162,8 +162,8 @@ function Pill({
 }) {
   const cls = `inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors min-[992px]:text-sm min-[1200px]:px-3.5 min-[1200px]:text-base ${
     active
-      ? "border-black bg-black text-white"
-      : "border-black/30 text-black hover:border-black/70"
+      ? "border-white bg-white text-black"
+      : "border-white/30 text-white hover:border-white/70"
   }`;
   const hover = onHoverChange
     ? {
@@ -206,7 +206,7 @@ function StepButton({
       // Distinct from the open-project nav's "Previous/Next project", which is
       // the same words for a different action.
       aria-label={dir < 0 ? "Previous teaser" : "Next teaser"}
-      className="flex items-center justify-center rounded-full border border-black/30 text-black transition-colors hover:border-black hover:bg-black hover:text-white"
+      className="flex items-center justify-center rounded-full border border-white/30 text-white transition-colors hover:border-white hover:bg-white hover:text-black"
       style={{ width: size, height: size }}
     >
       <svg
@@ -502,7 +502,7 @@ export default function Menu({
 
       <div className="flex flex-col gap-2" style={introAnim(300)}>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-black/60" style={{ fontSize: workSize }}>
+          <span className="text-white/60" style={{ fontSize: workSize }}>
             Work:
           </span>
           {PORTFOLIO_IDS.map((id) => (
@@ -516,7 +516,7 @@ export default function Menu({
             </Pill>
           ))}
         </div>
-        <div className="mt-1 h-px w-full bg-black/15" />
+        <div className="mt-1 h-px w-full bg-white/15" />
         {links}
       </div>
     </div>
@@ -543,7 +543,7 @@ export default function Menu({
         }}
       >
         <span
-          className="font-index shrink-0 tabular-nums text-black/50"
+          className="font-index shrink-0 tabular-nums text-white/50"
           style={{ width: fontSize * 1.4, fontSize: fontSize * 0.62 }}
         >
           {String(node.item + 1).padStart(2, "0")}
@@ -554,7 +554,7 @@ export default function Menu({
         <span
           ref={(el) => void (titleRefs.current[node.key] = el)}
           data-on={Math.abs(p) < 0.5}
-          className="min-w-0 break-words rounded-[5px] px-2 transition-colors duration-150 data-[on=true]:bg-black data-[on=true]:text-white"
+          className="min-w-0 break-words rounded-[5px] px-2 transition-colors duration-150 data-[on=true]:bg-white data-[on=true]:text-black"
         >
           {items[node.item].title}
         </span>
@@ -617,10 +617,10 @@ export default function Menu({
   );
 
   return (
-    <aside data-menu className="h-full w-full bg-white text-black">
+    <aside data-menu className="h-full w-full bg-black text-white">
       {isLandscape ? (
         // Single column: list fills the whole panel. The brand floats over the
-        // top on an opaque white box (masking the top), and the list runs to
+        // top on an opaque box (masking the top), and the list runs to
         // the bottom edge, dissolving there.
         <div className="relative h-full w-full overflow-hidden">
           <div className="absolute inset-0" style={listLayer}>
@@ -632,7 +632,7 @@ export default function Menu({
                 titles below it share one left edge at every width. */}
             <div
               ref={brandBoxRef}
-              className="pointer-events-auto bg-white p-5 min-[992px]:p-7"
+              className="pointer-events-auto bg-black p-5 min-[992px]:p-7"
               style={{ paddingLeft: railPad }}
             >
               {brand}

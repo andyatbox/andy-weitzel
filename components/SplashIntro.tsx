@@ -42,7 +42,7 @@ const COPY_SIZE = "clamp(15px, 1.5vw, 20px)";
 
 // Shared pill: portfolio picker and the Resumé / Contact links.
 const PILL =
-  "inline-flex shrink-0 items-center rounded-full border border-black px-5 py-2 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white min-[992px]:text-base";
+  "inline-flex shrink-0 items-center rounded-full border border-white px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-white hover:text-black min-[992px]:text-base";
 
 // Splash-only labels. With the descriptions gone the button alone has to say
 // what the portfolio is, so Interactive gets its full name here; the menu and
@@ -53,7 +53,7 @@ const SPLASH_LABELS: Record<PortfolioId, string> = {
 };
 
 /**
- * Full-page white gate shown before the gallery intro. The visitor picks
+ * Full-page black gate shown before the gallery intro. The visitor picks
  * which portfolio to start in; the parent sets that portfolio, fades this
  * out, and only then runs the slide-in reveal. Resumé/Contact are repeated
  * here so they're reachable before the gallery exists.
@@ -130,7 +130,7 @@ export default function SplashIntro({
   return (
     <div
       data-splash
-      className="fixed inset-x-0 top-0 isolate z-[80] w-full overflow-hidden bg-white text-black"
+      className="fixed inset-x-0 top-0 isolate z-[80] w-full overflow-hidden bg-black text-white"
       style={{
         height,
         opacity: hiding ? 0 : 1,
@@ -155,7 +155,7 @@ export default function SplashIntro({
             style={step(0)}
           >
             <LogoMark
-              className="shrink-0 self-end text-black sm:order-last sm:ml-auto sm:self-auto"
+              className="shrink-0 self-end text-white sm:order-last sm:ml-auto sm:self-auto"
               style={{
                 height: isPhone ? PHONE_LOGO_SIZE : LOGO_SIZE,
                 width: "auto",
@@ -170,7 +170,7 @@ export default function SplashIntro({
           </div>
 
           {/* Full-bleed rule dividing the name lockup from the two columns. */}
-          <div className="mt-5 h-px w-full bg-black" style={step(1)} />
+          <div className="mt-5 h-px w-full bg-white" style={step(1)} />
 
           {/* Bio left, picker right; stacked below md. */}
           <div className="mt-6 grid gap-8 px-6 sm:px-10 md:mt-8 md:grid-cols-2 md:gap-14">
@@ -232,7 +232,7 @@ export default function SplashIntro({
               {/* Column-width rule separating the picker from the repeated
                   Resumé / Contact links. */}
               <div
-                className="mt-8 flex flex-wrap items-center gap-3 border-t border-black pt-8"
+                className="mt-8 flex flex-wrap items-center gap-3 border-t border-white pt-8"
                 style={step(5)}
               >
                 <button

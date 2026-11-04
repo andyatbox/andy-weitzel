@@ -120,6 +120,41 @@ content is being finished — remove both before public launch.
   embed to its poster image (Gumlet's poster needs a collection ID that only
   exists in CORS-blocked embed HTML; Vimeo via public oEmbed).
 
+## Theme
+
+The site's **chrome is dark**: a near-black page (`#070707`, a true inversion
+of the off-white it used to be), a black menu rail with white type, and
+white-filled active pills. Two surfaces are deliberately *not* part of that
+and stay as they were:
+
+- **the open project** — `components/project/` plus the back / portfolio /
+  prev-next buttons in `PortfolioApp`, which live there but are gated on
+  `opened`. A light sheet with black type;
+- **`InfoModal`** — the résumé (white sheet, black type) and Contact
+  (no background of its own, white type over the psychedelic effect), which
+  are inverted relative to *each other* and have to flip as a pair or not at
+  all.
+
+The landing gate (`AgentIntro` + `WeatherPanel`, `IntroCube`'s scene clear)
+was already dark and is unchanged. Its `bg-black/45` scrim is what lets the
+sizzle reel read; turning it white washes the reel out to pastel.
+
+Flipping the chrome is a find-and-replace on the Tailwind `*-white` /
+`*-black` utilities plus that hex — but four colours in it are *mechanisms*,
+not theme, and must never be swapped:
+
+- the custom cursor's `#fff` ring and dot (`globals.css`) — under
+  `mix-blend-mode: difference` white is a full inversion and black a no-op,
+  so swapping it makes the cursor disappear;
+- the gallery's `#000000` backing plane — what the additive R/G/B channels
+  sum against, whatever the canvas clears to;
+- the corner-mask canvas fill and `SplashIntro`'s difference-blend triangle,
+  both white as alpha/blend operands;
+- `Menu`'s list `linear-gradient` — a CSS mask, where black/white are alpha.
+
+`body`'s own `color` is the default for anything that sets none, so it tracks
+the chrome (white), not the light panels, which all set their own.
+
 ## Hard rules (violating these has broken things before)
 
 - **Never use `100vh`** for sizing — always `window.innerHeight` via

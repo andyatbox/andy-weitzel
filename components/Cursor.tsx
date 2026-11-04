@@ -22,7 +22,7 @@ const FOLLOW = 0.26;
  * hidden everywhere except over text fields, where the caret is more useful.
  *
  * The ring and dot invert what's under them (mix-blend-mode: difference), so
- * they read on the white menu, the black landing page and over images alike.
+ * they read on the dark menu, the dark landing page and over images alike.
  * The name pill is a separate element because blending it would invert its
  * text too.
  *
@@ -129,7 +129,7 @@ export default function Cursor({ tooltipRef }: { tooltipRef: RefObject<HTMLDivEl
       <div
         ref={tooltipRef}
         aria-hidden
-        className="pointer-events-none fixed left-0 top-0 z-[201] whitespace-nowrap rounded-full bg-white/85 px-3.5 py-1.5 text-[15px] font-medium text-black shadow-lg backdrop-blur-md"
+        className="pointer-events-none fixed left-0 top-0 z-[201] whitespace-nowrap rounded-full bg-black/85 px-3.5 py-1.5 text-[15px] font-medium text-white shadow-lg backdrop-blur-md"
         style={{ opacity: 0, transition: "opacity 0.15s ease", willChange: "transform" }}
       />
     </>

@@ -185,12 +185,12 @@ export default function Gallery({
       // texture (otherwise the buffer may be cleared before it can be sampled).
       gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
       camera={{ position: [0, 0, 500], near: 0.1, far: 1000, zoom: CAMERA_ZOOM }}
-      style={{ background: "#f8f8f8" }}
+      style={{ background: "#070707" }}
       onCreated={({ gl }) => onReady?.(gl.domElement)}
     >
       {/* Canvas (gap) background. Images sit on their own black backing so the
           additive RGB-shift channels still sum correctly; see ChannelPlanes. */}
-      <color attach="background" args={["#f8f8f8"]} />
+      <color attach="background" args={["#070707"]} />
       <GalleryScene
         key={portfolio}
         items={items}
@@ -807,7 +807,7 @@ function ChannelPlanes({
   if (!texture) {
     return (
       <mesh ref={backingRef} geometry={geomMain} scale={scale} renderOrder={-1}>
-        <meshBasicMaterial color="#1a1a1a" alphaMap={mask} transparent />
+        <meshBasicMaterial color="#e5e5e5" alphaMap={mask} transparent />
       </mesh>
     );
   }
@@ -843,8 +843,10 @@ function ChannelPlanes({
   return (
     <>
       {/* Black backing: the additive channels sum on top of this, so the
-          image renders correctly even though the canvas clears to a light
-          gray. Shares the main (twisted) geometry so it tracks the planes.
+          image renders correctly whatever the canvas clears to — this stays
+          black on a dark page as it did on a light one, because it is what
+          the channels sum against, not a theme colour. Shares the main
+          (twisted) geometry so it tracks the planes.
           The corner mask makes it transparent rather than opaque, which moves
           it into the sorted transparent pass — hence the explicit renderOrder,
           so it can never be drawn after the channels it has to sit behind. */}

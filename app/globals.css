@@ -32,7 +32,7 @@ body {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
-  background: #f8f8f8;
+  background: #070707;
   color: #ffffff;
   font-family: "New Spirit", Helvetica, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -113,8 +113,10 @@ html.has-cursor [contenteditable="true"] {
   top: 0;
   z-index: 200;
   pointer-events: none;
-  /* Inverts whatever is underneath: black over the white menu, white over the
-     black landing, a negative lens over images. */
+  /* Inverts whatever is underneath: white over the dark menu and the dark
+     landing, a negative lens over images. The ring and dot stay #fff whatever
+     the theme — under `difference`, white is a full inversion and black is a
+     no-op, so these are the blend's operand, not a colour. */
   mix-blend-mode: difference;
   opacity: 0;
   transition: opacity 0.25s;
