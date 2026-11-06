@@ -14,10 +14,11 @@ export interface TeaserSlides {
 }
 
 /**
- * Cycles a teaser through its project's gallery stills: the thumbnail first,
- * then every still it has, holding SLIDE_MS on each and looping. Only the
- * active item loads anything, and it drops straight back to the thumbnail the
- * moment it stops being active.
+ * Cycles a teaser through its project's gallery stills, holding SLIDE_MS on
+ * each and looping. The thumbnail is not one of the frames — it is what an
+ * inactive teaser shows, and what this one shows only until the first still
+ * decodes. Only the active item loads anything, and it drops straight back to
+ * the thumbnail the moment it stops being active.
  *
  * Stills are published as they decode rather than in one batch at the end: a
  * project can carry twenty, and waiting for the last one would leave the
@@ -31,7 +32,7 @@ export function useTeaserSlides(
   enabled: boolean
 ): TeaserSlides {
   const [textures, setTextures] = useState<THREE.Texture[]>([]);
-  // 0 is the thumbnail; 1..n index into `textures`.
+  // Indexes `textures` directly.
   const [frame, setFrame] = useState(0);
   const loaded = useRef<THREE.Texture[]>([]);
   const count = useRef(0);
@@ -92,15 +93,20 @@ export function useTeaserSlides(
       return;
     }
     const id = setInterval(() => {
-      // Nothing decoded yet: hold the thumbnail rather than dividing by one.
+      // Nothing decoded yet: there is nothing to advance to.
       if (count.current === 0) {
         setFrame(0);
         return;
       }
-      setFrame((f) => (f + 1) % (count.current + 1));
+      setFrame((f) => (f + 1) % count.current);
     }, SLIDE_MS);
     return () => clearInterval(id);
   }, [enabled, urls]);
 
-  return { texture: frame > 0 ? textures[frame - 1] ?? null : null };
+  // The modulo guards the frame where `frame` is still pointing past a run
+  // that has just been emptied (a portfolio switch) — null there means the
+  // thumbnail, which is what an inactive teaser shows anyway.
+  return {
+    texture: textures.length ? textures[frame % textures.length] ?? null : null,
+  };
 }
