@@ -200,6 +200,15 @@ the chrome (white), not the light panels, which all set their own.
   MSE blob as a black frame through WebGL and must use native HLS instead.
   Chrome answers `"maybe"` to the HLS mime type despite being unable to play
   it, so `canPlayType` can never be the first branch in that decision.
+- **A transparent source renders as a black teaser.** The gallery sums
+  additively-blended R/G/B planes over the opaque black backing, so wherever
+  an image is transparent the channels add nothing and the backing is what
+  shows — NoHo B.I.D.'s first still is black artwork on a transparent ground
+  and came out solid black. Painting the backing white is not the fix: the
+  channels sum *on top of* it and every teaser clips to flat white (measured:
+  centre pixel 255,255,255). `overWhite` in `lib/textures.ts` puts the ground
+  under the artwork before the texture reaches the GPU instead, for both
+  thumbnails and cycled stills.
 - **Swapping a map between an image and a `VideoTexture` needs the material
   rebuilt.** three picks the sRGB decode with a shader define
   (`DECODE_VIDEO_TEXTURE`) baked in at program-compile time; changing `map` on

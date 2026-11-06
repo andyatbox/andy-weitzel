@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
+import { overWhite } from "./textures";
+
 // How long each frame holds. No transition — it's a hard cut between stills.
 const SLIDE_MS = 800;
 
@@ -62,7 +64,9 @@ export function useTeaserSlides(
           }
           t.colorSpace = THREE.SRGBColorSpace;
           t.anisotropy = 4;
-          slots[i] = t;
+          // A still with transparency would otherwise show the gallery's
+          // black backing wherever it is see-through.
+          slots[i] = overWhite(t);
           publish();
         },
         undefined,
