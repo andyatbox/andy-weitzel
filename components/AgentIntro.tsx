@@ -50,15 +50,19 @@ const TALK_GRACE_MS = 110;
 const LEAD_OUT_MS = 380;
 
 const NAME_SIZE = "clamp(22px, 2.5vw, 34px)";
-// Floor on the shrink-to-fit below; past this the copy is too small to read
-// and letting the page scroll is the better answer.
-const MIN_CAP_FIT = 0.6;
+// Floor on the shrink-to-fit below. The gate does not scroll, so this is the
+// point past which it would rather clip than go on shrinking — low enough
+// that no realistic window reaches it, since everything in the block scales
+// together and there is far less to fit than when only the copy did.
+const MIN_CAP_FIT = 0.45;
 const CAP_RATIO = 0.717;
 
+// Shape only. Both pills take their size from the shrink-to-fit below, in
+// `em` padding so a pill keeps its proportions at any of them.
 const PILL =
-  "inline-flex shrink-0 items-center rounded-full border-2 border-white px-5 py-2.5 text-lg font-medium text-white transition-colors hover:bg-white hover:text-black min-[992px]:px-8 min-[992px]:py-3 min-[992px]:text-[22px]";
+  "inline-flex shrink-0 items-center rounded-full border-2 border-white font-medium text-white transition-colors hover:bg-white hover:text-black";
 const PILL_QUIET =
-  "inline-flex shrink-0 items-center rounded-full border border-white/30 px-5 py-2 text-base font-medium text-white/70 transition-colors hover:border-white hover:bg-white hover:text-black";
+  "inline-flex shrink-0 items-center rounded-full border border-white/30 font-medium text-white/70 transition-colors hover:border-white hover:bg-white hover:text-black";
 
 const SPLASH_LABELS: Record<PortfolioId, string> = {
   ...LABELS,
@@ -297,12 +301,12 @@ export default function AgentIntro({
     );
   }, [typed, script, width, hasPanel]);
 
-  // Both rows ease in with the first character rather than waiting for the
-  // sentence that offers them. The script is no longer skippable, so holding
-  // the links back would keep the way out of the landing hidden for its whole
-  // run — and a visitor who already knows where they're going shouldn't have
-  // to sit through an introduction to leave.
-  const showLinks = typed > 0;
+  // Both rows wait for the question to finish typing, then ease in under it.
+  // They answer it, so arriving with the first character had them offering an
+  // answer to something half-asked; the run is short enough that waiting
+  // costs little. Their space is reserved from the first frame either way —
+  // they fade rather than appear, so nothing below them moves.
+  const showLinks = !!script && typed >= script.length;
 
   const rowIn = (shown: boolean): React.CSSProperties => ({
     opacity: shown ? 1 : 0,
@@ -326,8 +330,8 @@ export default function AgentIntro({
   // the same height from the first frame rather than growing as it types. The
   // panel scales by the same factor, so the two shrink as one.
   const [capFit, setCapFit] = useState(1);
-  // Start from the full size again whenever the box or the copy changes, so
-  // the loop below only ever has to shrink.
+  // A new box or new copy starts from the ideal size again, so a resize that
+  // opens up room jumps straight back to it instead of climbing in steps.
   useEffect(() => setCapFit(1), [script, width, height]);
   useEffect(() => {
     const box = mainRef.current;
@@ -339,17 +343,39 @@ export default function AgentIntro({
       parseFloat(pad.paddingTop) -
       parseFloat(pad.paddingBottom);
     const used = col.scrollHeight;
-    if (avail <= 0 || used <= 0 || used <= avail) return;
-    // Scale the *current* size by how much it overshot, and repeat until it
-    // fits. Solving it in one pass assumes height falls off linearly with font
+    if (avail <= 0 || used <= 0) return;
+
+    // Solving this in one pass assumes height falls off linearly with font
     // size, which it doesn't — the copy re-wraps into fewer lines as it
-    // shrinks, so a single ratio left it still overlapping on short windows.
-    const next = Math.max(MIN_CAP_FIT, capFit * (avail / used) * 0.985);
-    if (next < capFit - 0.004) setCapFit(next);
-  }, [script, width, height, capFit, hasPanel]);
+    // shrinks — so it's a loop: step, re-measure, step again.
+    //
+    // It steps both ways. The reset above only fires on a resize, while the
+    // block now arrives in pieces inside one layout — the panel lands, the
+    // fonts settle, the buttons fade in — and a shrink-only loop would read
+    // the tallest moment of that arrival as the final one and never give the
+    // room back. Growing needs a band, or "doesn't fit" and "has room" would
+    // hand the size to each other forever: it only reaches for a larger size
+    // with real slack to spend, and stops anywhere inside the band.
+    const next =
+      used > avail
+        ? Math.max(MIN_CAP_FIT, capFit * (avail / used) * 0.985)
+        : capFit < 1 && used < avail * 0.93
+          ? Math.min(1, capFit * 1.08)
+          : capFit;
+    if (Math.abs(next - capFit) > 0.004) setCapFit(next);
+  }, [script, width, height, capFit, hasPanel, typed]);
 
   const capSize = `calc(${capBase} * ${capFit.toFixed(3)})`;
   const panelSize = `calc(${isPhone ? "clamp(20px, 5.6vw, 24px)" : "clamp(22px, 2.3vw, 36px)"} * ${capFit.toFixed(3)})`;
+  // The answer rows are part of the measured block now, so they take the same
+  // factor as the copy: the whole gate shrinks as one thing and there is never
+  // a size where the type fits but the buttons don't.
+  const pillSize = `calc(${isPhone ? "clamp(15px, 4.4vw, 18px)" : "clamp(17px, 1.6vw, 22px)"} * ${capFit.toFixed(3)})`;
+  const quietSize = `calc(${isPhone ? "clamp(13px, 3.6vw, 15px)" : "clamp(14px, 1.15vw, 16px)"} * ${capFit.toFixed(3)})`;
+  // Spacing inside the block is set against the headline rather than in fixed
+  // px, so the parts keep their relationship to each other as it scales.
+  const gapRows = `calc(${capSize} * 0.62)`;
+  const gapQuiet = `calc(${capSize} * 0.3)`;
 
   return (
     <div
@@ -375,10 +401,10 @@ export default function AgentIntro({
         className="pointer-events-none absolute inset-0 z-[5] bg-black/45"
       />
 
-      {/* Short viewports scroll rather than clip; auto margins on the middle
-          row keep it centred without pushing the top out of reach once the
-          content overflows (justify-center would). */}
-      <div className="relative z-10 flex h-full w-full flex-col overflow-y-auto overscroll-contain">
+      {/* The gate never scrolls. Everything below the header is one block
+          that measures itself and shrinks to the room it has (see `capFit`),
+          so there is nothing to scroll to. */}
+      <div className="relative z-10 flex h-full w-full flex-col overflow-hidden">
         {/* Wordmark left, monogram right, across the top. */}
         <header className="flex shrink-0 items-start justify-between px-6 pt-6 sm:px-10 sm:pt-8">
           {/* Nudged down to sit on the logo's baseline. The wheel's box is
@@ -403,11 +429,11 @@ export default function AgentIntro({
         {/* Captions ride over the cube. */}
         <main
           ref={mainRef}
-          className="relative flex min-h-0 flex-1 items-center justify-center px-6 py-10 sm:px-10"
+          className="relative flex min-h-0 flex-1 items-center justify-center px-6 py-6 sm:px-10 sm:py-8"
         >
           <div ref={colRef} className="mx-auto w-full max-w-3xl">
             {greeting && hasPanel && (
-              <div className="mb-8 md:mb-12">
+              <div style={{ marginBottom: gapRows }}>
                 <WeatherPanel
                   place={greeting.place}
                   weather={greeting.weather}
@@ -474,42 +500,58 @@ export default function AgentIntro({
                 })}
               </span>
             </p>
+
+            {/* The answer sits with the question. These two rows used to be a
+                footer pinned to the bottom edge, which left the gate reading
+                as two separate things on a tall window and made the fit a
+                negotiation between them; in the measured block they ride the
+                same shrink and the group centres as one. */}
+            <div
+              className="flex flex-wrap items-center justify-start gap-3"
+              style={{ ...rowIn(showLinks), marginTop: gapRows }}
+            >
+              {PORTFOLIO_IDS.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onChoose(id)}
+                  className={PILL}
+                  style={{ fontSize: pillSize, padding: "0.55em 1.3em" }}
+                >
+                  {SPLASH_LABELS[id]}
+                </button>
+              ))}
+            </div>
+            {/* Left-aligned like the row above it, with the hairline running
+                out to the right instead of bracketing the pair — the same
+                motif, squared up to the copy's edge. */}
+            <div
+              className="flex items-center gap-4"
+              style={{ ...rowIn(showLinks), marginTop: gapQuiet }}
+            >
+              <span className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenInfo("resume")}
+                  className={PILL_QUIET}
+                  style={{ fontSize: quietSize, padding: "0.5em 1.25em" }}
+                >
+                  Resumé
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenInfo("contact")}
+                  className={PILL_QUIET}
+                  style={{ fontSize: quietSize, padding: "0.5em 1.25em" }}
+                >
+                  Contact
+                </button>
+              </span>
+              <span className="h-px flex-1 bg-white/20" />
+            </div>
+
           </div>
         </main>
-
-        {/* Portfolios first, then the secondary pair, separated. */}
-        <footer className="shrink-0 px-6 pb-8 sm:px-10 sm:pb-10">
-          <div
-            className="flex flex-wrap items-center justify-center gap-3"
-            style={rowIn(showLinks)}
-          >
-            {PORTFOLIO_IDS.map((id) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => onChoose(id)}
-                className={PILL}
-              >
-                {SPLASH_LABELS[id]}
-              </button>
-            ))}
-          </div>
-          <div
-            className="mx-auto mt-5 flex max-w-sm items-center gap-4"
-            style={rowIn(showLinks)}
-          >
-            <span className="h-px flex-1 bg-white/20" />
-            <span className="flex flex-wrap items-center justify-center gap-2">
-              <button type="button" onClick={() => onOpenInfo("resume")} className={PILL_QUIET}>
-                Resumé
-              </button>
-              <button type="button" onClick={() => onOpenInfo("contact")} className={PILL_QUIET}>
-                Contact
-              </button>
-            </span>
-            <span className="h-px flex-1 bg-white/20" />
-          </div>
-        </footer>
       </div>
 
     </div>
