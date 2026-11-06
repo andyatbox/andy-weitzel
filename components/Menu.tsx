@@ -153,6 +153,7 @@ function Pill({
   href,
   onHoverChange,
   size,
+  pad,
   children,
 }: {
   active?: boolean;
@@ -161,6 +162,8 @@ function Pill({
   onHoverChange?: (active: boolean) => void;
   /** Type size in px; padding is derived from it so the pill scales whole. */
   size: number;
+  /** Padding override as [y, x] in px, for a pill held to a fixed shape. */
+  pad?: [number, number];
   children: React.ReactNode;
 }) {
   const cls = `inline-flex items-center rounded-full border font-medium transition-colors ${
@@ -169,11 +172,14 @@ function Pill({
       : "border-white/30 text-white hover:border-white/70"
   }`;
   // Driven from `size` rather than breakpoint utilities: the list type beside
-  // these already rides the wide-display ramp (railMetrics.fontBump), and
-  // pills pinned at text-base shrank against it on a very wide rail.
+  // these already rides the wide-display ramp (railMetrics.fontBump), and the
+  // Work pair pinned at text-base shrank against it on a very wide rail. A
+  // caller that wants the old fixed shape passes `pad` instead of inheriting
+  // the derived one.
+  const [padY, padX] = pad ?? [Math.round(size * 0.42), Math.round(size * 0.95)];
   const style: React.CSSProperties = {
     fontSize: size,
-    padding: `${Math.round(size * 0.42)}px ${Math.round(size * 0.95)}px`,
+    padding: `${padY}px ${padX}px`,
   };
   const hover = onHoverChange
     ? {
@@ -470,15 +476,21 @@ export default function Menu({
   // Fluid sizes (clamp) scale continuously with the viewport so the brand
   // block stays proportioned instead of jumping at one breakpoint.
   const logoWidth = isLandscape
-    ? isMedium ? "clamp(88px, 7.8vw, 138px)" : "clamp(66px, 6.2vw, 106px)"
-    : isMedium ? "clamp(96px, 14vw, 140px)" : "clamp(72px, 15vw, 116px)";
+    ? isMedium ? "clamp(78px, 6.9vw, 122px)" : "clamp(60px, 5.5vw, 94px)"
+    : isMedium ? "clamp(86px, 12.4vw, 124px)" : "clamp(66px, 13.3vw, 103px)";
   const nameSize = isLandscape
     ? isXL ? "clamp(30px, 2.6vw, 44px)" : isLarge ? "clamp(24px, 2.4vw, 34px)" : isMedium ? "clamp(20px, 2.1vw, 26px)" : "clamp(17px, 1.8vw, 22px)"
     : isMedium ? "clamp(21px, 3.9vw, 29px)" : "clamp(19px, 4.2vw, 25px)";
   const workSize = isXL ? "15px" : "clamp(11px, 1.05vw, 13px)";
-  // Portfolio / Resumé / Contact pills. Same wide-display bump as the list
-  // type, so the brand block keeps its proportions as the rail grows.
-  const pillSize = (isXL ? 18 : isLarge ? 15 : isMedium ? 13 : 12) + rail.fontBump;
+  // The two Work pills carry the portfolio choice, so they take the same
+  // wide-display bump as the list type and the brand block keeps its
+  // proportions as the rail grows.
+  const workPillSize = (isXL ? 18 : isLarge ? 15 : isMedium ? 13 : 12) + rail.fontBump;
+  // Resumé and Contact are secondary and stay at the size they always were —
+  // the old text-xs → text-sm → text-base ramp with py-1 / px-3 padding, which
+  // the derived padding would have grown along with the type.
+  const linkPillSize = isXL ? 16 : isLarge ? 14 : 12;
+  const linkPillPad: [number, number] = [4, isXL ? 14 : 12];
 
   const introAnim = (delay: number): React.CSSProperties => ({
     opacity: intro ? 1 : 0,
@@ -490,10 +502,20 @@ export default function Menu({
   // a divider) in both orientations.
   const links = (
     <div className="flex flex-wrap items-center gap-2">
-      <Pill onClick={() => onOpenInfo("resume")} onHoverChange={onInfoHover} size={pillSize}>
+      <Pill
+        onClick={() => onOpenInfo("resume")}
+        onHoverChange={onInfoHover}
+        size={linkPillSize}
+        pad={linkPillPad}
+      >
         Resumé
       </Pill>
-      <Pill onClick={() => onOpenInfo("contact")} onHoverChange={onInfoHover} size={pillSize}>
+      <Pill
+        onClick={() => onOpenInfo("contact")}
+        onHoverChange={onInfoHover}
+        size={linkPillSize}
+        pad={linkPillPad}
+      >
         Contact
       </Pill>
     </div>
@@ -524,7 +546,7 @@ export default function Menu({
               active={portfolio === id}
               onClick={() => onSelectPortfolio(id)}
               onHoverChange={onInfoHover}
-              size={pillSize}
+              size={workPillSize}
             >
               {LABELS[id]}
             </Pill>
