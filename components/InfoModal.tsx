@@ -98,7 +98,7 @@ function Award({
 const CLIENTS = [
   "Adidas", "AdventHealth", "Afterpay", "Amazon", "BBC", "BMW", "Burger King",
   "Cadillac", "Corona", "Crocs", "Crowne Plaza", "Downtown Newark", "Dyson",
-  "Kroger", "E.L.F. Cosmetics", "Foot Locker", "GM", "JP Morgan", "Invesco QQQ",
+  "Kroger", "e.l.f. Cosmetics", "Foot Locker", "GM", "JP Morgan", "Invesco QQQ",
   "Lionsgate Films", "LG", "L’Oréal", "Microsoft", "McKesson", "Modelo", "MoMA",
   "MTV", "Nature Valley", "Nickelodeon", "NY Islanders", "NY Life", "NY Yankees",
   "Oppenheimer", "Oxygen", "Paramount", "Pepsi", "Redken", "Showtime",
@@ -110,14 +110,14 @@ function ResumeBody() {
   return (
     <>
       <p className="mt-8 text-lg leading-relaxed text-black md:text-xl">
-        Creative Director, full-stack developer, and visual artist with over two
-        decades of experience at the intersection of design, brand strategy, and
-        emerging technology. Andy co-founded Box Creative in 2007 and serves as
-        its hands-on Creative Director and CCO, shipping award-winning campaigns,
-        digital experiences, and branding solutions for Fortune 50 businesses and
-        startups alike. Work spans identity systems, integrated marketing,
-        immersive AR/AI/3D experiences, and application development — a rare
-        fluency across the full creative-to-technical pipeline.
+        Creative Director with over two decades of experience at the
+        intersection of design, brand identity and strategy, emerging
+        technology, and interactive. Andy co-founded Box Creative in 2007 and
+        serves as its hands-on Creative Director and CCO, shipping award-winning
+        campaigns, digital experiences, and branding solutions for Fortune 50
+        businesses and startups alike. Work spans identity systems, integrated
+        marketing, immersive AR/AI/3D experiences, and application development —
+        a rare fluency across the full creative-to-technical pipeline.
       </p>
 
       <Section title="Experience">
@@ -131,11 +131,11 @@ function ResumeBody() {
             digital studio, alongside his twin brother. Within the first year,
             landed immersive 3D projects for Pepsi and MoMA/PS1 — setting the
             trajectory for nearly two decades of work for Fortune 50 brands and
-            startups including Adidas, Amazon, GM, LG, JP Morgan, MTV, Pepsi, and
-            Urban Decay. Operates across the full scope of agency leadership:
-            creative direction, UX/UI, project management, copywriting,
-            illustration, photography, print production, and social/campaign
-            management.
+            startups including Adidas, Amazon, GM, LG, JP Morgan, MTV, Pepsi,
+            e.l.f. Cosmetics, and Urban Decay. Operates across the full scope of
+            agency leadership: creative direction, UX/UI, project management,
+            copywriting, illustration, photography, print production, and
+            social/campaign management.
           </p>
           <ul className="list-disc space-y-2 pl-5 marker:text-black/50">
             <li>
@@ -232,9 +232,12 @@ function ResumeBody() {
             A.I. season identifier webapp
           </p>
         </Award>
-        <Award label="Webby Awards, 2021" title="VMAs Burger King x Lil Yachty">
+        <Award label="Shorty Awards, 2020" title="VMAs Burger King x Lil Yachty">
           <p>Agency: Coffee Labs</p>
-          <p>MTV VMAs AR Burger King x Lil Yachty webapp</p>
+          <p>
+            MTV VMAs Burger King x Lil Yachty in AR “Fire Performance” at
+            bk.mtv.com
+          </p>
         </Award>
       </Section>
 
