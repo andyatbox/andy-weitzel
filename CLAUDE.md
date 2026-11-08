@@ -28,8 +28,10 @@ content is being finished — remove both before public launch.
   the picture is enlarged, so a sharp source stays sharp (the 1080p reel
   shows near 1:1). Replacing a Gumlet asset in place regenerated only its
   DASH output, leaving the HLS ladder on the old video — upload a new asset
-  and swap the id instead. `SplashIntro.tsx` is the older static gate, kept
-  as a revert path.
+  and swap the id instead. The two portfolio buttons are `MagneticPill.tsx`,
+  which leans them toward the cursor on a rAF lerp — gated on `(pointer: fine)
+  and (hover: hover)`, not on touch points, so an iPad with a trackpad keeps
+  it. `SplashIntro.tsx` is the older static gate, kept as a revert path.
 - **`components/Cursor.tsx`** — custom cursor for fine pointers (ring + dot,
   `mix-blend-mode: difference`), states via classes: link / drag / teaser
   (`body.cursor-teaser`, set by the gallery tooltip, whose "View … Project"

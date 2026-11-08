@@ -6,6 +6,7 @@ import LogoMark from "./LogoMark";
 import NameWheel from "./NameWheel";
 import IntroCube from "./IntroCube";
 import WeatherPanel from "./WeatherPanel";
+import MagneticPill from "./MagneticPill";
 import type { Greeting } from "@/app/api/greeting/route";
 
 /**
@@ -511,15 +512,15 @@ export default function AgentIntro({
               style={{ ...rowIn(showLinks), marginTop: gapRows }}
             >
               {PORTFOLIO_IDS.map((id) => (
-                <button
+                <MagneticPill
                   key={id}
-                  type="button"
+                  active={showLinks}
                   onClick={() => onChoose(id)}
                   className={PILL}
                   style={{ fontSize: pillSize, padding: "0.55em 1.3em" }}
                 >
                   {SPLASH_LABELS[id]}
-                </button>
+                </MagneticPill>
               ))}
             </div>
             {/* Left-aligned like the row above it, with the hairline running
