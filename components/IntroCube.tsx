@@ -16,11 +16,11 @@ import {
   MOUSE_TWIST,
   detectTouch,
 } from "@/lib/pointerFx";
-
 // The reel the shape and the sky both play — one stream feeds both. Any
 // proportions work: the sky wraps the whole picture, the shape takes a
-// centred square of it.
-const EMBED = "https://play.gumlet.io/embed/6ac0ee1dd6a6ba7c2cbf0b19";
+// centred square of it. Shared with the "My Reel" overlay, which shows the
+// same stream flat.
+import { REEL_EMBED as EMBED } from "@/lib/reel";
 // One decode shared by the shape's six faces and the sky, capped in height,
 // with uploads gated well below the source's frame rate. Desktops get up to
 // 1080p, which the sky shows near 1:1; touch devices, where both decode and

@@ -26,6 +26,9 @@ interface MenuProps {
   // Prev/next chevrons: ±1 teaser, no wheel or drag involved.
   onStepItem: (delta: number) => void;
   onOpenInfo: (kind: "resume" | "contact") => void;
+  // The sizzle reel, full-screen and flat — the same stream the landing gate
+  // bends through WebGL.
+  onOpenReel: () => void;
   // Hovering the logo or the four pills toggles the post-process effect.
   onInfoHover: (active: boolean) => void;
   // A quick, clean tap/click on the logo: back to the landing.
@@ -254,6 +257,7 @@ export default function Menu({
   onSelectItem,
   onStepItem,
   onOpenInfo,
+  onOpenReel,
   onInfoHover,
   onHome,
   onLogoHold,
@@ -498,8 +502,11 @@ export default function Menu({
     transition: `opacity 0.38s ease ${delay}ms, transform 0.38s ease ${delay}ms`,
   });
 
-  // Resumé / Contact links, inside the brand block under the Work pills (below
-  // a divider) in both orientations.
+  // Resumé / Contact / My Reel links, inside the brand block under the Work
+  // pills (below a divider) in both orientations. My Reel sits last: it is
+  // the newest and the only one that opens a moving picture, so it reads as
+  // the odd one out wherever it is — better at the end than splitting the
+  // two panels that have always been a pair.
   const links = (
     <div className="flex flex-wrap items-center gap-2">
       <Pill
@@ -517,6 +524,14 @@ export default function Menu({
         pad={linkPillPad}
       >
         Contact
+      </Pill>
+      <Pill
+        onClick={onOpenReel}
+        onHoverChange={onInfoHover}
+        size={linkPillSize}
+        pad={linkPillPad}
+      >
+        My Reel
       </Pill>
     </div>
   );

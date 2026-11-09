@@ -10,6 +10,7 @@ import Gallery from "./Gallery";
 import ProjectModal, { type ActiveProject } from "./project/ProjectModal";
 import ProjectStrip from "./project/ProjectStrip";
 import InfoModal, { type InfoKind } from "./InfoModal";
+import ReelOverlay from "./ReelOverlay";
 import PsychedelicFX from "./PsychedelicFX";
 import AgentIntro from "./AgentIntro";
 import Cursor from "./Cursor";
@@ -74,6 +75,7 @@ export default function PortfolioApp() {
   // Resumé / Contact popup + the halftone trigger (hovering those buttons or
   // having their modal open).
   const [infoModal, setInfoModal] = useState<InfoKind | null>(null);
+  const [reelOpen, setReelOpen] = useState(false);
   const [infoHover, setInfoHover] = useState(false);
   // Press-and-hold on the menu logo: the effect, on any device.
   const [logoHeld, setLogoHeld] = useState(false);
@@ -301,6 +303,19 @@ export default function PortfolioApp() {
   const closeInfo = useCallback(() => {
     infoOpenRef.current = false;
     setInfoModal(null);
+  }, []);
+
+  // The reel rides the same gate as the info panels: `infoOpenRef` is what
+  // tells the window-level scroll/drag handlers and the hover tooltip to
+  // stand down, and an overlay covering the gallery wants exactly that.
+  const openReel = useCallback(() => {
+    infoOpenRef.current = true;
+    setInfoModal(null);
+    setReelOpen(true);
+  }, []);
+  const closeReel = useCallback(() => {
+    infoOpenRef.current = false;
+    setReelOpen(false);
   }, []);
 
   // Scroll driven by vertical wheel/drag on the entire window. A small
@@ -667,6 +682,7 @@ export default function PortfolioApp() {
             onSelectItem={selectItem}
             onStepItem={stepItem}
             onOpenInfo={openInfo}
+            onOpenReel={openReel}
             onInfoHover={setInfoHover}
             onHome={returnToLanding}
             onLogoHold={setLogoHeld}
@@ -849,6 +865,10 @@ export default function PortfolioApp() {
       {infoModal && (
         <InfoModal kind={infoModal} onClose={closeInfo} height={height} />
       )}
+
+      {/* The sizzle reel, flat and full-screen — the landing gate's shape and
+          sky play the same stream through WebGL. */}
+      {reelOpen && <ReelOverlay onClose={closeReel} height={height} />}
     </main>
   );
 }

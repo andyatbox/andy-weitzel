@@ -74,6 +74,17 @@ content is being finished — remove both before public launch.
 - **`components/InfoModal.tsx`** — Resumé / Contact popup. Contact posts
   natively to a Google Form (no iframe, no click-out); résumé is built from
   static JSX content mirroring the source PDF/docx, not fetched from Sanity.
+- **`components/ReelOverlay.tsx`** — "My Reel", the third pill beside Resumé
+  and Contact: the sizzle reel full-screen and flat, the one place on the
+  site it is shown with no shader between it and the viewer. A plain
+  `<video>`, so none of the WebGL texture plumbing applies — only `attachHls`
+  is shared, since how to play a Gumlet stream at all is the same question
+  everywhere. The id lives in `lib/reel.ts` so this and `IntroCube` can't
+  drift apart; a constant exported from `IntroCube` would drag R3F in behind
+  it. The current asset has no audio track (every rendition in the manifest
+  is video-only), which is why there is no sound control. It rides
+  `infoOpenRef` in `PortfolioApp` like the info panels, which is what tells
+  the window-level scroll/drag and the hover tooltip to stand down.
 - **`components/project/`** — the full-screen project detail overlay
   (`ProjectModal`), its image/video slider (`ProjectGallery`), portable-text
   rendering, multi-column layout, and `ProjectStrip` — the looping prev/next
