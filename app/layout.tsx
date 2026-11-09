@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
+import { GTM_ID } from "@/lib/analytics";
 import "./globals.css";
 
 // Apex redirects to www (Vercel's recommended setup), so www is the domain
@@ -27,7 +29,6 @@ export const metadata: Metadata = {
     "portfolio",
     "New York",
   ],
-  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     url: SITE_URL,
@@ -62,6 +63,11 @@ export const metadata: Metadata = {
   // TEMPORARY: site is still being built out — keep search engines out until
   // content is ready. Flip both this and public/robots.txt back to allow
   // indexing before announcing the site publicly.
+  //
+  // Every page inherits this. Route metadata (app/[[...path]]/page.tsx) sets
+  // only a title and a canonical, and anything a page leaves unset comes from
+  // here — so a new URL is noindex by default rather than by remembering to
+  // say so. public/robots.txt disallows the whole site to match.
   robots: { index: false, follow: false, nocache: true },
 };
 
@@ -79,6 +85,28 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Google Tag Manager. The container itself decides what runs inside
+            it; all this does is load it and leave `gtag` where a tag that
+            wants it can find it. `afterInteractive` is Google's own guidance
+            for a container — it is measurement, and the first paint of a
+            WebGL scene should not be queued behind it.
+
+            One script rather than two: the loader has to find `dataLayer`
+            already there, and keeping both halves in the same block settles
+            that without depending on the order two tags happen to execute
+            in. In-app navigation is a push of its own, since the page never
+            reloads — see lib/analytics.ts. */}
+        <Script id="gtm" strategy="afterInteractive">{`
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});
+var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
+j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;
+f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${GTM_ID}');
+        `}</Script>
+      </head>
       <body>{children}</body>
     </html>
   );

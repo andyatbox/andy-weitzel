@@ -17,16 +17,19 @@ content is being finished — remove both before public launch.
   weather data graphics (`WeatherPanel.tsx`; data from `app/api/greeting`,
   Open-Meteo + Vercel's geo headers) above a typed "Hello." and the portfolio
   question, over **`IntroCube.tsx`** — the sizzle reel (HLS via
-  `lib/hlsVideo.ts`) twice: as a shape cycling cube → sphere → gooey blob on
-  two shader dials (`u_sphere`, `u_goo`) that follows/swirls under the
-  pointer, and as a half-skybox behind it that the pointer turns. The sky is
-  a full-screen shader, stereographic both for the wrap and for its lens, so
-  at rest it shows the picture flat at a chosen framing (`DOME_FRAME`) and
-  turning bends it like a dome; a normal rectilinear camera could only show
-  a sliver of a 180° sky. One stream feeds both (`EMBED`; any proportions —
-  the shape takes a centred square); the sky's soft focus scales with how far
-  the picture is enlarged, so a sharp source stays sharp (the 1080p reel
-  shows near 1:1). Replacing a Gumlet asset in place regenerated only its
+  `lib/hlsVideo.ts`) as a half-skybox the pointer turns. The sky is a
+  full-screen shader: the picture is wrapped stereographically, and the lens
+  is mixed between that same projection and an ordinary rectilinear one
+  (`DOME_BEND`). The mix is the only thing that curves it — wrap and lens
+  being identical compose to an identity, which is why the sky used to show
+  dead flat at rest however it was framed (`DOME_FRAME`) — and the two agree
+  at the centre of the screen, so the bend costs nothing there and grows
+  outward. The sky's soft focus scales with how far the picture is enlarged,
+  so a sharp source stays sharp (the 1080p reel shows near 1:1). A morphing
+  cube → sphere → blob of the same footage used to hang in front of it,
+  riding the cursor; it was taken out in full (Nov 2026), which is why the
+  sky now carries a faint sway of its own while the agent types (`DOME_STIR`).
+  Replacing a Gumlet asset in place regenerated only its
   DASH output, leaving the HLS ladder on the old video — upload a new asset
   and swap the id instead. The two portfolio buttons are `MagneticPill.tsx`,
   which leans them toward the cursor on a rAF lerp — gated on `(pointer: fine)
@@ -63,7 +66,8 @@ content is being finished — remove both before public launch.
   writes drops to the canvas as soon as `opened` flips — an open project
   fills the window exactly.
 - **`components/Menu.tsx`** — the DOM nav/menu panel (logo, name, role
-  ticker, portfolio pills, infinite scrolling item list). A quick tap/click
+  ticker, portfolio pills, then Work Reel | Resumé · Contact, then the
+  infinite scrolling item list). A quick tap/click
   on the logo returns to the landing (`returnToLanding` in PortfolioApp);
   holding it plays the psychedelic effect instead, and a drag does neither. Landscape and
   portrait are materially different layouts, not just a CSS breakpoint.
@@ -74,8 +78,8 @@ content is being finished — remove both before public launch.
 - **`components/InfoModal.tsx`** — Resumé / Contact popup. Contact posts
   natively to a Google Form (no iframe, no click-out); résumé is built from
   static JSX content mirroring the source PDF/docx, not fetched from Sanity.
-- **`components/ReelOverlay.tsx`** — "My Reel", the third pill beside Resumé
-  and Contact: the sizzle reel full-screen and flat, the one place on the
+- **`components/ReelOverlay.tsx`** — "Work Reel", the pill that leads the row
+  with Resumé and Contact: the sizzle reel full-screen and flat, the one place on the
   site it is shown with no shader between it and the viewer. A plain
   `<video>`, so none of the WebGL texture plumbing applies — only `attachHls`
   is shared, since how to play a Gumlet stream at all is the same question
@@ -125,7 +129,27 @@ content is being finished — remove both before public launch.
   (`interactive` / `branding`) map to Sanity category values `immersive-ux` /
   `branding-print`; `advertising-rich-media` projects are dropped. Gallery
   `imagesSlide` entries (multi-image uploads) are flattened into single slides
-  here, so nothing downstream knows about them.
+  here, so nothing downstream knows about them. The ids are historical: the
+  `interactive` portfolio is called **Experiential** and lives at
+  `/experiential`. Both the label and the id live in **`lib/portfolioMeta.ts`**
+  rather than here, because a module the server reads cannot import a React
+  hook — see the hard rules — and `portfolios.ts` re-exports them so client
+  code still has one import.
+- **`lib/routes.ts`** — every URL on the site and the one place that maps
+  between them and app state: `/`, `/experiential`, `/experiential/<slug>`,
+  and `?panel=resume|contact|reel` for the three overlays (a query, so an
+  overlay keeps whatever page it was opened over, and back closes it rather
+  than leaving the page). Also the document titles. No `"use client"`: the
+  route segment reads it on the server.
+- **`app/[[...path]]/page.tsx`** — *every* address resolves to this one page
+  component, which validates the segments (`notFound()` otherwise, see
+  `app/not-found.tsx`) and sets the title and canonical. The app then moves
+  its own URL with `history.pushState` and plays `popstate` back into state
+  (`go` / `applyRoute` in `PortfolioApp`). See the hard rules for why.
+- **`lib/analytics.ts`** — the GTM container id, loaded in `app/layout.tsx`,
+  plus the `virtual_page_view` push every in-app move makes (the page never
+  reloads, so the container's own page view only ever fires for the address
+  the visitor arrived on).
 - **`lib/videoEmbed.ts`** — resolves a pasted Vimeo/Gumlet URL or full embed
   code to a player src, plus postMessage helpers for detecting playback end
   across both providers' cross-origin iframes.
@@ -170,6 +194,24 @@ the chrome (white), not the light panels, which all set their own.
 
 ## Hard rules (violating these has broken things before)
 
+- **Never navigate with the router.** `<Link>`, `router.push` and friends
+  swap the page tree, which tears down both WebGL contexts, the video decode
+  and the scroll position — the very things a move from a portfolio to a
+  project animates. In-app moves go through `go()` in `PortfolioApp`, which
+  pushes a `history` entry; back/forward come back in through `popstate` and
+  `applyRoute`. Every address resolving to one page component
+  (`app/[[...path]]`) is what makes that safe: nothing Next does on a
+  restore can remount the app.
+- **A module a server component imports cannot import a React hook** — the
+  compiler refuses it outright, whether or not the hook is ever called. This
+  is why the portfolio ids and labels sit in `lib/portfolioMeta.ts` apart
+  from the hooks in `lib/portfolios.ts`: the route segment needs the labels
+  to title a page. Anything else both sides need goes there too, not into
+  `portfolios.ts`.
+- **Page metadata inherits, so leave `robots` alone.** The root layout sets
+  `noindex, nofollow, nocache` and route metadata sets only a title and a
+  canonical, which means a new route is noindex without anyone remembering
+  to say so. Verified in the served HTML, not assumed.
 - **Never use `100vh`** for sizing — always `window.innerHeight` via
   `lib/useViewport.ts`. Mobile browser chrome makes `100vh` wrong.
 - **Hooks run unconditionally, before any early return.** This component tree
