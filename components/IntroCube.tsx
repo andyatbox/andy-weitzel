@@ -10,34 +10,20 @@ import {
   retryOnNextGesture,
   throttleUploads,
 } from "@/lib/hlsVideo";
-import {
-  MOUSE_EASE,
-  MOUSE_RADIUS_RATIO,
-  MOUSE_TWIST,
-  detectTouch,
-} from "@/lib/pointerFx";
-// The reel the shape and the sky both play — one stream feeds both. Any
-// proportions work: the sky wraps the whole picture, the shape takes a
-// centred square of it. Shared with the "My Reel" overlay, which shows the
-// same stream flat.
+import { detectTouch } from "@/lib/pointerFx";
+// The reel the sky plays. Any proportions work: the wrap takes the whole
+// picture. Shared with the "Work Reel" overlay, which shows the same stream
+// flat.
 import { REEL_EMBED as EMBED } from "@/lib/reel";
-// One decode shared by the shape's six faces and the sky, capped in height,
-// with uploads gated well below the source's frame rate. Desktops get up to
-// 1080p, which the sky shows near 1:1; touch devices, where both decode and
-// upload cost more, stop at 720p.
+// The decode, capped in height, with uploads gated well below the source's
+// frame rate. Desktops get up to 1080p, which the sky shows near 1:1; touch
+// devices, where both decode and upload cost more, stop at 720p.
 const MAX_VIDEO_HEIGHT = 1080;
 const MAX_VIDEO_HEIGHT_TOUCH = 720;
 const MAX_TEXTURE_FPS = 30;
-// How far the goo can swell past the pillowed shape, in half-widths. Shared
-// by the shader and the idle wander, which sizes itself off the shape's
-// widest possible reach.
-const MORPH = 0.55;
 
 /**
  * Streams the reel into a VideoTexture for as long as the intro is up.
- *
- * One element, one decode — all six faces sample the same texture, so the
- * cube costs no more to feed than a single plane would.
  */
 function useReelTexture(enabled: boolean) {
   const [texture, setTexture] = useState<THREE.VideoTexture | null>(null);
@@ -119,400 +105,58 @@ function useReelTexture(enabled: boolean) {
   return texture;
 }
 
-/**
- * Pillows each face: every vertex is pushed out along its own face's normal by
- * (1-u²)(1-v²), where u,v are its position across that face. That's zero along
- * the face's border and peaks at its centre, so the faces bow out while the
- * twelve edges and eight corners stay exactly where a hard cube has them —
- * sharp, straight, unrounded.
- *
- * BoxGeometry gives each face its own vertices with a flat face normal, which
- * is what makes the per-face push possible: a shared-vertex cube would have no
- * single direction to push an edge vertex in.
- *
- * On top of that, the goo: slow, large-scale simplex noise swells and sinks
- * the surface, and a slow twist wrings it about its vertical axis, so the cube
- * never holds a shape — a lava lamp rather than a solid.
- *
- * The goo must not tear the cube open. Each face owns its own copy of the
- * vertices along a shared edge, so anything that moves those copies apart
- * opens a crack. The pillow is safe because it's zero on the edges; the goo is
- * made safe by depending only on things the copies share — their undisplaced
- * position, and the direction out from the centre — never on the face normal.
- */
-const VERT = `
-uniform float u_inflate;
-uniform float u_morph;
-// The shape is two dials, both eased in the frame loop (see shapeAt):
-// u_sphere rounds the pillowed cube toward a sphere (0..1), u_goo scales
-// everything that makes it a blob — swell, squash, wring and the picture's
-// slide. Cube, sphere and blob are just points on those two dials, so moving
-// between any two is one surface morphing, never a cut.
-uniform float u_sphere;
-uniform float u_goo;
-uniform float u_time;
-// Pointer swirl (see lib/pointerFx.ts), all in canvas px with y up.
-uniform vec2 u_res;
-uniform vec2 u_mouse;
-uniform float u_mstr;
-uniform float u_radius;
-uniform float u_twist;
-varying vec2 vUv;
-varying float vDisp;
-
-// 3D simplex noise (Ashima Arts / Stefan Gustavson, MIT).
-vec3 mod289(vec3 x){ return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec4 mod289(vec4 x){ return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec4 permute(vec4 x){ return mod289(((x * 34.0) + 1.0) * x); }
-vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
-float snoise(vec3 v){
-  const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
-  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
-  vec3 i = floor(v + dot(v, C.yyy));
-  vec3 x0 = v - i + dot(i, C.xxx);
-  vec3 g = step(x0.yzx, x0.xyz);
-  vec3 l = 1.0 - g;
-  vec3 i1 = min(g.xyz, l.zxy);
-  vec3 i2 = max(g.xyz, l.zxy);
-  vec3 x1 = x0 - i1 + C.xxx;
-  vec3 x2 = x0 - i2 + C.yyy;
-  vec3 x3 = x0 - D.yyy;
-  i = mod289(i);
-  vec4 p = permute(permute(permute(
-      i.z + vec4(0.0, i1.z, i2.z, 1.0))
-    + i.y + vec4(0.0, i1.y, i2.y, 1.0))
-    + i.x + vec4(0.0, i1.x, i2.x, 1.0));
-  float n_ = 0.142857142857;
-  vec3 ns = n_ * D.wyz - D.xzx;
-  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-  vec4 x_ = floor(j * ns.z);
-  vec4 y_ = floor(j - 7.0 * x_);
-  vec4 x = x_ * ns.x + ns.yyyy;
-  vec4 y = y_ * ns.x + ns.yyyy;
-  vec4 h = 1.0 - abs(x) - abs(y);
-  vec4 b0 = vec4(x.xy, y.xy);
-  vec4 b1 = vec4(x.zw, y.zw);
-  vec4 s0 = floor(b0) * 2.0 + 1.0;
-  vec4 s1 = floor(b1) * 2.0 + 1.0;
-  vec4 sh = -step(h, vec4(0.0));
-  vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
-  vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
-  vec3 p0 = vec3(a0.xy, h.x);
-  vec3 p1 = vec3(a0.zw, h.y);
-  vec3 p2 = vec3(a1.xy, h.z);
-  vec3 p3 = vec3(a1.zw, h.w);
-  vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
-  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
-  vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
-  m = m * m;
-  return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
-}
-
-void main() {
-  vUv = uv;
-  vec3 p = position * 2.0;               // unit box spans -0.5..0.5
-  // Position across the face: zero out the component along the normal, so
-  // only the two in-face coordinates shape the bulge.
-  vec3 f = p * (1.0 - abs(normal));
-  float bulge = (1.0 - f.x * f.x) * (1.0 - f.y * f.y) * (1.0 - f.z * f.z);
-  vec3 q = p + normal * u_inflate * bulge;
-
-  // Round toward a sphere — all the way for the sphere state, and partway
-  // under the blob: at that much swell the cube's hard edges stop reading as
-  // edges and fold into creases, and a softened base keeps the lobes smooth.
-  // Like everything else here it depends only on position, so the seams hold.
-  vec3 p2 = p * p;
-  vec3 sph = vec3(
-    p.x * sqrt(max(0.0, 1.0 - (p2.y + p2.z) * 0.5 + p2.y * p2.z / 3.0)),
-    p.y * sqrt(max(0.0, 1.0 - (p2.z + p2.x) * 0.5 + p2.z * p2.x / 3.0)),
-    p.z * sqrt(max(0.0, 1.0 - (p2.x + p2.y) * 0.5 + p2.x * p2.y / 3.0))
-  );
-  q = mix(q, sph * (1.0 + u_inflate * 0.5), u_sphere);
-
-  // Goo: few, big lobes. One low-frequency noise, sampled through a second
-  // slow noise that bends its coordinates (domain warp), so neighbouring
-  // lobes pull into each other like wax rather than sitting as separate
-  // bumps. Sampled at the undisplaced position and pushed straight out from
-  // the centre — both shared by coincident edge vertices, so the surface
-  // flows without splitting along the seams.
-  float t = u_time * 0.38;
-  vec3 warp = vec3(
-    snoise(p * 0.45 + vec3(t * 0.6, 0.0, 0.0)),
-    snoise(p * 0.45 + vec3(0.0, t * 0.5, 3.1)),
-    snoise(p * 0.45 + vec3(5.7, 0.0, t * 0.55))
-  );
-  float n = snoise(p * 0.6 + warp * 0.55 + vec3(0.0, t, t * 0.7)) * 0.85
-          + snoise(p * 1.1 - vec3(t * 0.8, 0.0, t)) * 0.15;
-  q += normalize(p) * n * u_morph * u_goo;
-
-  // Squash and stretch along an axis that keeps turning, so the whole mass
-  // elongates and flattens in changing directions.
-  vec3 ax = normalize(vec3(sin(t * 0.7), cos(t * 0.53), sin(t * 0.41 + 1.3)));
-  q += ax * dot(q, ax) * 0.28 * sin(t * 1.1) * u_goo;
-
-  // A wring about the vertical axis, stronger toward the top and bottom,
-  // swinging back and forth. Kept gentle: past this the shear folds the
-  // surface over itself into pleats instead of bending it.
-  float a = sin(t * 0.9) * 0.45 * q.y * u_morph * u_goo;
-  float c = cos(a), s = sin(a);
-  q.xz = mat2(c, -s, s, c) * q.xz;
-
-  vDisp = n * u_goo;
-
-  // --- Pointer swirl, in screen space -----------------------------------
-  // The teasers' swirl, shape only: within a radius of the cursor the blob
-  // twists about it by up to u_twist — full strength under the cursor,
-  // smoothstepped to nothing at the radius. Applied after projection, so it
-  // bends the shape as seen, exactly as it bends the flat teaser planes. The
-  // teasers' colour split is deliberately left out here.
-  vec4 clip = projectionMatrix * modelViewMatrix * vec4(q * 0.5, 1.0);
-  vec2 sp = (clip.xy / clip.w * 0.5 + 0.5) * u_res;
-  if (u_mstr > 0.001) {
-    vec2 d = sp - u_mouse;
-    float dist = length(d);
-    float f = 1.0 - dist / u_radius;
-    if (f > 0.0) {
-      f = f * f * (3.0 - 2.0 * f) * u_mstr;
-      float ang = u_twist * f;
-      float cs = cos(ang), sn = sin(ang);
-      sp = u_mouse + vec2(d.x * cs - d.y * sn, d.x * sn + d.y * cs);
-    }
-  }
-  clip.xy = (sp / u_res * 2.0 - 1.0) * clip.w;
-  gl_Position = clip;
-}
-`;
-
-/**
- * The reel, as is. No colour conversion: the video texture is sampled as
- * stored and written out unchanged, so the picture is exact.
- */
-const FRAG = `
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
-uniform sampler2D u_map;
-// Share of the picture each face shows, per axis: a centred square of it, so
-// a wide reel isn't squashed onto the square faces.
-uniform vec2 u_crop;
-varying vec2 vUv;
-varying float vDisp;
-
-void main() {
-  // The picture slides with the swell underneath it, so the reel reads as
-  // painted on the goo rather than projected onto a rigid box.
-  vec2 uv = vUv + vec2(vDisp * 0.07, -vDisp * 0.055);
-  uv = 0.5 + (uv - 0.5) * u_crop;
-  gl_FragColor = vec4(texture2D(u_map, uv).rgb, 1.0);
-}
-`;
-
-// The shape cycles cube → sphere → blob → cube: HOLD seconds on each, easing
-// into the next over the last MORPH_TIME of each hold.
-const HOLD = 7;
-const MORPH_TIME = 1.6;
-const SHAPES = [
-  { sphere: 0, goo: 0 }, // inflated cube
-  { sphere: 1, goo: 0 }, // sphere
-  { sphere: 0.75, goo: 1 }, // distorted blob (on a mostly-rounded base)
-];
-
-function shapeAt(t: number) {
-  const c = t % (HOLD * SHAPES.length);
-  const i = Math.floor(c / HOLD);
-  const from = SHAPES[i];
-  const to = SHAPES[(i + 1) % SHAPES.length];
-  const into = c - i * HOLD - (HOLD - MORPH_TIME);
-  if (into <= 0) return from;
-  const k = into / MORPH_TIME;
-  const e = k * k * (3 - 2 * k); // smoothstep
-  return { sphere: from.sphere + (to.sphere - from.sphere) * e, goo: from.goo + (to.goo - from.goo) * e };
-}
-
 /** Slow, non-repeating drift — three sines that never line up again. */
 function drift(t: number, a: number, b: number, c: number) {
   return Math.sin(t * a) * 0.6 + Math.sin(t * b + 1.7) * 0.3 + Math.sin(t * c + 4.2) * 0.1;
 }
 
-function Cube({ speaking, texture }: { speaking: boolean; texture: THREE.VideoTexture | null }) {
-  const group = useRef<THREE.Group>(null);
-  const { viewport, size } = useThree();
-  const isTouch = useMemo(detectTouch, []);
-  // Pointer target in -1..1 for the follow, the pointer in canvas px (y up)
-  // for the teaser effect, and that effect's eased strength.
-  const target = useRef(new THREE.Vector2(0, 0));
-  const pointer = useRef({ x: 0, y: 0, active: false, strength: 0 });
-  const enter = useRef(0); // 0 -> 1 arrival ramp
-  // Goo phase. It runs a little faster while the agent is typing, so the blob
-  // stirs as it speaks — accumulated rather than scaled, so speeding up never
-  // makes the shape jump.
-  const phase = useRef(0);
-  const speak = useRef(0);
-
-  // The material is built here and owned outright, not declared as a JSX
-  // prop: R3F is free to copy a `uniforms` prop onto the material, after which
-  // writes to our copy reach nothing — which once rendered this as a silent
-  // black cube.
-  const { geometry, shared, material } = useMemo(() => {
-    // Subdivided so the bulge and goo are smooth: a 6-quad box has no
-    // interior vertices to move.
-    const geometry = new THREE.BoxGeometry(1, 1, 1, 40, 40, 40);
-    const shared = {
-      u_map: { value: null as THREE.Texture | null },
-      u_crop: { value: new THREE.Vector2(1, 1) },
-      u_time: { value: 0 },
-      // How far each face centre bows out, in half-widths of the cube.
-      u_inflate: { value: 0.32 },
-      u_morph: { value: MORPH },
-      u_sphere: { value: 0 },
-      u_goo: { value: 0 },
-      u_res: { value: new THREE.Vector2(1, 1) },
-      u_mouse: { value: new THREE.Vector2(0, 0) },
-      u_mstr: { value: 0 },
-      u_radius: { value: 1 },
-      u_twist: { value: MOUSE_TWIST },
-    };
-    const material = new THREE.ShaderMaterial({
-      vertexShader: VERT,
-      fragmentShader: FRAG,
-      uniforms: shared,
-    });
-    return { geometry, shared, material };
-  }, []);
-
-  useEffect(
-    () => () => {
-      geometry.dispose();
-      material.dispose();
-    },
-    [geometry, material]
-  );
-
-  // Pointer: follow target and teaser effect, desktop only. Touch devices
-  // fire a single synthetic move on tap, which would jerk the blob to the tap
-  // and leave it there.
-  useEffect(() => {
-    if (isTouch) return;
-    const onMove = (e: PointerEvent) => {
-      if (e.pointerType === "touch") return;
-      target.current.set(
-        (e.clientX / window.innerWidth) * 2 - 1,
-        -((e.clientY / window.innerHeight) * 2 - 1)
-      );
-      pointer.current.x = e.clientX;
-      pointer.current.y = window.innerHeight - e.clientY;
-      pointer.current.active = true;
-    };
-    const onLeave = () => {
-      pointer.current.active = false;
-    };
-    window.addEventListener("pointermove", onMove);
-    document.documentElement.addEventListener("pointerleave", onLeave);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      document.documentElement.removeEventListener("pointerleave", onLeave);
-    };
-  }, [isTouch]);
-
-  useFrame((state, delta) => {
-    const g = group.current;
-    if (!g) return;
-    const t = state.clock.elapsedTime;
-    const d = Math.min(delta, 0.05); // a backgrounded tab must not jump
-
-    // Size off the smaller viewport axis so it fills the frame on a phone
-    // without overflowing a wide desktop. Kept below the rigid cube's size
-    // because the goo swells it by up to half again.
-    const base = Math.min(viewport.width, viewport.height) * 0.36;
-    enter.current += (1 - enter.current) * d * 1.4;
-    const breathe = 1 + Math.sin(t * 0.7) * 0.06 + Math.sin(t * 1.9 + 2.1) * 0.02;
-    const scale = base * breathe * (0.6 + 0.4 * enter.current);
-    g.scale.setScalar(scale);
-
-    // Rotation: three axes at unrelated rates, so it never repeats a pose.
-    g.rotation.x += d * (0.18 + 0.05 * Math.sin(t * 0.31));
-    g.rotation.y += d * (0.26 + 0.07 * Math.sin(t * 0.23 + 1.1));
-    g.rotation.z += d * 0.045;
-
-    // Travel: the shape rides the cursor. The pointer's -1..1 maps straight
-    // onto the visible world at z=0 — which is exactly what R3F's `viewport`
-    // measures — so the centre lands under the cursor rather than inside a
-    // shrunken safe box. Deliberately unclamped: at the edges of the window
-    // the shape hangs off the frame, and that's the point.
-    const half = (scale * (Math.sqrt(3) + MORPH)) / 2;
-    const wander = half * 0.18; // idle wobble, so a still pointer isn't a dead shape
-    const wantX = (target.current.x * viewport.width) / 2 + drift(t, 0.11, 0.27, 0.53) * wander;
-    const wantY = (target.current.y * viewport.height) / 2 + drift(t, 0.09, 0.21, 0.44) * wander;
-    g.position.x += (wantX - g.position.x) * d * 3;
-    g.position.y += (wantY - g.position.y) * d * 3;
-
-    speak.current += ((speaking ? 1 : 0) - speak.current) * d * 3;
-    phase.current += d * (1 + 0.6 * speak.current);
-    shared.u_time.value = phase.current;
-    const shape = shapeAt(t);
-    shared.u_sphere.value = shape.sphere;
-    shared.u_goo.value = shape.goo;
-    if (shared.u_map.value !== texture) shared.u_map.value = texture;
-    const video = texture?.image as HTMLVideoElement | undefined;
-    const va = (video?.videoWidth || 1) / (video?.videoHeight || 1);
-    shared.u_crop.value.set(Math.min(1, 1 / va), Math.min(1, va));
-
-    // The teasers' swirl: same radius, twist and easing as the gallery.
-    const minDim = Math.min(size.width, size.height);
-    const p = pointer.current;
-    p.strength += ((!isTouch && p.active ? 1 : 0) - p.strength) * MOUSE_EASE;
-    shared.u_res.value.set(size.width, size.height);
-    shared.u_mouse.value.set(p.x, p.y);
-    shared.u_mstr.value = p.strength;
-    shared.u_radius.value = minDim * MOUSE_RADIUS_RATIO;
-  });
-
-  return (
-    <group ref={group}>
-      {/* The shader moves every vertex well past the box's own bounds. */}
-      <mesh geometry={geometry} material={material} frustumCulled={false} />
-    </group>
-  );
-}
-
 /**
- * The reel again, as a half skybox: the picture wrapped round the viewer,
- * which the visitor looks around by moving the pointer. The same texture as
- * the shape (one decode feeds both), so the shape reads as a piece of the
- * world behind it, pulled forward.
+ * The reel as a half skybox: the picture wrapped round the viewer, which the
+ * visitor looks around by moving the pointer. Since the morphing shape that
+ * used to hang in front of it was taken out, this is the landing's whole
+ * scene.
  *
- * The wrap and the lens are both stereographic — the projection planetarium
- * dome content is made in. Using one projection for both means that looking
- * straight ahead shows the picture flat and undistorted, framed however
- * DOME_FRAME says; turning bends it smoothly (circles stay circles), opening
- * up the side turned toward. An ordinary rectilinear lens can't do this: it
- * can only take in a small window of a dome before its edges smear, which
- * left the first version showing barely a tenth of the reel, hugely
- * magnified.
+ * The picture is wrapped stereographically — the projection planetarium dome
+ * content is made in. The lens is mixed between that same projection and an
+ * ordinary rectilinear one (DOME_BEND): matching the wrap exactly would undo
+ * it and show the picture dead flat, which is what this did before, while a
+ * rectilinear lens on dome content is what bends it. The two agree at the
+ * centre of the screen, so the bend costs nothing there and grows outward.
+ * Turning bends it further and smoothly (circles stay circles), opening up
+ * the side turned toward.
  *
  * Past the picture's edges the sky carries on as its mirror image, so a turn
- * can never reach a rim. The reel is only 600px square, so a soft-focus blur
- * turns its upscaling into depth of field; the shape in front stays sharp.
+ * can never reach a rim. A soft-focus blur turns any upscaling into depth of
+ * field, scaled to how far past 1:1 the picture is actually enlarged — so a
+ * source with pixels to spare, like the 1080p reel, stays sharp.
  */
 // How much of the picture fills the screen at rest, along whichever axis is
 // the tighter fit (the screen's long side, for a square reel). Lower shows
-// more of the picture, smaller, and leaves less of it to turn toward.
+// more of the picture, smaller, and leaves less of it to turn toward. The
+// bend below pulls the edges in past this; the centre is unaffected.
 const DOME_FRAME = 0.82;
+// How far the lens is bent away from the picture's own projection, 0..1.
+// Zero is the flat view the sky used to show at rest, one an ordinary camera
+// looking at dome content. Nothing but this makes the sky read as curved: the
+// wrap and an identical lens compose to an identity, so no amount of framing
+// or zoom could bend it.
+const DOME_BEND = 0.55;
+// How far the view sways on its own while the agent types, as a share of the
+// turn the pointer commands.
+const DOME_STIR = 0.14;
 // How far past the picture's edge a full turn may reach into the mirrored
 // sky beyond it, as a share of the picture's half-width. Kept to a sliver:
 // the reel is full of type, and mirrored type reads as a mistake.
 const DOME_SPILL = 0.03;
 // Most the view tilts up or down.
 const DOME_PITCH_CAP = THREE.MathUtils.degToRad(30);
-// Multiplier on the picture. The backdrop is darker than the shape so the
-// shape stays the subject even though they show the same footage.
+// Multiplier on the picture: the sky is a bed for the copy over it, so it
+// reads below the type rather than competing with it.
 const DOME_DIM = 0.55;
 // Soft focus, there to hide upscaling: its radius in texels of the video is
 // DOME_BLUR_PER × how far past 1:1 the picture is enlarged, up to
-// DOME_BLUR_MAX. A source with pixels to spare stays sharp; the 600px stand-in
-// reel, enlarged about fourfold, gets the full blur.
+// DOME_BLUR_MAX. A source with pixels to spare stays sharp; a small one,
+// enlarged several times over, gets the full blur.
 const DOME_BLUR_PER = 0.7;
 const DOME_BLUR_MAX = 2.4;
 
@@ -525,8 +169,8 @@ void main() {
 }
 `;
 
-// Like the shape, the picture is sampled as stored and written out unchanged
-// (just dimmed), so the two match exactly.
+// The picture is sampled as stored and written out unchanged but for the dim,
+// so what the sky shows is the reel's own colour.
 const DOME_FRAG = `
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -537,6 +181,8 @@ uniform sampler2D u_map;
 uniform float u_dim;
 // Half-extent of the screen on the lens's projection plane.
 uniform vec2 u_scale;
+// How far the lens is bent from the picture's own projection (see DOME_BEND).
+uniform float u_bend;
 // Where the view is turned: rotates a view ray into the sky's frame.
 uniform mat3 u_look;
 // Projection plane to texture: the picture's longer side spans -1..1.
@@ -551,11 +197,21 @@ vec3 tap(vec2 uv) {
 }
 
 void main() {
-  // Screen point to view ray: the inverse stereographic projection, with
-  // straight ahead along -z.
+  // Screen point to view ray, through a lens mixed between two projections,
+  // both looking straight ahead along -z and both unit length.
+  //
+  // The wrap ray is the inverse of the picture's own stereographic
+  // projection, so unturned it undoes the wrap exactly and the picture comes
+  // out dead flat at any framing. The lens ray is an ordinary rectilinear
+  // camera, which is what bends dome content. They agree to first order at the centre of the
+  // screen — so the middle of the picture keeps its scale and its sharpness,
+  // and the bend grows with the square of the distance out from it, folding
+  // the edges away from the viewer.
   vec2 q = vNdc * u_scale;
   float r2 = dot(q, q);
-  vec3 ray = vec3(2.0 * q, r2 - 1.0) / (1.0 + r2);
+  vec3 wrap = vec3(2.0 * q, r2 - 1.0) / (1.0 + r2);
+  vec3 lens = normalize(vec3(2.0 * q, -1.0));
+  vec3 ray = normalize(mix(wrap, lens, u_bend));
   ray = u_look * ray;
   // Ray to the picture: the stereographic projection again, in the sky's
   // frame. Unturned, this undoes the line above exactly.
@@ -586,6 +242,32 @@ const DOME_EDGE = [-1, -0.5, 0, 0.5, 1].flatMap((a) => [
 ]);
 
 /**
+ * The shader's lens, on the CPU: a point on the projection plane to a unit
+ * view ray, straight ahead along -z. The two have to agree — the turn limits
+ * below are worked out from this, and a lens that reached further than they
+ * assumed would carry mirrored footage into the frame.
+ */
+function domeRay(qx: number, qy: number, out: THREE.Vector3) {
+  const r2 = qx * qx + qy * qy;
+  const w = 1 + r2;
+  const l = Math.sqrt(4 * r2 + 1);
+  const b = DOME_BEND;
+  return out
+    .set(
+      (2 * qx) / w + ((2 * qx) / l - (2 * qx) / w) * b,
+      (2 * qy) / w + ((2 * qy) / l - (2 * qy) / w) * b,
+      (r2 - 1) / w + (-1 / l - (r2 - 1) / w) * b
+    )
+    .normalize();
+}
+
+/** Where a view ray lands on the picture, in half-extents of the wrap. */
+function domeHit(v: THREE.Vector3) {
+  const w = Math.max(1e-6, 1 - v.z);
+  return { x: v.x / w, y: v.y / w };
+}
+
+/**
  * How far out the screen's border lands on the picture for a given turn, as
  * a multiple of the picture's half-extent (1 = exactly at its edge). The same
  * maths as the shader, on the CPU, for a handful of points.
@@ -604,21 +286,25 @@ function domeReach(
   m.makeRotationY(yaw).multiply(mb.makeRotationX(pitch));
   let worst = 0;
   for (const [nx, ny] of DOME_EDGE) {
-    const qx = nx * sx;
-    const qy = ny * sy;
-    const r2 = qx * qx + qy * qy;
-    v.set(2 * qx, 2 * qy, r2 - 1).divideScalar(1 + r2).applyMatrix4(m);
-    const w = Math.max(1e-6, 1 - v.z);
-    worst = Math.max(worst, Math.abs(v.x / w) / ex, Math.abs(v.y / w) / ey);
+    domeRay(nx * sx, ny * sy, v).applyMatrix4(m);
+    const hit = domeHit(v);
+    worst = Math.max(worst, Math.abs(hit.x) / ex, Math.abs(hit.y) / ey);
   }
   return worst;
 }
 
-function Dome({ texture }: { texture: THREE.VideoTexture | null }) {
+function Dome({
+  speaking,
+  texture,
+}: {
+  speaking: boolean;
+  texture: THREE.VideoTexture | null;
+}) {
   const { size } = useThree();
   const isTouch = useMemo(detectTouch, []);
   const target = useRef({ x: 0, y: 0 }); // pointer, -1..1, y up
   const look = useRef({ yaw: 0, pitch: 0 });
+  const speak = useRef(0); // eased 0..1, so the sway starts and stops smoothly
 
   const { geometry, material, uniforms, m4, m4b, v3 } = useMemo(() => {
     const geometry = new THREE.PlaneGeometry(2, 2);
@@ -626,6 +312,7 @@ function Dome({ texture }: { texture: THREE.VideoTexture | null }) {
       u_map: { value: null as THREE.Texture | null },
       u_dim: { value: DOME_DIM },
       u_scale: { value: new THREE.Vector2(1, 1) },
+      u_bend: { value: DOME_BEND },
       u_look: { value: new THREE.Matrix3() },
       u_fit: { value: new THREE.Vector2(1, 1) },
       u_blur: { value: new THREE.Vector2(0, 0) },
@@ -634,7 +321,7 @@ function Dome({ texture }: { texture: THREE.VideoTexture | null }) {
       vertexShader: DOME_VERT,
       fragmentShader: DOME_FRAG,
       uniforms,
-      // Always behind: drawn first, and never occluding the shape.
+      // Always behind: drawn first, and never occluding anything.
       depthWrite: false,
       depthTest: false,
     });
@@ -685,18 +372,33 @@ function Dome({ texture }: { texture: THREE.VideoTexture | null }) {
     const sy = k;
 
     // How far the view may turn straight sideways or straight up: until the
-    // screen's edge, which sits 2·atan(s) off-centre, reaches the picture's
-    // edge (plus the allowed spill into its mirror image) at 2·atan(e).
-    const yawMax = Math.max(0, 2 * Math.atan(ex * (1 + DOME_SPILL)) - 2 * Math.atan(sx));
+    // screen's edge reaches the picture's edge (plus the allowed spill into
+    // its mirror image) at 2·atan(e). Where that edge lands is a question for
+    // the lens, since the bend pulls it in from the 2·atan(s) a bare
+    // stereographic view would put it at — which is why the bend buys a
+    // little more room to turn rather than costing it.
+    const edgeX = Math.abs(domeHit(domeRay(sx, 0, v3)).x);
+    const edgeY = Math.abs(domeHit(domeRay(0, sy, v3)).y);
+    const yawMax = Math.max(0, 2 * Math.atan(ex * (1 + DOME_SPILL)) - 2 * Math.atan(edgeX));
     const pitchMax = Math.min(
       DOME_PITCH_CAP,
-      Math.max(0, 2 * Math.atan(ey * (1 + DOME_SPILL)) - 2 * Math.atan(sy))
+      Math.max(0, 2 * Math.atan(ey * (1 + DOME_SPILL)) - 2 * Math.atan(edgeY))
     );
 
     const t = state.clock.elapsedTime;
     const d = Math.min(delta, 0.05);
-    const tx = isTouch ? drift(t, 0.05, 0.13, 0.31) * 0.7 : target.current.x;
-    const ty = isTouch ? drift(t, 0.04, 0.11, 0.27) * 0.5 : target.current.y;
+    // A slow sway while the agent is typing, over whatever is steering the
+    // view. With the shape gone the sky is the only thing on the landing that
+    // can answer the copy arriving, so it leans about as the words land and
+    // settles once they stop.
+    speak.current += ((speaking ? 1 : 0) - speak.current) * d * 2;
+    const stir = DOME_STIR * speak.current;
+    const tx =
+      (isTouch ? drift(t, 0.05, 0.13, 0.31) * 0.7 : target.current.x) +
+      drift(t, 0.23, 0.47, 0.71) * stir;
+    const ty =
+      (isTouch ? drift(t, 0.04, 0.11, 0.27) * 0.5 : target.current.y) +
+      drift(t, 0.19, 0.39, 0.63) * stir;
     const kk = 1 - Math.exp(-d * 2.2);
     const L = look.current;
     // Look toward the pointer: right turns the view right, up tilts it up.
@@ -742,19 +444,19 @@ function Dome({ texture }: { texture: THREE.VideoTexture | null }) {
 }
 
 /**
- * The landing's backdrop: a gooey, always-shifting mass of the sizzle reel,
- * turning behind the copy until a portfolio is chosen, in front of the same
- * reel wrapped round a half-dome (see Dome). Full-bleed — it owns the
- * viewport rather than sitting in a box, which is what the blob it replaced
- * did. On desktop the shape rides the cursor — off the edge of the frame at
- * the edges of the window — and the cursor also swirls it, as it does the
- * gallery teasers, and turns the dome.
+ * The landing's backdrop: the sizzle reel wrapped round a curved half-dome
+ * behind the copy, until a portfolio is chosen (see Dome). Full-bleed — it
+ * owns the viewport rather than sitting in a box.
+ *
+ * A morphing shape of the same footage used to hang in front of it, riding
+ * the cursor and swirling under it. That is gone; the cursor now only turns
+ * the sky, which is what the bend in the lens is there to make legible.
  */
 function IntroCube({
   speaking,
   visible,
 }: {
-  /** True while the agent is typing — stirs the goo a little faster. */
+  /** True while the agent is typing — sways the sky a little. */
   speaking: boolean;
   /** False once the intro is dismissed; tears the stream down. */
   visible: boolean;
@@ -780,8 +482,7 @@ function IntroCube({
         style={{ position: "absolute", inset: 0 }}
       >
         <color attach="background" args={["#000000"]} />
-        <Dome texture={texture} />
-        <Cube speaking={speaking} texture={texture} />
+        <Dome speaking={speaking} texture={texture} />
       </Canvas>
     </div>
   );

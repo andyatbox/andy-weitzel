@@ -11,8 +11,8 @@ import type { Greeting } from "@/app/api/greeting/route";
 
 /**
  * A sentence, as pieces rather than a string, so a phrase inside it can be
- * underlined and clickable — "Interactive Experiences" is both the name of the
- * portfolio and a way into it.
+ * underlined and clickable — a portfolio's name is both what it is called and
+ * a way into it.
  */
 interface Beat {
   parts: { text: string; link?: PortfolioId }[];
@@ -62,13 +62,11 @@ const CAP_RATIO = 0.717;
 // `em` padding so a pill keeps its proportions at any of them.
 const PILL =
   "inline-flex shrink-0 items-center rounded-full border-2 border-white font-medium text-white transition-colors hover:bg-white hover:text-black";
+// The quiet row (Resumé / Contact) is secondary by size and by its single
+// hairline border, not by being faded — at 30% border and 70% type it read
+// as disabled next to the portfolio pills. Both are full strength now.
 const PILL_QUIET =
-  "inline-flex shrink-0 items-center rounded-full border border-white/30 font-medium text-white/70 transition-colors hover:border-white hover:bg-white hover:text-black";
-
-const SPLASH_LABELS: Record<PortfolioId, string> = {
-  ...LABELS,
-  interactive: "Interactive Experiences",
-};
+  "inline-flex shrink-0 items-center rounded-full border border-white font-medium text-white transition-colors hover:bg-white hover:text-black";
 
 /**
  * Landing gate: a scripted agent — no model behind it — greets the visitor,
@@ -389,13 +387,13 @@ export default function AgentIntro({
         transition: "opacity 0.4s ease",
       }}
     >
-      {/* The reel cube owns the whole viewport behind the copy — it isn't
-          boxed into the caption row the way the blob it replaced was. */}
+      {/* The reel owns the whole viewport behind the copy, wrapped round a
+          curved half-dome the pointer turns. */}
       <IntroCube speaking={speaking} visible={!hiding} />
 
       {/* A quiet bed for the copy. The reel is bright and busy — white type
           straight over it loses whole phrases whenever a pale frame comes up.
-          A scrim between the two keeps the cube's own colour intact rather
+          A scrim between the two keeps the reel's own colour intact rather
           than dimming the scene itself. */}
       <div
         aria-hidden
@@ -519,7 +517,7 @@ export default function AgentIntro({
                   className={PILL}
                   style={{ fontSize: pillSize, padding: "0.55em 1.3em" }}
                 >
-                  {SPLASH_LABELS[id]}
+                  {LABELS[id]}
                 </MagneticPill>
               ))}
             </div>
