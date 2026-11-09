@@ -485,8 +485,7 @@ export default function Menu({
   const nameSize = isLandscape
     ? isXL ? "clamp(30px, 2.6vw, 44px)" : isLarge ? "clamp(24px, 2.4vw, 34px)" : isMedium ? "clamp(20px, 2.1vw, 26px)" : "clamp(17px, 1.8vw, 22px)"
     : isMedium ? "clamp(21px, 3.9vw, 29px)" : "clamp(19px, 4.2vw, 25px)";
-  const workSize = isXL ? "15px" : "clamp(11px, 1.05vw, 13px)";
-  // The two Work pills carry the portfolio choice, so they take the same
+  // The two portfolio pills carry the portfolio choice, so they take the same
   // wide-display bump as the list type and the brand block keeps its
   // proportions as the rail grows.
   const workPillSize = (isXL ? 18 : isLarge ? 15 : isMedium ? 13 : 12) + rail.fontBump;
@@ -502,13 +501,29 @@ export default function Menu({
     transition: `opacity 0.38s ease ${delay}ms, transform 0.38s ease ${delay}ms`,
   });
 
-  // Resumé / Contact / My Reel links, inside the brand block under the Work
-  // pills (below a divider) in both orientations. My Reel sits last: it is
-  // the newest and the only one that opens a moving picture, so it reads as
-  // the odd one out wherever it is — better at the end than splitting the
-  // two panels that have always been a pair.
+  // Work Reel / Resumé / Contact, inside the brand block under the portfolio
+  // pills (below a divider) in both orientations. The reel leads, ruled off
+  // from the two panels that have always been a pair: it is the one that
+  // opens a moving picture rather than a sheet of type.
   const links = (
     <div className="flex flex-wrap items-center gap-2">
+      <Pill
+        onClick={onOpenReel}
+        onHoverChange={onInfoHover}
+        size={linkPillSize}
+        pad={linkPillPad}
+      >
+        Work Reel
+      </Pill>
+      {/* A character, not a border: it divides two pills that wrap
+          independently of each other, and it travels with the first. */}
+      <span
+        aria-hidden
+        className="text-white/30"
+        style={{ fontSize: linkPillSize }}
+      >
+        |
+      </span>
       <Pill
         onClick={() => onOpenInfo("resume")}
         onHoverChange={onInfoHover}
@@ -524,14 +539,6 @@ export default function Menu({
         pad={linkPillPad}
       >
         Contact
-      </Pill>
-      <Pill
-        onClick={onOpenReel}
-        onHoverChange={onInfoHover}
-        size={linkPillSize}
-        pad={linkPillPad}
-      >
-        My Reel
       </Pill>
     </div>
   );
@@ -551,10 +558,10 @@ export default function Menu({
       </div>
 
       <div className="flex flex-col gap-2" style={introAnim(300)}>
+        {/* The two portfolios, unlabelled: "Work:" in front of them said
+            nothing the pills do not, and its baseline never sat right
+            against pills that take the wide-display size bump. */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-white/60" style={{ fontSize: workSize }}>
-            Work:
-          </span>
           {PORTFOLIO_IDS.map((id) => (
             <Pill
               key={id}
