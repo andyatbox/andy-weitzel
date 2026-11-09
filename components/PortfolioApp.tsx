@@ -2,6 +2,16 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CATEGORY, LABELS, PORTFOLIO_IDS, usePortfolios, type PortfolioId } from "@/lib/portfolios";
+import {
+  asPanel,
+  currentRoute,
+  prettySlug,
+  routeHref,
+  routeTitle,
+  type Panel,
+  type Route,
+} from "@/lib/routes";
+import { pageView } from "@/lib/analytics";
 import { ScrollEngine } from "@/lib/ScrollEngine";
 import { useViewport } from "@/lib/useViewport";
 import Menu from "./Menu";
@@ -49,50 +59,88 @@ function preloadImage(url: string) {
   });
 }
 
-export default function PortfolioApp() {
+export default function PortfolioApp({
+  initialPortfolio = null,
+  initialSlug = null,
+}: {
+  /** The portfolio the address named; null is the landing gate. */
+  initialPortfolio?: PortfolioId | null;
+  /** The project the address named, if it named one. */
+  initialSlug?: string | null;
+}) {
+  // An address that names a portfolio skips the gate, and one that names a
+  // project arrives with it already open: someone sent a link to a piece of
+  // work should land on the work, not watch the arrival sequence play at them
+  // first and then jump.
+  const deepProject = !!(initialPortfolio && initialSlug);
+  // The overlays are a query rather than a path, and the route segment
+  // deliberately doesn't read it — it is the one part of the address only the
+  // browser acts on — so it is picked up here instead.
+  const [initialPanel] = useState<Panel | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : asPanel(new URLSearchParams(window.location.search).get("panel"))
+  );
   const viewport = useViewport();
   const portfolios = usePortfolios();
-  const [portfolio, setPortfolio] = useState<PortfolioId>("interactive");
-  const [opened, setOpened] = useState(false);
+  const [portfolio, setPortfolio] = useState<PortfolioId>(
+    initialPortfolio ?? "interactive"
+  );
+  const [opened, setOpened] = useState(deepProject);
   // True only once the teaser has finished growing to full screen; gates the
   // project sheet's reveal.
-  const [expandDone, setExpandDone] = useState(false);
+  const [expandDone, setExpandDone] = useState(deepProject);
   // The bottom teaser strip, held back until STRIP_DELAY_MS after expandDone.
   const [stripUp, setStripUp] = useState(false);
   const [switching, setSwitching] = useState(false);
-  const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
-  const [intro, setIntro] = useState(false);
+  const [activeProject, setActiveProject] = useState<ActiveProject | null>(
+    deepProject && initialPortfolio && initialSlug
+      ? {
+          slug: initialSlug,
+          // Stands in for one render. The real title comes with the dataset
+          // (see the effect by `ready`), long before the sheet fades up.
+          title: prettySlug(initialSlug),
+          category: CATEGORY[initialPortfolio],
+        }
+      : null
+  );
+  const [intro, setIntro] = useState(deepProject);
   // Slide-reveal intro: the menu/gallery panel starts pushed off by the canvas
   // size (menu parked at the window edge), a hero logo sits centered in the
   // exposed empty area, then the panel slides home.
-  const [slideIn, setSlideIn] = useState(false);
-  const [introLogo, setIntroLogo] = useState(true);
+  const [slideIn, setSlideIn] = useState(deepProject);
+  const [introLogo, setIntroLogo] = useState(!deepProject);
   // Splash gate: a full-page black overlay asks which portfolio to open in.
   // `started` flips once the choice has been made and the splash has faded,
   // which is what releases the gallery intro below.
-  const [started, setStarted] = useState(false);
+  const [started, setStarted] = useState(!!initialPortfolio);
   const [splashHiding, setSplashHiding] = useState(false);
   // Resumé / Contact popup + the halftone trigger (hovering those buttons or
   // having their modal open).
-  const [infoModal, setInfoModal] = useState<InfoKind | null>(null);
-  const [reelOpen, setReelOpen] = useState(false);
+  const [infoModal, setInfoModal] = useState<InfoKind | null>(
+    initialPanel === "resume" || initialPanel === "contact" ? initialPanel : null
+  );
+  const [reelOpen, setReelOpen] = useState(initialPanel === "reel");
   const [infoHover, setInfoHover] = useState(false);
   // Press-and-hold on the menu logo: the effect, on any device.
   const [logoHeld, setLogoHeld] = useState(false);
   // The gallery's WebGL canvas, sampled by the post-process distortion.
   const [galleryCanvas, setGalleryCanvas] = useState<HTMLCanvasElement | null>(null);
-  const introFired = useRef(false);
-  const openedRef = useRef(false);
+  const introFired = useRef(deepProject);
+  const openedRef = useRef(deepProject);
   // True while a Resumé/Contact modal is open, so the global wheel/drag scroll
   // stands down and the modal can scroll natively.
-  const infoOpenRef = useRef(false);
+  const infoOpenRef = useRef(initialPanel !== null);
   const switchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const switchTimer2 = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const closeThenSwitchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const splashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // A step of a back/forward move that has to wait for the one before it to
+  // finish animating (see applyRoute).
+  const routeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // True until the splash is dismissed, so window-level scroll/drag and the
   // hover tooltip stand down while the gate is up.
-  const splashOpenRef = useRef(true);
+  const splashOpenRef = useRef(!initialPortfolio);
   const switchingRef = useRef(false);
   // Touch devices fire mouseenter (but not mouseleave) on tap, which would
   // latch the hover effect on. So on touch, ignore hover entirely — the
@@ -111,7 +159,9 @@ export default function PortfolioApp() {
   // Shared, mutable open/close progress (0=closed, 1=open). The layout effect
   // eases it each frame and resizes the canvas DOM; the WebGL scene reads the
   // same value, so plane dims, zoom and gap animate together.
-  const animRef = useRef({ t: 0, w: 0, h: 0, animating: false });
+  // Open from the first frame when the address named a project, so the
+  // teaser is full-screen on arrival instead of growing into it.
+  const animRef = useRef({ t: deepProject ? 1 : 0, w: 0, h: 0, animating: false });
   const anim = animRef.current;
 
   const items = portfolios ? portfolios[portfolio].items : [];
@@ -131,12 +181,68 @@ export default function PortfolioApp() {
   // when the item under a stationary cursor changes.
   const repaintTip = useRef<(() => void) | null>(null);
 
+  // ---- The address bar ----------------------------------------------------
+  //
+  // The app moves its own URL instead of routing to it. Every address on the
+  // site resolves to one page component (see app/[[...path]]/page.tsx), so a
+  // push here changes the address and the history stack without unmounting
+  // anything: the two WebGL contexts, the video decode and the scroll
+  // position all carry on through a move from a portfolio to a project,
+  // which is the whole point of the animation that move plays.
+  //
+  // `silent` is up wherever a push would be wrong — while the back/forward
+  // buttons are being played back into state, since that entry is already in
+  // the stack, and across the first half of a move whose last step is what
+  // the address should say.
+  const silent = useRef(false);
+  const routeRef = useRef<Route>({
+    portfolio: initialPortfolio,
+    slug: deepProject ? initialSlug : null,
+    panel: initialPanel,
+  });
+
+  /** A route's title, with the project's real one if the dataset is in. */
+  const titleFor = useCallback((route: Route) => {
+    const item = route.slug
+      ? itemsRef.current.find((it) => it.slug === route.slug)
+      : null;
+    return routeTitle(route, item?.title);
+  }, []);
+
+  /**
+   * Move to an address. Everything the visitor can click goes through here,
+   * so what the address bar says and what is on screen cannot drift apart.
+   */
+  const go = useCallback(
+    (next: Partial<Route>, opts?: { replace?: boolean; force?: boolean }) => {
+      if (silent.current && !opts?.force) return;
+      const route = { ...routeRef.current, ...next };
+      routeRef.current = route;
+      const url = routeHref(route);
+      const title = titleFor(route);
+      document.title = title;
+      if (url === window.location.pathname + window.location.search) return;
+      if (opts?.replace) window.history.replaceState(null, "", url);
+      else window.history.pushState(null, "", url);
+      pageView(url, title);
+    },
+    [titleFor]
+  );
+
+  /** Put the overlays where an address says they are. */
+  const applyPanel = useCallback((panel: Panel | null) => {
+    infoOpenRef.current = panel !== null;
+    setInfoModal(panel === "resume" || panel === "contact" ? panel : null);
+    setReelOpen(panel === "reel");
+  }, []);
+
   // Switch the portfolio by replaying the slide intro: slide the panel out to
   // the parked (pre-intro) state — exposing the logo-bg — swap the portfolio
   // off-screen, then slide it back in. Orientation-aware via `slideTransform`.
   const selectPortfolio = useCallback(
-    (id: PortfolioId) => {
+    (id: PortfolioId, after?: () => void) => {
       if (openedRef.current || id === portfolio || switchingRef.current) return;
+      go({ portfolio: id, slug: null });
       switchingRef.current = true;
       setSwitching(true); // dim the list so its swap isn't seen at the edge
       setIntroLogo(true); // re-expose the logo-bg in the cleared area
@@ -159,6 +265,10 @@ export default function PortfolioApp() {
           switchTimer2.current = setTimeout(() => {
             setIntroLogo(false);
             switchingRef.current = false;
+            // Whatever was waiting on the switch — a back/forward that landed
+            // on a project in the other portfolio — runs from here rather
+            // than from a guess at how long the slide takes.
+            after?.();
           }, SLIDE_DUR);
         };
         const urls = portfolios ? portfolios[id].items.map((it) => it.image) : [];
@@ -168,7 +278,7 @@ export default function PortfolioApp() {
         switchTimer2.current = setTimeout(slideHome, SWITCH_LOAD_CAP);
       }, SLIDE_DUR);
     },
-    [engine, portfolio, portfolios]
+    [engine, go, portfolio, portfolios]
   );
 
   useEffect(
@@ -177,6 +287,7 @@ export default function PortfolioApp() {
       clearTimeout(switchTimer2.current);
       clearTimeout(closeThenSwitchTimer.current);
       clearTimeout(splashTimer.current);
+      clearTimeout(routeTimer.current);
     },
     []
   );
@@ -187,6 +298,7 @@ export default function PortfolioApp() {
   const chooseStart = useCallback(
     (id: PortfolioId) => {
       if (splashHiding) return;
+      go({ portfolio: id, slug: null });
       setPortfolio(id);
       engine.reset();
       splashOpenRef.current = false;
@@ -194,7 +306,7 @@ export default function PortfolioApp() {
       clearTimeout(splashTimer.current);
       splashTimer.current = setTimeout(() => setStarted(true), SPLASH_FADE);
     },
-    [engine, splashHiding]
+    [engine, go, splashHiding]
   );
 
   // The menu logo, tapped: back to the landing. The landing fades in over the
@@ -202,6 +314,7 @@ export default function PortfolioApp() {
   // out of sight, so choosing a portfolio again plays it as on first arrival.
   const returnToLanding = useCallback(() => {
     if (openedRef.current || switchingRef.current || splashOpenRef.current) return;
+    go({ portfolio: null, slug: null, panel: null });
     splashOpenRef.current = true;
     setInfoHover(false);
     setLogoHeld(false);
@@ -217,7 +330,7 @@ export default function PortfolioApp() {
       setSlideIn(false);
       setIntroLogo(true);
     }, SPLASH_FADE + 50);
-  }, []);
+  }, [go]);
 
   const selectItem = useCallback(
     (index: number) => {
@@ -246,21 +359,32 @@ export default function PortfolioApp() {
     });
     openedRef.current = true;
     setOpened(true);
-  }, [engine]);
+    go({ slug: item.slug });
+  }, [engine, go]);
 
   const closeProject = useCallback(() => {
     openedRef.current = false;
     setOpened(false);
-  }, []);
+    go({ slug: null });
+  }, [go]);
 
   // Portfolio pills in the open-project nav: close the project back to the
   // gallery, then — once that close has visually settled — replay the normal
   // portfolio-switch slide. See PROJECT_CLOSE_MS for why this waits.
   const switchPortfolioFromProject = useCallback(
-    (id: PortfolioId) => {
+    (id: PortfolioId, after?: () => void) => {
+      // One history entry for the whole move: the project closing on its way
+      // to another portfolio isn't a place anyone can come back to, so the
+      // address is left alone until the switch itself sets it.
+      const was = silent.current;
+      silent.current = true;
       closeProject();
+      silent.current = was;
       clearTimeout(closeThenSwitchTimer.current);
-      closeThenSwitchTimer.current = setTimeout(() => selectPortfolio(id), PROJECT_CLOSE_MS);
+      closeThenSwitchTimer.current = setTimeout(
+        () => selectPortfolio(id, after),
+        PROJECT_CLOSE_MS
+      );
     },
     [closeProject, selectPortfolio]
   );
@@ -280,8 +404,9 @@ export default function PortfolioApp() {
         category: CATEGORY[portfolioRef.current],
       });
       engine.scrollToIndex(index);
+      go({ slug: item.slug });
     },
-    [engine]
+    [engine, go]
   );
 
   // Prev/next (wraps at the ends).
@@ -296,14 +421,19 @@ export default function PortfolioApp() {
     [goToProject]
   );
 
-  const openInfo = useCallback((kind: InfoKind) => {
-    infoOpenRef.current = true;
-    setInfoModal(kind);
-  }, []);
+  const openInfo = useCallback(
+    (kind: InfoKind) => {
+      infoOpenRef.current = true;
+      setInfoModal(kind);
+      go({ panel: kind });
+    },
+    [go]
+  );
   const closeInfo = useCallback(() => {
     infoOpenRef.current = false;
     setInfoModal(null);
-  }, []);
+    go({ panel: null });
+  }, [go]);
 
   // The reel rides the same gate as the info panels: `infoOpenRef` is what
   // tells the window-level scroll/drag handlers and the hover tooltip to
@@ -312,11 +442,129 @@ export default function PortfolioApp() {
     infoOpenRef.current = true;
     setInfoModal(null);
     setReelOpen(true);
-  }, []);
+    go({ panel: "reel" });
+  }, [go]);
   const closeReel = useCallback(() => {
     infoOpenRef.current = false;
     setReelOpen(false);
-  }, []);
+    go({ panel: null });
+  }, [go]);
+
+  /**
+   * Open the project with this slug, in the portfolio showing now. The
+   * address bar's way in — a direct link, or back and forward — never a
+   * click, which already knows which teaser it is on.
+   */
+  const openSlug = useCallback(
+    (slug: string, opts?: { jump?: boolean }) => {
+      const index = itemsRef.current.findIndex((it) => it.slug === slug);
+      if (index < 0) {
+        // Nothing in this portfolio carries that slug. Show the portfolio and
+        // say so in the address bar, rather than hold an empty sheet open on
+        // a dead link. Forced, because correcting a bad address is the one
+        // push that has to go through while an address is being played back,
+        // and a replace so the dead link leaves no entry behind.
+        if (openedRef.current) {
+          openedRef.current = false;
+          setOpened(false);
+        }
+        setActiveProject(null);
+        go({ slug: null }, { replace: true, force: true });
+        return;
+      }
+      const item = itemsRef.current[index];
+      setActiveProject({
+        slug: item.slug,
+        title: item.title,
+        category: CATEGORY[portfolioRef.current],
+      });
+      // Already open: let the engine carry the full-screen teaser across
+      // behind the sheet, the way prev/next does. Otherwise simply be there.
+      if (opts?.jump || !openedRef.current) engine.jumpToIndex(index);
+      else engine.scrollToIndex(index);
+      if (!openedRef.current) {
+        openedRef.current = true;
+        setOpened(true);
+      }
+    },
+    [engine, go]
+  );
+
+  /**
+   * Drive the app to match an address. Only the back and forward buttons come
+   * through here; everything else changes state and pushes as it goes.
+   *
+   * A move can take more than one step — a portfolio slides out and back
+   * before a project inside it can open over the top — so the steps that
+   * have an end run the next one from it.
+   */
+  const applyRoute = useCallback(
+    (route: Route) => {
+      clearTimeout(routeTimer.current);
+      applyPanel(route.panel);
+
+      if (!route.portfolio) {
+        if (openedRef.current) closeProject();
+        returnToLanding();
+        return;
+      }
+
+      const slug = route.slug;
+      const openAfter = slug ? () => openSlug(slug) : undefined;
+
+      // Back to the gate and forward again: choosing releases the whole
+      // arrival sequence, and a project can only open once that has run.
+      if (splashOpenRef.current) {
+        chooseStart(route.portfolio);
+        if (openAfter) {
+          routeTimer.current = setTimeout(
+            openAfter,
+            SPLASH_FADE + SLIDE_HOLD + SLIDE_DUR
+          );
+        }
+        return;
+      }
+
+      if (route.portfolio !== portfolioRef.current) {
+        if (openedRef.current) switchPortfolioFromProject(route.portfolio, openAfter);
+        else selectPortfolio(route.portfolio, openAfter);
+        return;
+      }
+
+      if (slug) openSlug(slug);
+      else if (openedRef.current) closeProject();
+    },
+    [
+      applyPanel,
+      chooseStart,
+      closeProject,
+      openSlug,
+      returnToLanding,
+      selectPortfolio,
+      switchPortfolioFromProject,
+    ]
+  );
+
+  // Back and forward. That entry is already in the stack, so nothing here may
+  // push — `silent` holds the handlers' own pushes off while the address is
+  // played back into state.
+  useEffect(() => {
+    const onPop = () => {
+      const route = currentRoute();
+      routeRef.current = route;
+      silent.current = true;
+      try {
+        applyRoute(route);
+      } finally {
+        silent.current = false;
+      }
+      const title = titleFor(route);
+      document.title = title;
+      pageView(routeHref(route), title);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [applyRoute, titleFor]);
 
   // Scroll driven by vertical wheel/drag on the entire window. A small
   // movement threshold (4px) ensures taps and menu clicks fire normally —
@@ -422,6 +670,19 @@ export default function PortfolioApp() {
   }, [engine, openProject, isTouch]);
 
   const ready = !!viewport && !!portfolios;
+
+  // A directly linked project. The dataset is in by now, so put the strip on
+  // it — without travelling there, since it is meant to have been there all
+  // along — and take its real title. Nothing has painted yet (this component
+  // renders null until the viewport and the portfolios are both in hand), so
+  // this still is the first frame, which is why it is a layout effect.
+  const deepResolved = useRef(false);
+  useLayoutEffect(() => {
+    if (!ready || !deepProject || !initialSlug || deepResolved.current) return;
+    deepResolved.current = true;
+    openSlug(initialSlug, { jump: true });
+    document.title = titleFor(routeRef.current);
+  }, [ready, deepProject, initialSlug, openSlug, titleFor]);
 
   // Cursor-following "View … Project" tooltip over the gallery teasers.
   // Non-touch only; hidden while dragging, while a project or info modal is

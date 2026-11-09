@@ -3,8 +3,18 @@
 import { useEffect, useState } from "react";
 import type { PortableTextBlock } from "@portabletext/react";
 import { sanity, urlFor } from "./sanity";
+import {
+  CATEGORY,
+  ID_BY_CATEGORY,
+  LABELS,
+  type PortfolioId,
+} from "./portfolioMeta";
 
-export type PortfolioId = "interactive" | "branding";
+// What the portfolios are lives in lib/portfolioMeta, which the server can
+// read too; it is re-exported here so client code has one import for the
+// portfolios whether it wants the data or the fetching of it.
+export { CATEGORY, LABELS, PORTFOLIO_IDS } from "./portfolioMeta";
+export type { PortfolioId } from "./portfolioMeta";
 
 export interface PortfolioItem {
   id: string;
@@ -23,25 +33,6 @@ export interface Portfolio {
 }
 
 export type Portfolios = Record<PortfolioId, Portfolio>;
-
-export const PORTFOLIO_IDS: PortfolioId[] = ["interactive", "branding"];
-
-export const LABELS: Record<PortfolioId, string> = {
-  interactive: "Interactive",
-  branding: "Branding",
-};
-
-// Our app portfolios map onto Sanity category values. The dataset may still
-// hold `advertising-rich-media` projects; with no id mapped to it they're
-// simply dropped from the fetch below.
-const CATEGORY: Record<PortfolioId, string> = {
-  interactive: "immersive-ux",
-  branding: "branding-print",
-};
-const ID_BY_CATEGORY: Record<string, PortfolioId> = {
-  "immersive-ux": "interactive",
-  "branding-print": "branding",
-};
 
 type RawImage = Parameters<typeof urlFor>[0];
 
@@ -182,7 +173,7 @@ export interface ProjectContent {
 
 export const CATEGORY_LABELS: Record<string, string> = {
   "branding-print": "Branding & Print",
-  "immersive-ux": "Interactive Experiences",
+  "immersive-ux": "Experiential",
 };
 
 const PROJECT_QUERY = `*[_type == "project" && slug.current == $slug][0]{
@@ -241,5 +232,3 @@ export function useProject(slug: string | null): ProjectContent | null {
 
   return project;
 }
-
-export { CATEGORY };

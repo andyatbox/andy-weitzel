@@ -45,11 +45,11 @@ const PILL =
   "inline-flex shrink-0 items-center rounded-full border border-white px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-white hover:text-black min-[992px]:text-base";
 
 // Splash-only labels. With the descriptions gone the button alone has to say
-// what the portfolio is, so Interactive gets its full name here; the menu and
+// what the portfolio is, so the portfolio names are spelled out here; the menu and
 // the project nav keep the short label, where pill width is tight.
 const SPLASH_LABELS: Record<PortfolioId, string> = {
   ...LABELS,
-  interactive: "Interactive Experiences",
+  interactive: "Experiential",
 };
 
 /**

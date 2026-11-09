@@ -592,6 +592,26 @@ export class ScrollEngine {
     this.plan(snapped + delta * this.spacing, false);
   }
 
+  /**
+   * Put item `index` at the centre now, with no motion at all — for a URL
+   * that names a project, where the strip has to already be on it in the
+   * first frame rather than travelling there while the teaser grows.
+   *
+   * Safe to call before the gallery has published a layout: `spacing` is 1
+   * until it does, and `setLayout` rescales whatever is here by the same
+   * factor it rescales everything else.
+   */
+  jumpToIndex(index: number) {
+    this.landing = null;
+    this.needsLanding = false;
+    this.absorbing = false;
+    this.chaseCap = Infinity;
+    this.velocity = 0;
+    this.prevSpeed = 0;
+    this.current = index * this.spacing;
+    this.target = this.current;
+  }
+
   scrollToIndex(index: number) {
     const total = this.count * this.spacing;
     const base = index * this.spacing;
