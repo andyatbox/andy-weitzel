@@ -456,12 +456,21 @@ export default function Menu({
         const stepP = place(k, progress, total);
         el.style.transform = `translateY(calc(-50% + ${pPx}px))`;
         // Landscape dissolves rows toward the panel edges, so the ones the
-        // mask has taken away must stop answering clicks. Portrait shows
-        // every row inside the panel at full strength and lets the column's
-        // own overflow crop the rest, which already takes them out of hit
-        // testing — gating there would have left live-looking rows dead.
+        // mask has taken to nothing must stop answering clicks — and only
+        // those. The mask runs out at the edges of the region, so the line
+        // is there, measured in the same pixels the row was just placed in.
+        //
+        // This used to be a cut at 0.7 of the fade radius in *item steps*,
+        // which disagrees with a mask in pixels the moment a title wraps and
+        // a row takes more than its step: rows still showing at a third of
+        // full strength were dead to the pointer, and asymmetrically, since
+        // the wrapped titles were all on one side of the centre.
+        //
+        // Portrait masks nothing and lets the column's own overflow crop the
+        // rest, which already takes those rows out of hit testing; gating
+        // there would leave live-looking rows dead.
         el.style.pointerEvents =
-          isLandscape && Math.abs(stepP) > FADE_ZERO * 0.7 ? "none" : "auto";
+          isLandscape && Math.abs(pPx) >= regionHeight / 2 ? "none" : "auto";
         const title = titleRefs.current[k];
         if (title) title.dataset.on = String(Math.abs(stepP) < 0.5);
       }
@@ -472,7 +481,10 @@ export default function Menu({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [engine, total, rowHeight, isLandscape, n, reps, baseRow, ROW_GAP]);
+    // `regionHeight` is in here for the hit-testing line above: it can change
+    // (the brand box growing or shrinking) while `rowHeight` sits still on
+    // its `baseRow` floor, and a stale line would cut in the wrong place.
+  }, [engine, total, rowHeight, regionHeight, isLandscape, n, reps, baseRow, ROW_GAP]);
 
   // Initial inline placement so the first paint is already positioned.
   const progress0 = engine.current / (engine.spacing || 1);
