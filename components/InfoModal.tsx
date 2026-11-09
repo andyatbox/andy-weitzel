@@ -83,7 +83,8 @@ function Award({
   children,
 }: {
   label: string;
-  title: string;
+  /** A node, not a string: one award's title carries the project's link. */
+  title: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -217,27 +218,34 @@ function ResumeBody() {
       </Section>
 
       <Section title="Awards">
-        <Award label="Webby Awards, 2026" title="E.L.F. Cosmetics elfnalysis.com">
-          <p>Award: Webby winner, People’s Voice winner, Nominee (AR)</p>
+        {/* The PDF dropped these three descriptions for space; the titles and
+            agencies below are its wording exactly. The one thing kept that
+            the PDF cannot have is the link — the title already reads
+            "elfnalysis.com", so the site points it at the site. */}
+        <Award
+          label="Webby Awards, 2026"
+          title={
+            <>
+              E.L.F. Cosmetics{" "}
+              <a
+                href="https://www.elfnalysis.com"
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-2"
+              >
+                elfnalysis.com
+              </a>
+            </>
+          }
+        >
+          <p>Webby winner, People’s Voice winner</p>
           <p>Agency: Movement Strategy</p>
-          <p>
-            <a
-              href="https://www.elfnalysis.com"
-              target="_blank"
-              rel="noreferrer"
-              className="italic underline underline-offset-2"
-            >
-              elfnalysis.com
-            </a>{" "}
-            A.I. season identifier webapp
-          </p>
         </Award>
         <Award label="Shorty Awards, 2020" title="VMAs Burger King x Lil Yachty">
           <p>Agency: Coffee Labs</p>
-          <p>
-            MTV VMAs Burger King x Lil Yachty in AR “Fire Performance” at
-            bk.mtv.com
-          </p>
+        </Award>
+        <Award label="Shorty Awards, 2020" title="Kroger A.I. Chatbot">
+          <p>Agency: Coffee Labs</p>
         </Award>
       </Section>
 
