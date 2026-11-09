@@ -34,7 +34,7 @@ content is being finished — remove both before public launch.
   and swap the id instead. The two portfolio buttons are `MagneticPill.tsx`,
   which leans them toward the cursor on a rAF lerp — gated on `(pointer: fine)
   and (hover: hover)`, not on touch points, so an iPad with a trackpad keeps
-  it. `SplashIntro.tsx` is the older static gate, kept as a revert path.
+  it.
 - **`components/Cursor.tsx`** — custom cursor for fine pointers (ring + dot,
   `mix-blend-mode: difference`), states via classes: link / drag / teaser
   (`body.cursor-teaser`, set by the gallery tooltip, whose "View … Project"
@@ -146,10 +146,14 @@ content is being finished — remove both before public launch.
   `app/not-found.tsx`) and sets the title and canonical. The app then moves
   its own URL with `history.pushState` and plays `popstate` back into state
   (`go` / `applyRoute` in `PortfolioApp`). See the hard rules for why.
-- **`lib/analytics.ts`** — the GTM container id, loaded in `app/layout.tsx`,
-  plus the `virtual_page_view` push every in-app move makes (the page never
-  reloads, so the container's own page view only ever fires for the address
-  the visitor arrived on).
+- **`lib/analytics.ts`** — the GA4 measurement id, loaded in `app/layout.tsx`,
+  plus the `page_view` event every in-app move sends (the page never reloads,
+  so gtag's own page view only ever fires for the address the visitor arrived
+  on, and `page_location` has to be passed explicitly or every move is
+  reported as that first address). Measured directly rather than through a
+  Tag Manager container: there is one tag, so a container would only mean the
+  switch for analytics lives outside the repo. The old container id is in the
+  file's comment if tags ever need adding without a deploy.
 - **`lib/videoEmbed.ts`** — resolves a pasted Vimeo/Gumlet URL or full embed
   code to a player src, plus postMessage helpers for detecting playback end
   across both providers' cross-origin iframes.
@@ -185,8 +189,7 @@ not theme, and must never be swapped:
   so swapping it makes the cursor disappear;
 - the gallery's `#000000` backing plane — what the additive R/G/B channels
   sum against, whatever the canvas clears to;
-- the corner-mask canvas fill and `SplashIntro`'s difference-blend triangle,
-  both white as alpha/blend operands;
+- the corner-mask canvas fill — white as an alpha operand, not as a colour;
 - `Menu`'s list `linear-gradient` — a CSS mask, where black/white are alpha.
 
 `body`'s own `color` is the default for anything that sets none, so it tracks

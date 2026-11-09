@@ -171,11 +171,6 @@ export interface ProjectContent {
   columnsContent?: ColumnsGroup[];
 }
 
-export const CATEGORY_LABELS: Record<string, string> = {
-  "branding-print": "Branding & Print",
-  "immersive-ux": "Experiential",
-};
-
 const PROJECT_QUERY = `*[_type == "project" && slug.current == $slug][0]{
   _id, title, category,
   gallery[]{
