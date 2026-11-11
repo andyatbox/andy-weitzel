@@ -50,7 +50,11 @@ const TALK_GRACE_MS = 110;
 // as the last character lands, instead of carrying on afterwards.
 const LEAD_OUT_MS = 380;
 
-const NAME_SIZE = "clamp(22px, 2.5vw, 34px)";
+// The wordmark, and with it the monogram opposite (whose height is derived
+// from this), on the landing's top line. The ceiling is what a large display
+// sees: at 34px the pair sat marooned in the corners of a 27-inch screen
+// while the copy below it scaled on.
+const NAME_SIZE = "clamp(22px, 2.6vw, 52px)";
 // Floor on the shrink-to-fit below. The gate does not scroll, so this is the
 // point past which it would rather clip than go on shrinking — low enough
 // that no realistic window reaches it, since everything in the block scales

@@ -24,11 +24,22 @@ content is being finished — remove both before public launch.
   being identical compose to an identity, which is why the sky used to show
   dead flat at rest however it was framed (`DOME_FRAME`) — and the two agree
   at the centre of the screen, so the bend costs nothing there and grows
-  outward. The sky's soft focus scales with how far the picture is enlarged,
-  so a sharp source stays sharp (the 1080p reel shows near 1:1). A morphing
+  outward. How much of the picture the screen covers (`DOME_FRAME`) is a
+  share of the largest frame the *lens* allows, solved afresh whenever the
+  window or the source changes — not a fit to the picture's bounding box.
+  The bend pulls the corners in, so a box fit was far more conservative than
+  it had to be and left a 16:9 reel cropped to a fifth of its width on a
+  phone. Raising the bend costs visible picture at the edges, so the two
+  knobs move together. The sky's soft focus scales with how far the picture
+  is enlarged, so a sharp source stays sharp (the 1080p reel shows near
+  1:1). A morphing
   cube → sphere → blob of the same footage used to hang in front of it,
   riding the cursor; it was taken out in full (Nov 2026), which is why the
   sky now carries a faint sway of its own while the agent types (`DOME_STIR`).
+  Touch steers nothing and rests dead centre. A slow drift used to stand in
+  for the pointer there, but a wander is not a return — it starts off-centre
+  and takes two minutes to come back, so a phone showed the reel parked to
+  one side with no way to straighten it.
   Replacing a Gumlet asset in place regenerated only its
   DASH output, leaving the HLS ladder on the old video — upload a new asset
   and swap the id instead. The two portfolio buttons are `MagneticPill.tsx`,
@@ -95,7 +106,11 @@ content is being finished — remove both before public launch.
   teaser strip fixed along the bottom (scroll/drag, recentres after 3s idle).
   The sheet scrolls with eased wheel input (`lib/useSmoothScroll.ts`; touch
   and keyboard stay native) and blocks marked `data-reveal` animate in on
-  entry (`lib/useReveal.ts`).
+  entry (`lib/useReveal.ts`). Closing a project only fades the sheet —
+  nothing unmounts, deliberately, so the players survive the gallery's
+  expand — which means a video left running goes on being *heard* over the
+  portfolio behind it. `ProjectGallery` takes `active` and pauses on the way
+  out for that.
 - **`lib/ScrollEngine.ts`** — single source of truth for scroll position
   (`target`/`current`/`velocity`), shared by the WebGL gallery and the DOM
   menu so they stay locked in sync. Scrolls land on an item in one motion:

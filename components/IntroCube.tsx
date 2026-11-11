@@ -130,17 +130,23 @@ function drift(t: number, a: number, b: number, c: number) {
  * field, scaled to how far past 1:1 the picture is actually enlarged — so a
  * source with pixels to spare, like the 1080p reel, stays sharp.
  */
-// How much of the picture fills the screen at rest, along whichever axis is
-// the tighter fit (the screen's long side, for a square reel). Lower shows
-// more of the picture, smaller, and leaves less of it to turn toward. The
-// bend below pulls the edges in past this; the centre is unaffected.
-const DOME_FRAME = 0.82;
+// How much of the largest frame the picture allows is used at rest, 0..1.
+// One puts the rest view's border exactly on the picture's edge — every pixel
+// of the reel that can be shown without the mirrored sky coming into view,
+// and no room left to turn. Lower backs off that edge, showing less of the
+// picture and buying room to turn toward it.
+//
+// That maximum is solved for each frame shape rather than fitted to the
+// picture's bounding box: the bend pulls the corners in, so the box fit was
+// far more conservative than it needed to be, and on a tall screen it left
+// a 16:9 reel cropped to a fifth of its width for nothing.
+const DOME_FRAME = 0.92;
 // How far the lens is bent away from the picture's own projection, 0..1.
 // Zero is the flat view the sky used to show at rest, one an ordinary camera
 // looking at dome content. Nothing but this makes the sky read as curved: the
 // wrap and an identical lens compose to an identity, so no amount of framing
 // or zoom could bend it.
-const DOME_BEND = 0.55;
+const DOME_BEND = 0.8;
 // How far the view sways on its own while the agent types, as a share of the
 // turn the pointer commands.
 const DOME_STIR = 0.14;
@@ -304,6 +310,8 @@ function Dome({
   const isTouch = useMemo(detectTouch, []);
   const target = useRef({ x: 0, y: 0 }); // pointer, -1..1, y up
   const look = useRef({ yaw: 0, pitch: 0 });
+  // The solved frame size, kept across frames: see the fit in the loop below.
+  const fit = useRef({ aspect: 0, ex: 0, ey: 0, k: 0 });
   const speak = useRef(0); // eased 0..1, so the sway starts and stops smoothly
 
   const { geometry, material, uniforms, m4, m4b, v3 } = useMemo(() => {
@@ -343,8 +351,9 @@ function Dome({
     [geometry, material]
   );
 
-  // Desktop: the pointer turns the sky. Touch has no hover to read, so the
-  // sky drifts on its own instead (see the frame loop).
+  // Desktop: the pointer turns the sky. Touch gets no steering at all — see
+  // the frame loop for why the drift that used to stand in for a pointer is
+  // gone.
   useEffect(() => {
     if (isTouch) return;
     const onMove = (e: PointerEvent) => {
@@ -365,9 +374,27 @@ function Dome({
     const ey = va >= 1 ? 1 / va : 1;
 
     // Frame the screen inside the picture: the screen's half-extents on the
-    // plane, k·(aspect, 1), at DOME_FRAME of the tightest fit.
+    // plane are k·(aspect, 1), and k is DOME_FRAME of the largest value whose
+    // rest view still lands inside the picture everywhere along its border.
+    // Solved through the lens, so the bend's own pull on the corners is part
+    // of the answer. Only reshaping the window or swapping the source can
+    // change it, so it is kept rather than searched every frame.
     const aspect = size.width / size.height;
-    const k = DOME_FRAME * Math.min(ex / aspect, ey);
+    const f = fit.current;
+    if (f.aspect !== aspect || f.ex !== ex || f.ey !== ey) {
+      let lo = 0;
+      let hi = 4;
+      for (let i = 0; i < 20; i++) {
+        const mid = (lo + hi) / 2;
+        if (domeReach(0, 0, mid * aspect, mid, ex, ey, m4, m4b, v3) > 1) hi = mid;
+        else lo = mid;
+      }
+      f.aspect = aspect;
+      f.ex = ex;
+      f.ey = ey;
+      f.k = lo;
+    }
+    const k = DOME_FRAME * f.k;
     const sx = k * aspect;
     const sy = k;
 
@@ -393,12 +420,16 @@ function Dome({
     // settles once they stop.
     speak.current += ((speaking ? 1 : 0) - speak.current) * d * 2;
     const stir = DOME_STIR * speak.current;
-    const tx =
-      (isTouch ? drift(t, 0.05, 0.13, 0.31) * 0.7 : target.current.x) +
-      drift(t, 0.23, 0.47, 0.71) * stir;
-    const ty =
-      (isTouch ? drift(t, 0.04, 0.11, 0.27) * 0.5 : target.current.y) +
-      drift(t, 0.19, 0.39, 0.63) * stir;
+    // Touch steers nothing. A slow drift used to stand in for the pointer
+    // here, but it is a wander, not a return: it starts away from centre and
+    // takes two minutes to come back, so a phone showed the reel parked off
+    // to one side with no way to put it straight. The typing sway below is
+    // the only thing that moves it there now, and that one settles to dead
+    // centre when the words stop.
+    const px = isTouch ? 0 : target.current.x;
+    const py = isTouch ? 0 : target.current.y;
+    const tx = px + drift(t, 0.23, 0.47, 0.71) * stir;
+    const ty = py + drift(t, 0.19, 0.39, 0.63) * stir;
     const kk = 1 - Math.exp(-d * 2.2);
     const L = look.current;
     // Look toward the pointer: right turns the view right, up tilts it up.

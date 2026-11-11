@@ -169,6 +169,7 @@ export default function ProjectModal({
                 <ProjectGallery
                   images={content.gallery}
                   height={height}
+                  active={opened}
                   onExpandedChange={setGalleryExpanded}
                 />
               </div>

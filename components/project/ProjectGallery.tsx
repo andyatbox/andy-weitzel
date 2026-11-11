@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { GallerySlide } from "@/lib/portfolios";
 import { urlFor } from "@/lib/sanity";
 import {
@@ -25,9 +25,16 @@ const DOTS_MAX = 6;
 export default function ProjectGallery({
   images,
   height,
+  active = true,
   onExpandedChange,
 }: {
   images?: GallerySlide[];
+  /**
+   * False once the project sheet is on its way out. The sheet only fades —
+   * nothing here unmounts — so a player left running would go on playing,
+   * heard but not seen, over the gallery behind it.
+   */
+  active?: boolean;
   /** Measured window height — never size this in vh (mobile chrome). */
   height: number;
   /**
@@ -158,6 +165,32 @@ export default function ProjectGallery({
     return () => ro.disconnect();
   }, [images]);
 
+  // Send play/pause to a player iframe — Vimeo's player protocol or Gumlet's
+  // player.js protocol. Declared up here with the hooks because the effect
+  // below needs it and nothing may be declared past the early return.
+  const postCommand = useCallback((i: number, method: "play" | "pause") => {
+    const frame = iframeRefs.current[i];
+    const win = frame?.contentWindow;
+    if (!frame || !win) return;
+    if (frame.src.includes("vimeo")) {
+      win.postMessage(JSON.stringify({ method }), "*");
+    } else {
+      win.postMessage(
+        JSON.stringify({ context: "player.js", version: "0.0.11", method }),
+        "*"
+      );
+    }
+  }, []);
+
+  // Leaving the project stops whatever was playing. The sheet is still
+  // mounted behind the gallery at this point, so without this the sound
+  // carries on with nothing on screen to explain it.
+  useEffect(() => {
+    if (active || playingIndex === null) return;
+    postCommand(playingIndex, "pause");
+    setPlayingIndex(null);
+  }, [active, playingIndex, postCommand]);
+
   if (!images?.length) return null;
   const count = images.length;
   // 16:9 against the width actually available, capped against the measured
@@ -181,22 +214,6 @@ export default function ProjectGallery({
           ? "Next Slide"
           : null;
   if (hint) lastHint.current = hint;
-
-  // Send play/pause to a player iframe — Vimeo's player protocol or Gumlet's
-  // player.js protocol.
-  const postCommand = (i: number, method: "play" | "pause") => {
-    const frame = iframeRefs.current[i];
-    const win = frame?.contentWindow;
-    if (!frame || !win) return;
-    if (frame.src.includes("vimeo")) {
-      win.postMessage(JSON.stringify({ method }), "*");
-    } else {
-      win.postMessage(
-        JSON.stringify({ context: "player.js", version: "0.0.11", method }),
-        "*"
-      );
-    }
-  };
 
   const goTo = (index: number) => {
     // Players stay mounted across slides, so pause the one that was playing
