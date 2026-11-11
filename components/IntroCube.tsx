@@ -12,7 +12,7 @@ import {
 } from "@/lib/hlsVideo";
 import { detectTouch } from "@/lib/pointerFx";
 // The reel the sky plays. Any proportions work: the wrap takes the whole
-// picture. Shared with the "Work Reel" overlay, which shows the same stream
+// picture. Shared with the "Reel" overlay, which shows the same stream
 // flat.
 import { REEL_EMBED as EMBED } from "@/lib/reel";
 // The decode, capped in height, with uploads gated well below the source's
@@ -146,7 +146,13 @@ const DOME_FRAME = 0.92;
 // looking at dome content. Nothing but this makes the sky read as curved: the
 // wrap and an identical lens compose to an identity, so no amount of framing
 // or zoom could bend it.
-const DOME_BEND = 0.8;
+//
+// 0.8 was tried and read as distortion rather than curve — straight edges in
+// the footage bow far enough to look like a fault. It also costs picture:
+// the harder the bend, the further it drags the frame's own edges inward, so
+// backing it off here is what let the framing below open up as much as it
+// did. This is the value the landing shipped with.
+const DOME_BEND = 0.55;
 // How far the view sways on its own while the agent types, as a share of the
 // turn the pointer commands.
 const DOME_STIR = 0.14;

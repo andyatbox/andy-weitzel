@@ -513,7 +513,7 @@ export default function Menu({
     transition: `opacity 0.38s ease ${delay}ms, transform 0.38s ease ${delay}ms`,
   });
 
-  // Work Reel / Resumé / Contact, inside the brand block under the portfolio
+  // Reel / Resumé / Contact, inside the brand block under the portfolio
   // pills (below a divider) in both orientations. The reel leads, ruled off
   // from the two panels that have always been a pair: it is the one that
   // opens a moving picture rather than a sheet of type.
@@ -525,7 +525,7 @@ export default function Menu({
         size={linkPillSize}
         pad={linkPillPad}
       >
-        Work Reel
+        Reel
       </Pill>
       {/* A character, not a border: it divides two pills that wrap
           independently of each other, and it travels with the first. */}

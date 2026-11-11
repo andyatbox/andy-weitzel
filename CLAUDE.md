@@ -29,8 +29,11 @@ content is being finished — remove both before public launch.
   window or the source changes — not a fit to the picture's bounding box.
   The bend pulls the corners in, so a box fit was far more conservative than
   it had to be and left a 16:9 reel cropped to a fifth of its width on a
-  phone. Raising the bend costs visible picture at the edges, so the two
-  knobs move together. The sky's soft focus scales with how far the picture
+  phone. The two knobs pull against each other: the harder the bend, the
+  further it drags the frame's own edges inward, so a stronger curve is paid
+  for in picture. 0.8 was tried and read as distortion rather than curve —
+  straight edges in the footage bow enough to look like a fault — and
+  backing it off is what let the framing open up as far as it has. The sky's soft focus scales with how far the picture
   is enlarged, so a sharp source stays sharp (the 1080p reel shows near
   1:1). A morphing
   cube → sphere → blob of the same footage used to hang in front of it,
@@ -77,7 +80,7 @@ content is being finished — remove both before public launch.
   writes drops to the canvas as soon as `opened` flips — an open project
   fills the window exactly.
 - **`components/Menu.tsx`** — the DOM nav/menu panel (logo, name, role
-  ticker, portfolio pills, then Work Reel | Resumé · Contact, then the
+  ticker, portfolio pills, then Reel | Resumé · Contact, then the
   infinite scrolling item list). A quick tap/click
   on the logo returns to the landing (`returnToLanding` in PortfolioApp);
   holding it plays the psychedelic effect instead, and a drag does neither. Landscape and
@@ -89,7 +92,7 @@ content is being finished — remove both before public launch.
 - **`components/InfoModal.tsx`** — Resumé / Contact popup. Contact posts
   natively to a Google Form (no iframe, no click-out); résumé is built from
   static JSX content mirroring the source PDF/docx, not fetched from Sanity.
-- **`components/ReelOverlay.tsx`** — "Work Reel", the pill that leads the row
+- **`components/ReelOverlay.tsx`** — "Reel", the pill that leads the row
   with Resumé and Contact: the sizzle reel full-screen and flat, the one place on the
   site it is shown with no shader between it and the viewer. A plain
   `<video>`, so none of the WebGL texture plumbing applies — only `attachHls`
