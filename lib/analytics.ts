@@ -1,3 +1,5 @@
+import type { Route } from "./routes";
+
 /**
  * Google Analytics 4, as the two things the site has to do about it: load
  * gtag (app/layout.tsx) and say when the page has changed (here).
@@ -14,6 +16,26 @@
  * visitor arrived on. Every move after that is sent from here.
  */
 export const GA_ID = "G-X2D07YJG44";
+
+/**
+ * Whether a move is worth recording as a page view.
+ *
+ * Closing a project, or an overlay, lands back on the page it was opened
+ * over. Counting that would have a portfolio outscore every project on it
+ * several times over — not because anyone sought the portfolio out, but
+ * because it is the thing you pass back through on the way to the next
+ * project. The arrival counts; the way back does not.
+ *
+ * Everything else is a real move and counts, including one portfolio to
+ * another, and a project to a project.
+ */
+export function isPageViewWorthy(prev: Route, next: Route): boolean {
+  if (prev.portfolio !== next.portfolio) return true;
+  // Something is being opened, not closed.
+  if (next.slug || next.panel) return true;
+  // Nothing was open to close, so this is a move in its own right.
+  return !prev.slug && !prev.panel;
+}
 
 declare global {
   interface Window {

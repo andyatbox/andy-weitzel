@@ -11,7 +11,7 @@ import {
   type Panel,
   type Route,
 } from "@/lib/routes";
-import { pageView } from "@/lib/analytics";
+import { isPageViewWorthy, pageView } from "@/lib/analytics";
 import { ScrollEngine } from "@/lib/ScrollEngine";
 import { useViewport } from "@/lib/useViewport";
 import Menu from "./Menu";
@@ -216,7 +216,8 @@ export default function PortfolioApp({
   const go = useCallback(
     (next: Partial<Route>, opts?: { replace?: boolean; force?: boolean }) => {
       if (silent.current && !opts?.force) return;
-      const route = { ...routeRef.current, ...next };
+      const prev = routeRef.current;
+      const route = { ...prev, ...next };
       routeRef.current = route;
       const url = routeHref(route);
       const title = titleFor(route);
@@ -224,7 +225,9 @@ export default function PortfolioApp({
       if (url === window.location.pathname + window.location.search) return;
       if (opts?.replace) window.history.replaceState(null, "", url);
       else window.history.pushState(null, "", url);
-      pageView(url, title);
+      // The address and the title always follow the move; only the count is
+      // selective — see isPageViewWorthy.
+      if (isPageViewWorthy(prev, route)) pageView(url, title);
     },
     [titleFor]
   );
@@ -551,6 +554,7 @@ export default function PortfolioApp({
   useEffect(() => {
     const onPop = () => {
       const route = currentRoute();
+      const prev = routeRef.current;
       routeRef.current = route;
       silent.current = true;
       try {
@@ -560,7 +564,9 @@ export default function PortfolioApp({
       }
       const title = titleFor(route);
       document.title = title;
-      pageView(routeHref(route), title);
+      // Back out of a project is the same return as closing it, and is left
+      // uncounted for the same reason.
+      if (isPageViewWorthy(prev, route)) pageView(routeHref(route), title);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
