@@ -9,6 +9,12 @@ import type { PortfolioItem } from "@/lib/portfolios";
 const MIN_H = 44;
 const MAX_H_LANDSCAPE = 92;
 const MAX_H_PORTRAIT = 62;
+// A phone held upright is the one place the strip is the only picture on
+// screen — the sheet above it is a column of type a third the window's width —
+// and at the portrait height those thumbs read as a row of stamps. Touch only,
+// because that is the hand holding it: a narrow desktop window still grows the
+// strip on hover, where a pointer can ask for it.
+const MAX_H_PHONE = 90;
 const ASPECT = 16 / 9;
 const PAD_Y = 10;
 const TITLE_GAP = 6;
@@ -78,7 +84,11 @@ export default function ProjectStrip({
   const reps = n ? Math.max(1, Math.ceil((width / minPitch + 3) / n)) : 0;
   const total = n * reps;
   const forced = !isLandscape || height >= 1200;
-  const maxH = isLandscape ? MAX_H_LANDSCAPE : MAX_H_PORTRAIT;
+  const maxH = isLandscape
+    ? MAX_H_LANDSCAPE
+    : isTouch && width < 768
+      ? MAX_H_PHONE
+      : MAX_H_PORTRAIT;
   const titleH = isLandscape ? 18 : 15;
 
   const trackRef = useRef<HTMLDivElement>(null);

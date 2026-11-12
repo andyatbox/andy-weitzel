@@ -501,7 +501,7 @@ export default function InfoModal({
                   or rock the fields below. Thanks!
                 </p>
                 <p className="mt-3">
-                  I&rsquo;m also on{" "}
+                  Let&rsquo;s connect on{" "}
                   <a
                     href={LINKEDIN_URL}
                     target="_blank"

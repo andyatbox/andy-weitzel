@@ -13,10 +13,21 @@ content is being finished — remove both before public launch.
   switching, the open/close project animation state, the slide-reveal intro,
   window-level scroll/drag input, the hover tooltip, and mounts everything
   else.
-- **`components/AgentIntro.tsx`** — the landing gate: a row of location and
-  weather data graphics (`WeatherPanel.tsx`; data from `app/api/greeting`,
-  Open-Meteo + Vercel's geo headers) above a typed "Hello." and the portfolio
-  question, over **`IntroCube.tsx`** — the sizzle reel (HLS via
+- **`components/AgentIntro.tsx`** — the landing gate: one centred block,
+  left-aligned down a single edge — the AW monogram, the wordmark under it,
+  a row of location and weather data graphics (`WeatherPanel.tsx`; data from
+  `app/api/greeting`, Open-Meteo + Vercel's geo headers), and the typed
+  portfolio question. The wordmark (`NameWheel`, rolling between the name and
+  the role) carries the *copy's* size, not one of its own: it replaced the
+  typed "Hello." the script used to open with, which is why no beat sets
+  `pause` any more. The monogram and the wordmark used to sit in
+  the window's top corners in a header of their own; there is no header now,
+  and the monogram is sized against the copy (`LOGO_RATIO`) rather than
+  against a line of its own. One left edge for everything also retired the
+  centre-until-it-wraps measurement the copy used to do against a zero-width
+  caret marker. All of it rides one shrink-to-fit (`capFit`) measured against
+  the room the gate has, so nothing ever scrolls. It sits over
+  **`IntroCube.tsx`** — the sizzle reel (HLS via
   `lib/hlsVideo.ts`) as a half-skybox the pointer turns. The sky is a
   full-screen shader: the picture is wrapped stereographically, and the lens
   is mixed between that same projection and an ordinary rectilinear one
@@ -85,6 +96,11 @@ content is being finished — remove both before public launch.
   on the logo returns to the landing (`returnToLanding` in PortfolioApp);
   holding it plays the psychedelic effect instead, and a drag does neither. Landscape and
   portrait are materially different layouts, not just a CSS breakpoint.
+  A phone held upright gives the brand block half a narrow window, which is
+  why its pills were pinned to the list's own type size; the longest label
+  needs less of that half than it was given, so `phoneRoom` spends what a
+  bigger phone has (nothing at 340px, pills half again as large at 430px).
+  Measure against "Experiential" before raising it.
 - **`components/PsychedelicFX.tsx`** — a *real* second WebGL context that
   samples the rendered gallery canvas as a texture and distorts it (swirl,
   domain warp, chromatic aberration). Triggered by hovering the logo/pills;
@@ -107,6 +123,11 @@ content is being finished — remove both before public launch.
   (`ProjectModal`), its image/video slider (`ProjectGallery`), portable-text
   rendering, multi-column layout, and `ProjectStrip` — the looping prev/next
   teaser strip fixed along the bottom (scroll/drag, recentres after 3s idle).
+  Its thumbs grow on hover, and always where there is no hover to ask with:
+  portrait, or a landscape screen 1200px or taller. A phone held upright gets
+  a taller thumb again (`MAX_H_PHONE`) — the strip is the only picture on
+  screen beside a column of type, and the portrait height read as a row of
+  stamps there. Touch only, so a narrow desktop window still grows on hover.
   The sheet scrolls with eased wheel input (`lib/useSmoothScroll.ts`; touch
   and keyboard stay native) and blocks marked `data-reveal` animate in on
   entry (`lib/useReveal.ts`). Closing a project only fades the sheet —

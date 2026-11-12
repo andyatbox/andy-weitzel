@@ -497,15 +497,34 @@ export default function Menu({
   const nameSize = isLandscape
     ? isXL ? "clamp(30px, 2.6vw, 44px)" : isLarge ? "clamp(24px, 2.4vw, 34px)" : isMedium ? "clamp(20px, 2.1vw, 26px)" : "clamp(17px, 1.8vw, 22px)"
     : isMedium ? "clamp(21px, 3.9vw, 29px)" : "clamp(19px, 4.2vw, 25px)";
+  // How much room a phone held upright has to spend on the brand block, 0 to
+  // 1. The column is half a narrow window, which is why these pills were held
+  // at the list's own type size — but the longest label needs less of that
+  // half than it was given, and 12px pills under a logo three times their
+  // height read as fine print. Nothing changes on the narrowest phone; a large
+  // one gets pills half again as big. Zero in landscape and on anything
+  // wider, which keep the ramps they had.
+  const phoneRoom =
+    !isLandscape && !isMedium
+      ? Math.max(0, Math.min(1, (viewport.width - 340) / 90))
+      : 0;
   // The two portfolio pills carry the portfolio choice, so they take the same
   // wide-display bump as the list type and the brand block keeps its
   // proportions as the rail grows.
-  const workPillSize = (isXL ? 18 : isLarge ? 15 : isMedium ? 13 : 12) + rail.fontBump;
+  const workPillSize =
+    !isLandscape && !isMedium
+      ? Math.round(15 + 5 * phoneRoom)
+      : (isXL ? 18 : isLarge ? 15 : isMedium ? 13 : 12) + rail.fontBump;
   // Resumé and Contact are secondary and stay at the size they always were —
   // the old text-xs → text-sm → text-base ramp with py-1 / px-3 padding, which
-  // the derived padding would have grown along with the type.
-  const linkPillSize = isXL ? 16 : isLarge ? 14 : 12;
-  const linkPillPad: [number, number] = [4, isXL ? 14 : 12];
+  // the derived padding would have grown along with the type. They ride the
+  // phone ramp too, or the row below the portfolios would read as the smaller
+  // of two sizes rather than as the quiet one.
+  const linkPillSize = isXL ? 16 : isLarge ? 14 : 12 + Math.round(4 * phoneRoom);
+  const linkPillPad: [number, number] = [
+    4 + Math.round(2 * phoneRoom),
+    (isXL ? 14 : 12) + Math.round(3 * phoneRoom),
+  ];
 
   const introAnim = (delay: number): React.CSSProperties => ({
     opacity: intro ? 1 : 0,

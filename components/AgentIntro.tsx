@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LABELS, PORTFOLIO_IDS, type PortfolioId } from "@/lib/portfolios";
 import LogoMark from "./LogoMark";
 import NameWheel from "./NameWheel";
@@ -26,13 +26,13 @@ interface Beat {
  * is the same for everyone.
  */
 function buildBeats(): Beat[] {
-  const line = (text: string): Beat => ({ parts: [{ text }] });
   return [
-    // One sentence, typed in two breaths: the script's one rest lets the
-    // greeting land before the question runs on after it, on the same line.
-    { ...line("Hello!"), pause: true },
-    // The question closes the script; the portfolio buttons below answer it.
-    line("Which portfolio would you like to start with?"),
+    // The only beat. The greeting that used to open the script is gone: the
+    // wordmark sits on the line above as the question's own first line, so
+    // the lockup does the introducing and the agent only asks. The rest
+    // between the two breaths went with it, which is why nothing sets
+    // `pause` any more — the machinery stays for a script that wants one.
+    { parts: [{ text: "Which portfolio would you like to start with?" }] },
   ];
 }
 
@@ -50,17 +50,17 @@ const TALK_GRACE_MS = 110;
 // as the last character lands, instead of carrying on afterwards.
 const LEAD_OUT_MS = 380;
 
-// The wordmark, and with it the monogram opposite (whose height is derived
-// from this), on the landing's top line. The ceiling is what a large display
-// sees: at 34px the pair sat marooned in the corners of a 27-inch screen
-// while the copy below it scaled on.
-const NAME_SIZE = "clamp(22px, 2.6vw, 52px)";
 // Floor on the shrink-to-fit below. The gate does not scroll, so this is the
 // point past which it would rather clip than go on shrinking — low enough
 // that no realistic window reaches it, since everything in the block scales
 // together and there is far less to fit than when only the copy did.
 const MIN_CAP_FIT = 0.45;
-const CAP_RATIO = 0.717;
+// Monogram height, against the copy's own size. It opens the centred block
+// now instead of sitting opposite a wordmark in the far corner, so it is
+// sized against the type it leads rather than against a line of its own —
+// and sized well up: as a corner mark it came out at a phone's 25px, which
+// is smaller than the question under it.
+const LOGO_RATIO = 1.45;
 
 // Shape only. Both pills take their size from the shrink-to-fit below, in
 // `em` padding so a pill keeps its proportions at any of them.
@@ -254,55 +254,14 @@ export default function AgentIntro({
 
   const speaking = talking;
 
-  // The segment the typing has reached — where the measuring marker goes.
-  let caretSegment = 0;
-  for (let i = 0; i < segments.length; i++) {
-    if (typed >= segments[i].start) caretSegment = i;
-  }
-
-  // Centre-until-it-wraps. `text-align` can't be animated between values, so
-  // the paragraph is always left-aligned and nudged right by half its slack
-  // while the copy still fits on one line; when it wraps, that offset goes to
-  // zero and the transition below carries it home. The shift is applied
-  // without a transition while still centred, so growing text stays centred
-  // instead of chasing its own easing.
+  // The block that has to fit: the monogram, the panel, the copy and the two
+  // answer rows. The copy used to centre itself while it was still one line
+  // and slide left once it wrapped, measured character by character against a
+  // zero-width marker; with the monogram and the wordmark above it there is a
+  // left edge for the whole block to square up to, and nothing to animate
+  // between — so the measurement, the marker and the shift are all gone.
   const mainRef = useRef<HTMLElement>(null);
-  const capRef = useRef<HTMLParagraphElement>(null);
-  // The weather panel and the copy together — what has to fit.
   const colRef = useRef<HTMLDivElement>(null);
-  const typedRef = useRef<HTMLSpanElement>(null);
-  // Zero-width marker sitting immediately after the last typed character. The
-  // run itself can't be measured directly — it also contains the transparent
-  // tail, so its rects always span the finished paragraph.
-  const caretRef = useRef<HTMLSpanElement>(null);
-  const [centreShift, setCentreShift] = useState(0);
-  const [multiLine, setMultiLine] = useState(false);
-  // A layout effect, not a passive one: it measures the DOM and feeds the
-  // result straight back into layout, on every character typed. As a passive
-  // effect that was a setState-after-render chain once per frame for the
-  // whole script, which React eventually flags as a runaway loop ("Maximum
-  // update depth exceeded"); it could also paint a frame with the previous
-  // centring before correcting it. Layout effects resolve before paint.
-  useLayoutEffect(() => {
-    const box = capRef.current;
-    const run = typedRef.current;
-    const mark = caretRef.current;
-    if (!box || !run || !mark || !typed) return;
-    if (hasPanel) {
-      setMultiLine(false);
-      setCentreShift(0);
-      return;
-    }
-    const first = run.getClientRects()[0];
-    if (!first) return;
-    const at = mark.getBoundingClientRect();
-    // Past the first line box means the copy has wrapped.
-    const wrapped = at.top - first.top > first.height * 0.5;
-    setMultiLine(wrapped);
-    setCentreShift(
-      wrapped ? 0 : Math.max(0, (box.clientWidth - (at.left - first.left)) / 2)
-    );
-  }, [typed, script, width, hasPanel]);
 
   // Both rows wait for the question to finish typing, then ease in under it.
   // They answer it, so arriving with the first character had them offering an
@@ -404,37 +363,38 @@ export default function AgentIntro({
         className="pointer-events-none absolute inset-0 z-[5] bg-black/45"
       />
 
-      {/* The gate never scrolls. Everything below the header is one block
-          that measures itself and shrinks to the room it has (see `capFit`),
-          so there is nothing to scroll to. */}
+      {/* The gate never scrolls. It is one block that measures itself and
+          shrinks to the room it has (see `capFit`), so there is nothing to
+          scroll to. The monogram and the wordmark used to sit in the top
+          corners above it; they are part of the block now, which is why
+          there is no header here any more. */}
       <div className="relative z-10 flex h-full w-full flex-col overflow-hidden">
-        {/* Wordmark left, monogram right, across the top. */}
-        <header className="flex shrink-0 items-start justify-between px-6 pt-6 sm:px-10 sm:pt-8">
-          {/* Nudged down to sit on the logo's baseline. The wheel's box is
-              taller than its type (it has to clear descenders as it rolls), so
-              aligning the two boxes at the top leaves the wordmark reading
-              high. Stated in em so it tracks the fluid type size rather than
-              overshooting once the wordmark shrinks on a phone. */}
-          <NameWheel
-            className="font-medium tracking-tighter"
-            style={{ fontSize: NAME_SIZE, marginTop: "0.15em", ...arrive(0) }}
-          />
-          <LogoMark
-            className="shrink-0 text-white"
-            style={{
-              height: `calc(${NAME_SIZE} * ${CAP_RATIO} * 1.6)`,
-              width: "auto",
-              ...arrive(140),
-            }}
-          />
-        </header>
-
         {/* Captions ride over the cube. */}
         <main
           ref={mainRef}
           className="relative flex min-h-0 flex-1 items-center justify-center px-6 py-6 sm:px-10 sm:py-8"
         >
           <div ref={colRef} className="mx-auto w-full max-w-3xl">
+            {/* The monogram opens the block, squared up to the same left edge
+                as everything under it, with the wordmark stacked under it:
+                the two are one lockup, and the weather and the copy follow
+                below. */}
+            <LogoMark
+              className="block text-white"
+              style={{
+                height: `calc(${capSize} * ${LOGO_RATIO})`,
+                width: "auto",
+                marginBottom: `calc(${capSize} * 0.14)`,
+                ...arrive(0),
+              }}
+            />
+            {/* Rolling between the name and the role. Still the copy's size,
+                not a size of its own — it reads as the agent's own line even
+                with the weather row between it and the question. */}
+            <NameWheel
+              className="font-medium tracking-tighter"
+              style={{ fontSize: capSize, marginBottom: gapRows, ...arrive(140) }}
+            />
             {greeting && hasPanel && (
               <div style={{ marginBottom: gapRows }}>
                 <WeatherPanel
@@ -445,27 +405,18 @@ export default function AgentIntro({
                 />
               </div>
             )}
-            {/* Alone, centred while the copy is still one line, then slid to
-                its left-aligned home once it wraps. Done as a translate rather
-                than text-align, which can't be animated — see `centreShift`. */}
             <p
-              ref={capRef}
               className="relative text-left font-medium leading-[1.12]"
-              style={{
-                fontSize: capSize,
-                transform: `translateX(${centreShift}px)`,
-                transition: multiLine ? "transform 0.55s ease" : "none",
-              }}
+              style={{ fontSize: capSize }}
             >
               {/* The finished sentence for assistive tech, so a half-typed
                   paragraph never reaches a screen reader. */}
               <span className="sr-only">{script}</span>
-              <span aria-hidden ref={typedRef}>
+              <span aria-hidden>
                 {segments.map((seg, i) => {
                   const shown = Math.max(0, Math.min(typed - seg.start, seg.text.length));
                   const vis = seg.text.slice(0, shown);
                   const rest = seg.text.slice(shown);
-                  const isCaret = i === caretSegment;
                   return (
                     <span key={i}>
                       {seg.link ? (
@@ -482,17 +433,6 @@ export default function AgentIntro({
                         </span>
                       ) : (
                         vis
-                      )}
-                      {isCaret && (
-                        // Full line-height, not a zero-height box: an empty
-                        // inline sits *on* the baseline, so its top lands most
-                        // of a line below the line box and every measurement
-                        // read as "already wrapped".
-                        <span
-                          ref={caretRef}
-                          className="inline-block w-0 align-baseline"
-                          style={{ height: "1em" }}
-                        />
                       )}
                       {/* Transparent tail: holds the paragraph at its finished
                           size and final wrapping from the first frame, so the
