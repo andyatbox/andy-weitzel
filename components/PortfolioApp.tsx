@@ -1122,6 +1122,7 @@ export default function PortfolioApp({
         <AgentIntro
           onChoose={chooseStart}
           onOpenInfo={openInfo}
+          onOpenReel={openReel}
           hiding={splashHiding}
           width={width}
           height={height}

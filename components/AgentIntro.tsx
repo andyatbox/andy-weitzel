@@ -28,11 +28,12 @@ interface Beat {
 function buildBeats(): Beat[] {
   return [
     // The only beat. The greeting that used to open the script is gone: the
-    // wordmark sits on the line above as the question's own first line, so
-    // the lockup does the introducing and the agent only asks. The rest
-    // between the two breaths went with it, which is why nothing sets
-    // `pause` any more — the machinery stays for a script that wants one.
-    { parts: [{ text: "Which portfolio would you like to start with?" }] },
+    // lockup above does the introducing, so the agent only asks — and asks
+    // it in four words, since the row under it now says what is being
+    // chosen between. The rest between the two breaths went with the
+    // greeting, which is why nothing sets `pause` any more — the machinery
+    // stays for a script that wants one.
+    { parts: [{ text: "Where to begin?" }] },
   ];
 }
 
@@ -81,12 +82,14 @@ const PILL_QUIET =
 export default function AgentIntro({
   onChoose,
   onOpenInfo,
+  onOpenReel,
   hiding,
   width,
   height,
 }: {
   onChoose: (id: PortfolioId) => void;
   onOpenInfo: (kind: "resume" | "contact") => void;
+  onOpenReel: () => void;
   hiding: boolean;
   width: number;
   height: number;
@@ -327,6 +330,26 @@ export default function AgentIntro({
     if (Math.abs(next - capFit) > 0.004) setCapFit(next);
   }, [script, width, height, capFit, hasPanel, typed]);
 
+  // "Portfolios:" rides the pills' own line or it is not there at all — a
+  // label alone above them is a heading, which is not what it is. Measured
+  // rather than guessed at a breakpoint: the pills carry the copy's
+  // shrink-to-fit, so whether it fits is a question about this window at this
+  // size. The label keeps its box while hidden (out of flow, so the pills
+  // never move), which means the sum below is the same hypothetical row
+  // either way and the answer cannot flip-flop with its own result.
+  const answerRef = useRef<HTMLDivElement>(null);
+  const [labelFits, setLabelFits] = useState(true);
+  useEffect(() => {
+    const row = answerRef.current;
+    if (!row) return;
+    const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+    let used = -gap;
+    for (const el of Array.from(row.children)) {
+      used += (el as HTMLElement).offsetWidth + gap;
+    }
+    setLabelFits(used <= row.clientWidth);
+  }, [width, height, capFit, revealed, showLinks]);
+
   const capSize = `calc(${capBase} * ${capFit.toFixed(3)})`;
   const panelSize = `calc(${isPhone ? "clamp(20px, 5.6vw, 24px)" : "clamp(22px, 2.3vw, 36px)"} * ${capFit.toFixed(3)})`;
   // The answer rows are part of the measured block now, so they take the same
@@ -450,9 +473,29 @@ export default function AgentIntro({
                 negotiation between them; in the measured block they ride the
                 same shrink and the group centres as one. */}
             <div
-              className="flex flex-wrap items-center justify-start gap-3"
+              ref={answerRef}
+              className="relative flex flex-wrap items-center justify-start gap-3"
               style={{ ...rowIn(showLinks), marginTop: gapRows }}
             >
+              {/* Pinned inside the row while hidden rather than unmounted —
+                  see `labelFits`. */}
+              <span
+                aria-hidden={!labelFits}
+                className="shrink-0 font-medium text-white/60"
+                style={{
+                  fontSize: pillSize,
+                  ...(labelFits
+                    ? null
+                    : {
+                        position: "absolute",
+                        left: 0,
+                        top: 0,
+                        visibility: "hidden",
+                      }),
+                }}
+              >
+                Portfolios:
+              </span>
               {PORTFOLIO_IDS.map((id) => (
                 <MagneticPill
                   key={id}
@@ -473,6 +516,27 @@ export default function AgentIntro({
               style={{ ...rowIn(showLinks), marginTop: gapQuiet }}
             >
               <span className="flex flex-wrap items-center gap-2">
+                {/* The reel leads, ruled off from the two panels that have
+                    always been a pair — the same row, in the same order, as
+                    the one in the menu on a portfolio page. */}
+                <button
+                  type="button"
+                  onClick={onOpenReel}
+                  className={PILL_QUIET}
+                  style={{ fontSize: quietSize, padding: "0.5em 1.25em" }}
+                >
+                  Reel
+                </button>
+                {/* A character, not a border: it divides two pills that wrap
+                    independently of each other, and it travels with the
+                    first. */}
+                <span
+                  aria-hidden
+                  className="text-white/30"
+                  style={{ fontSize: quietSize }}
+                >
+                  |
+                </span>
                 <button
                   type="button"
                   onClick={() => onOpenInfo("resume")}

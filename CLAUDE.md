@@ -25,8 +25,13 @@ content is being finished — remove both before public launch.
   and the monogram is sized against the copy (`LOGO_RATIO`) rather than
   against a line of its own. One left edge for everything also retired the
   centre-until-it-wraps measurement the copy used to do against a zero-width
-  caret marker. All of it rides one shrink-to-fit (`capFit`) measured against
-  the room the gate has, so nothing ever scrolls. It sits over
+  caret marker. The "Portfolios:" label before the two pills is measured the
+  same way the gate is: it shows only while the whole row fits on one line,
+  and keeps its box out of flow while hidden so the sum it is judged by does
+  not change with the answer. Under it, Reel | Resumé · Contact — the same
+  row, in the same order, as the menu's on a portfolio page. All of it rides
+  one shrink-to-fit (`capFit`) measured against the room the gate has, so
+  nothing ever scrolls. It sits over
   **`IntroCube.tsx`** — the sizzle reel (HLS via
   `lib/hlsVideo.ts`) as a half-skybox the pointer turns. The sky is a
   full-screen shader: the picture is wrapped stereographically, and the lens
@@ -108,8 +113,12 @@ content is being finished — remove both before public launch.
 - **`components/InfoModal.tsx`** — Resumé / Contact popup. Contact posts
   natively to a Google Form (no iframe, no click-out); résumé is built from
   static JSX content mirroring the source PDF/docx, not fetched from Sanity.
+  The PDF itself is `public/Andrew-Weitzel-Resume.pdf`, which the panel links
+  to — so a new résumé is two changes, the file and the copy, and they are
+  meant to say the same thing.
 - **`components/ReelOverlay.tsx`** — "Reel", the pill that leads the row
-  with Resumé and Contact: the sizzle reel full-screen and flat, the one place on the
+  with Resumé and Contact in both the landing gate and the menu: the sizzle
+  reel full-screen and flat, the one place on the
   site it is shown with no shader between it and the viewer. A plain
   `<video>`, so none of the WebGL texture plumbing applies — only `attachHls`
   is shared, since how to play a Gumlet stream at all is the same question

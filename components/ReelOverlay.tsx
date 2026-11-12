@@ -123,11 +123,13 @@ export default function ReelOverlay({
           The reel could not be loaded.
         </p>
       )}
+      {/* A real border, not a ring: the stroke has to read against whatever
+          frame of the reel is behind it, and the picture runs edge to edge. */}
       <button
         type="button"
         onClick={onClose}
         aria-label="Close reel"
-        className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/15"
+        className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-white text-white transition-colors hover:bg-white hover:text-black"
       >
         <svg
           width="20"

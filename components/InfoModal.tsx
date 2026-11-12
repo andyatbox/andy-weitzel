@@ -110,60 +110,86 @@ const CLIENTS = [
 function ResumeBody() {
   return (
     <>
-      <p className="mt-8 text-lg leading-relaxed text-black md:text-xl">
-        Creative Director with over two decades of experience at the
-        intersection of design, brand identity and strategy, emerging
-        technology, and interactive. Andy co-founded Box Creative in 2007 and
-        serves as its hands-on Creative Director and CCO, shipping award-winning
-        campaigns, digital experiences, and branding solutions for Fortune 50
-        businesses and startups alike. Work spans identity systems, integrated
-        marketing, immersive AR/AI/3D experiences, and application development —
-        a rare fluency across the full creative-to-technical pipeline.
-      </p>
+      <div className="mt-8 space-y-4 text-lg leading-relaxed text-black md:text-xl">
+        <p>
+          Creative Director with more than two decades of experience in brand
+          strategy, design, and interactive experiences. Andy combines creative
+          direction with a passion for design and immersive experiences,
+          guiding ideas from concept to launch.
+        </p>
+        <p>
+          Andy co-founded Box Creative in 2007 and serves as its Creative
+          Director and Chief Creative Officer. He has led award-winning work
+          for Fortune 50 companies and startups, spanning brand identity
+          systems, integrated marketing, immersive experiences, and app
+          development.
+        </p>
+        <p>
+          Andy holds the same leadership roles at Dayworker, a tech startup
+          that helps skilled laborers find work and contractors build crews.
+          His work spans brand building, design and UX for mobile and web
+          apps, reactive marketing campaigns, and front-end development.
+        </p>
+      </div>
 
-      <Section title="Experience">
+      <Section title="Professional Experience">
         <Job
-          title="Chief Creative Officer, Creative Director & Co-founder"
+          title="Chief Creative Officer, Creative Director"
           org="Box Creative"
           meta="2007 — Present • Manhattan & Queens • www.box.biz"
         >
           <p>
-            Co-founded and built Box Creative, an award-winning design firm and
-            digital studio, alongside his twin brother. Within the first year,
-            landed immersive 3D projects for Pepsi and MoMA/PS1 — setting the
-            trajectory for nearly two decades of work for Fortune 50 brands and
-            startups including Adidas, Amazon, GM, LG, JP Morgan, MTV, Pepsi,
-            e.l.f. Cosmetics, and Urban Decay. Operates across the full scope of
-            agency leadership: creative direction, UX/UI, project management,
-            copywriting, illustration, photography, print production, and
-            social/campaign management.
+            Andy co-founded Box Creative, an award-winning design firm and
+            digital studio, with his twin brother in 2007. In the studio’s
+            first year, he secured immersive 3D projects for Pepsi and MoMA
+            PS1, laying the groundwork for nearly two decades of work with
+            Fortune 50 companies and startups. Clients include Amazon, LG,
+            JPMorgan, MTV, e.l.f. Cosmetics, and Urban Decay.
           </p>
           <ul className="list-disc space-y-2 pl-5 marker:text-black/50">
             <li>
-              Direct creative vision and brand strategy across integrated
-              campaigns spanning print, digital, motion, AR/AI/3D, and IRL
-              activations
+              Set creative direction and brand strategy for integrated
+              campaigns across print, digital, motion, emerging tech, and live
+              activations.
             </li>
             <li>
-              Lead client relationships, new business development, agency
-              operations, and team direction
+              Lead client relationships, new business, operations, and teams.
+              Manage projects from scope to delivery.
             </li>
             <li>
-              Architect applications and experiences that bridge creative
-              concept and technical execution
+              Develop applications using modern web technologies and
+              integrations.
             </li>
+            <li>Write campaign copy and manage social content and execution.</li>
           </ul>
         </Job>
 
         <Job
-          title="Senior Designer, Associate Art Director"
+          title="Chief Creative Officer, Creative Director"
+          org="Dayworker"
+          meta="2023 — Present • NYC & LI • www.dayworker.co"
+        >
+          <p>
+            Built the Dayworker brand and continue to evolve it across the app,
+            website, and campaigns. Lead all marketing and advertising, and
+            guide the art director and production team from concept through
+            delivery. Set the UX direction for the development team and build
+            front-end applications in React, Next.js, and other web
+            technologies.
+          </p>
+        </Job>
+
+        <Job
+          title="Art Director"
           org="Asphalt Jungle"
           meta="2005 — 2007 • Manhattan"
         >
           <p>
             Provided design, web development, production, illustration, and
             animation for a national client roster including Hanes, working
-            across both digital and traditional media.
+            across both digital and traditional media. Began as a Senior
+            Designer and was promoted to Art Director in 2006. The business
+            closed in 2007.
           </p>
         </Job>
 
@@ -218,15 +244,14 @@ function ResumeBody() {
       </Section>
 
       <Section title="Awards">
-        {/* The PDF dropped these three descriptions for space; the titles and
-            agencies below are its wording exactly. The one thing kept that
-            the PDF cannot have is the link — the title already reads
-            "elfnalysis.com", so the site points it at the site. */}
+        {/* The PDF's own wording, line for line. The one thing it cannot
+            have is the link — the title already reads "elfnalysis.com", so
+            the site points it at the site. */}
         <Award
           label="Webby Awards, 2026"
           title={
             <>
-              E.L.F. Cosmetics{" "}
+              e.l.f. Cosmetics:{" "}
               <a
                 href="https://www.elfnalysis.com"
                 target="_blank"
@@ -239,9 +264,14 @@ function ResumeBody() {
           }
         >
           <p>Webby winner, People’s Voice winner</p>
+          <p>AI interactive experience with Pinterest</p>
           <p>Agency: Movement Strategy</p>
         </Award>
-        <Award label="Shorty Awards, 2020" title="VMAs Burger King x Lil Yachty">
+        <Award
+          label="Shorty Awards, 2020"
+          title="MTV &amp; Burger King x Lil Yachty"
+        >
+          <p>AR interactive experience during the MTV VMAs</p>
           <p>Agency: Coffee Labs</p>
         </Award>
         <Award label="Shorty Awards, 2020" title="Kroger A.I. Chatbot">
