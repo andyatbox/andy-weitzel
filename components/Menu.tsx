@@ -533,9 +533,10 @@ export default function Menu({
   });
 
   // Reel / Resumé / Contact, inside the brand block under the portfolio
-  // pills (below a divider) in both orientations. The reel leads, ruled off
-  // from the two panels that have always been a pair: it is the one that
-  // opens a moving picture rather than a sheet of type.
+  // pills (below a divider) in both orientations. The reel leads. It used to
+  // be ruled off from the two panels with a typed divider; three pills of the
+  // same weight read as one row without it, and the rule only added a mark
+  // that wrapped on its own.
   const links = (
     <div className="flex flex-wrap items-center gap-2">
       <Pill
@@ -546,15 +547,6 @@ export default function Menu({
       >
         Reel
       </Pill>
-      {/* A character, not a border: it divides two pills that wrap
-          independently of each other, and it travels with the first. */}
-      <span
-        aria-hidden
-        className="text-white/30"
-        style={{ fontSize: linkPillSize }}
-      >
-        |
-      </span>
       <Pill
         onClick={() => onOpenInfo("resume")}
         onHoverChange={onInfoHover}

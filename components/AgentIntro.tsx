@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { LABELS, PORTFOLIO_IDS, type PortfolioId } from "@/lib/portfolios";
 import LogoMark from "./LogoMark";
 import NameWheel from "./NameWheel";
@@ -94,13 +94,12 @@ export default function AgentIntro({
   width: number;
   height: number;
 }) {
-  // The lockup arrives before the agent speaks. Held until the
-  // webfonts settle, so the wordmark doesn't reflow from the fallback face
-  // mid-fade; capped so a stalled font can't strand the page.
-  const [revealed, setRevealed] = useState(false);
+  // Held until the webfonts settle, so the wordmark doesn't reflow from the
+  // fallback face mid-fade; capped so a stalled font can't strand the page.
+  const [fontsReady, setFontsReady] = useState(false);
   useEffect(() => {
     let alive = true;
-    const show = () => alive && setRevealed(true);
+    const show = () => alive && setFontsReady(true);
     void Promise.race([
       document.fonts?.ready ?? Promise.resolve(),
       new Promise((r) => setTimeout(r, 1500)),
@@ -109,11 +108,6 @@ export default function AgentIntro({
       alive = false;
     };
   }, []);
-  const arrive = (delay: number): React.CSSProperties => ({
-    opacity: revealed ? 1 : 0,
-    transform: revealed ? "none" : "translateY(-10px)",
-    transition: `opacity 0.6s ease ${delay}ms, transform 0.6s ease ${delay}ms`,
-  });
 
   const [greeting, setGreeting] = useState<Greeting | null>(null);
   const [typed, setTyped] = useState(0);
@@ -143,6 +137,20 @@ export default function AgentIntro({
       clearTimeout(cap);
     };
   }, []);
+
+  // Nothing shows until the block is whole. The lockup used to arrive as
+  // soon as the fonts were in and the weather row to mount under it whenever
+  // the lookup answered, which pushed the monogram and the wordmark up the
+  // screen mid-fade — the column is centred, so anything added below it moves
+  // everything above it. Waiting on the greeting as well costs a beat of
+  // black over the reel and buys one arrival instead of two; the lookup caps
+  // itself, so a dead request still lands here.
+  const revealed = fontsReady && greeting !== null;
+  const arrive = (delay: number): React.CSSProperties => ({
+    opacity: revealed ? 1 : 0,
+    transform: revealed ? "none" : "translateY(-10px)",
+    transition: `opacity 0.6s ease ${delay}ms, transform 0.6s ease ${delay}ms`,
+  });
 
   const beats = greeting ? buildBeats() : null;
   // Anything to draw above the copy. Without it the copy is alone and keeps
@@ -297,8 +305,13 @@ export default function AgentIntro({
   const [capFit, setCapFit] = useState(1);
   // A new box or new copy starts from the ideal size again, so a resize that
   // opens up room jumps straight back to it instead of climbing in steps.
-  useEffect(() => setCapFit(1), [script, width, height]);
-  useEffect(() => {
+  useLayoutEffect(() => setCapFit(1), [script, width, height]);
+  // Before paint, not after: each pass of the loop below re-renders and
+  // re-measures synchronously, so the whole climb happens inside one frame
+  // and the block is already at its final size the first time it is drawn.
+  // As a plain effect the steps were painted one by one, and on a short
+  // window the gate visibly shrank into place as it faded in.
+  useLayoutEffect(() => {
     const box = mainRef.current;
     const col = colRef.current;
     if (!box || !col) return;
@@ -339,7 +352,9 @@ export default function AgentIntro({
   // either way and the answer cannot flip-flop with its own result.
   const answerRef = useRef<HTMLDivElement>(null);
   const [labelFits, setLabelFits] = useState(true);
-  useEffect(() => {
+  // Also before paint: the row starts out assuming the label fits, and a
+  // measurement taken after the frame let a too-long row show for one.
+  useLayoutEffect(() => {
     const row = answerRef.current;
     if (!row) return;
     const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
@@ -516,9 +531,9 @@ export default function AgentIntro({
               style={{ ...rowIn(showLinks), marginTop: gapQuiet }}
             >
               <span className="flex flex-wrap items-center gap-2">
-                {/* The reel leads, ruled off from the two panels that have
-                    always been a pair — the same row, in the same order, as
-                    the one in the menu on a portfolio page. */}
+                {/* The reel leads — the same row, in the same order, as the
+                    one in the menu on a portfolio page. The divider that used
+                    to separate it from the two panels is gone from both. */}
                 <button
                   type="button"
                   onClick={onOpenReel}
@@ -527,16 +542,6 @@ export default function AgentIntro({
                 >
                   Reel
                 </button>
-                {/* A character, not a border: it divides two pills that wrap
-                    independently of each other, and it travels with the
-                    first. */}
-                <span
-                  aria-hidden
-                  className="text-white/30"
-                  style={{ fontSize: quietSize }}
-                >
-                  |
-                </span>
                 <button
                   type="button"
                   onClick={() => onOpenInfo("resume")}

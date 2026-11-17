@@ -28,10 +28,14 @@ content is being finished — remove both before public launch.
   caret marker. The "Portfolios:" label before the two pills is measured the
   same way the gate is: it shows only while the whole row fits on one line,
   and keeps its box out of flow while hidden so the sum it is judged by does
-  not change with the answer. Under it, Reel | Resumé · Contact — the same
+  not change with the answer. Under it, Reel, Resumé and Contact — the same
   row, in the same order, as the menu's on a portfolio page. All of it rides
   one shrink-to-fit (`capFit`) measured against the room the gate has, so
-  nothing ever scrolls. It sits over
+  nothing ever scrolls — measured in a layout effect, so the climb finishes
+  inside the frame instead of being painted step by step. Nothing shows until
+  the block is whole: the fade waits on the weather lookup as well as the
+  fonts, because the column is centred and a row arriving under the lockup
+  pushes the monogram up the screen. It sits over
   **`IntroCube.tsx`** — the sizzle reel (HLS via
   `lib/hlsVideo.ts`) as a half-skybox the pointer turns. The sky is a
   full-screen shader: the picture is wrapped stereographically, and the lens
@@ -96,7 +100,7 @@ content is being finished — remove both before public launch.
   writes drops to the canvas as soon as `opened` flips — an open project
   fills the window exactly.
 - **`components/Menu.tsx`** — the DOM nav/menu panel (logo, name, role
-  ticker, portfolio pills, then Reel | Resumé · Contact, then the
+  ticker, portfolio pills, then Reel, Resumé and Contact, then the
   infinite scrolling item list). A quick tap/click
   on the logo returns to the landing (`returnToLanding` in PortfolioApp);
   holding it plays the psychedelic effect instead, and a drag does neither. Landscape and
