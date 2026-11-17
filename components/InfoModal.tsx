@@ -112,23 +112,26 @@ function ResumeBody() {
     <>
       <div className="mt-8 space-y-4 text-lg leading-relaxed text-black md:text-xl">
         <p>
-          Creative Director with more than two decades of experience in brand
-          strategy, design, and interactive experiences. Andy combines creative
-          direction with a passion for design and immersive experiences,
-          guiding ideas from concept to launch.
+          Creative Director with more than 20 years of experience leading
+          teams, building brands, and creating award-winning digital and
+          experiential work for startups and Fortune 50 companies. As a
+          full-stack developer, I keep the creative vision connected to the
+          build from concept and UX design through launch. I write production
+          code on many projects and lead developers and engineers on others.
         </p>
         <p>
-          Andy co-founded Box Creative in 2007 and serves as its Creative
-          Director and Chief Creative Officer. He has led award-winning work
-          for Fortune 50 companies and startups, spanning brand identity
-          systems, integrated marketing, immersive experiences, and app
-          development.
+          I co-founded Box Creative and serve as its Creative Director and
+          Chief Creative Officer. I’ve led teams across brand strategy, visual
+          identity, packaging, digital experiences, and interactive
+          activations. I hold the same roles at Dayworker, a tech startup that
+          helps blue-collar workers find jobs more often and contractors fill
+          gaps in their crews.
         </p>
         <p>
-          Andy holds the same leadership roles at Dayworker, a tech startup
-          that helps skilled laborers find work and contractors build crews.
-          His work spans brand building, design and UX for mobile and web
-          apps, reactive marketing campaigns, and front-end development.
+          I combine strategy, concept development, and design leadership with
+          hands-on technical skills. I enjoy exploring what emerging technology
+          makes possible and working with teams to turn ambitious ideas into
+          experiences people can use.
         </p>
       </div>
 
@@ -244,21 +247,21 @@ function ResumeBody() {
       </Section>
 
       <Section title="Awards">
-        {/* The PDF's own wording, line for line. The one thing it cannot
-            have is the link — the title already reads "elfnalysis.com", so
-            the site points it at the site. */}
+        {/* The PDF’s own wording, line for line. The one thing it cannot
+            have is the link — the title already reads as a URL, so the site
+            points it at the project. */}
         <Award
           label="Webby Awards, 2026"
           title={
             <>
               e.l.f. Cosmetics:{" "}
               <a
-                href="https://www.elfnalysis.com"
+                href="https://elfnalysis.elfcosmetics.com"
                 target="_blank"
                 rel="noreferrer"
                 className="underline underline-offset-2"
               >
-                elfnalysis.com
+                elfnalysis.elfcosmetics.com
               </a>
             </>
           }
