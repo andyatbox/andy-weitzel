@@ -113,25 +113,18 @@ function ResumeBody() {
       <div className="mt-8 space-y-4 text-lg leading-relaxed text-black md:text-xl">
         <p>
           Creative Director with more than 20 years of experience leading
-          teams, building brands, and creating award-winning digital and
-          experiential work for startups and Fortune 50 companies. As a
-          full-stack developer, I keep the creative vision connected to the
-          build from concept and UX design through launch. I write production
-          code on many projects and lead developers and engineers on others.
+          teams, building strategies, and creating award-winning digital and
+          experiential work for clients ranging from startups to Fortune 50
+          companies. As a full-stack developer, I keep the creative vision
+          connected to the build from concept through launch, utilizing
+          emerging technology along the way.
         </p>
         <p>
-          I co-founded Box Creative and serve as its Creative Director and
-          Chief Creative Officer. I’ve led teams across brand strategy, visual
-          identity, packaging, digital experiences, and interactive
-          activations. I hold the same roles at Dayworker, a tech startup that
-          helps blue-collar workers find jobs more often and contractors fill
-          gaps in their crews.
-        </p>
-        <p>
-          I combine strategy, concept development, and design leadership with
-          hands-on technical skills. I enjoy exploring what emerging technology
-          makes possible and working with teams to turn ambitious ideas into
-          experiences people can use.
+          I co-founded Box Creative and serve as its hands-on Creative
+          Director and Chief Creative Officer. I’ve led teams across brand
+          strategy, visual identity, packaging, digital experiences, and
+          interactive activations. I hold the same roles at Dayworker, a tech
+          startup that connects blue-collar workers with local jobs.
         </p>
       </div>
 
@@ -139,7 +132,7 @@ function ResumeBody() {
         <Job
           title="Chief Creative Officer, Creative Director"
           org="Box Creative"
-          meta="2007 — Present • Manhattan & Queens • www.box.biz"
+          meta="June 2007 — Present • Manhattan & Queens • www.box.biz"
         >
           <p>
             Andy co-founded Box Creative, an award-winning design firm and
@@ -170,7 +163,7 @@ function ResumeBody() {
         <Job
           title="Chief Creative Officer, Creative Director"
           org="Dayworker"
-          meta="2023 — Present • NYC & LI • www.dayworker.co"
+          meta="January 2023 — Present • NYC & LI • www.dayworker.co"
         >
           <p>
             Built the Dayworker brand and continue to evolve it across the app,
@@ -185,7 +178,7 @@ function ResumeBody() {
         <Job
           title="Art Director"
           org="Asphalt Jungle"
-          meta="2005 — 2007 • Manhattan"
+          meta="June 2005 — May 2007 • Manhattan"
         >
           <p>
             Provided design, web development, production, illustration, and
@@ -199,7 +192,7 @@ function ResumeBody() {
         <Job
           title="Senior Designer"
           org="Flight Design Communications"
-          meta="2004 — 2005 • Queens"
+          meta="January 2004 — May 2005 • Queens"
         >
           <p>
             Designed and produced print, packaging, and point-of-sale work for
