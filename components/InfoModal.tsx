@@ -113,18 +113,11 @@ function ResumeBody() {
       <div className="mt-8 space-y-4 text-lg leading-relaxed text-black md:text-xl">
         <p>
           Creative Director with more than 20 years of experience leading
-          teams, building strategies, and creating award-winning digital and
+          teams, developing strategies, and creating award-winning digital and
           experiential work for clients ranging from startups to Fortune 50
           companies. As a full-stack developer, I keep the creative vision
-          connected to the build from concept through launch, utilizing
-          emerging technology along the way.
-        </p>
-        <p>
-          I co-founded Box Creative and serve as its hands-on Creative
-          Director and Chief Creative Officer. I’ve led teams across brand
-          strategy, visual identity, packaging, digital experiences, and
-          interactive activations. I hold the same roles at Dayworker, a tech
-          startup that connects blue-collar workers with local jobs.
+          connected to the build from concept through launch, using emerging
+          technology and AI workflows along the way.
         </p>
       </div>
 
@@ -135,12 +128,11 @@ function ResumeBody() {
           meta="June 2007 — Present • Manhattan & Queens • www.box.biz"
         >
           <p>
-            Andy co-founded Box Creative, an award-winning design firm and
-            digital studio, with his twin brother in 2007. In the studio’s
-            first year, he secured immersive 3D projects for Pepsi and MoMA
-            PS1, laying the groundwork for nearly two decades of work with
-            Fortune 50 companies and startups. Clients include Amazon, LG,
-            JPMorgan, MTV, e.l.f. Cosmetics, and Urban Decay.
+            Co-founder and hands-on Creative Director at Box Creative, an
+            award-winning design firm and digital studio. In the first year,
+            he secured immersive 3D projects for Pepsi and MoMA PS1, laying
+            the groundwork for nearly two decades of work with Fortune 50
+            companies and startups.
           </p>
           <ul className="list-disc space-y-2 pl-5 marker:text-black/50">
             <li>
@@ -153,8 +145,8 @@ function ResumeBody() {
               Manage projects from scope to delivery.
             </li>
             <li>
-              Develop applications using modern web technologies and
-              integrations.
+              Develop applications using modern web technologies and emerging
+              technology integrations.
             </li>
             <li>Write campaign copy and manage social content and execution.</li>
           </ul>
@@ -203,20 +195,42 @@ function ResumeBody() {
       </Section>
 
       <Section title="Skills & Expertise">
-        <Skill title="Creative & Strategic Leadership">
-          Visionary Strategist, Campaign & Marketing Strategy, Team Mentorship,
-          Brand Identity Guardian, Project Management, Application Development
-          Direction, Video & Social Marketing Direction, Print/Packaging QC,
-          Media & Ad Ops, Budget Steward, Copywriting
+        {/* The PDF prints this list beside the profile on page one rather
+            than down here — a second column the sheet doesn’t have. It is
+            the same list either way, and it absorbed the old Strategic
+            block, which is why that one is gone. */}
+        <Skill title="Creative Leadership">
+          Creative Direction, Art Direction, Brand Strategy, Integrated
+          Campaigns, Experiential Marketing, Visionary Strategist, Campaign &
+          Marketing Strategy, Team Leadership, Brand Visual Identity, Project
+          Management, AI Prompt Engineer, AI Workflows, Application Development
+          Direction, Social Media Marketing, Print / Packaging QC, Media & Ad
+          Ops, Budget Steward, Copywriting, Creative Operations, New Business
+          Development
         </Skill>
-        <Skill title="Design Tools">
-          Adobe Creative Cloud (Illustrator, Photoshop, InDesign, Premiere Pro,
-          After Effects, Dreamweaver, Express), Figma with Claude Design, Blender
-          (3D/CGI)
+        <Skill title="Creative Tools">
+          <p>
+            <span className={LABEL}>Core</span> — Adobe Creative Cloud
+            (Illustrator, Photoshop, InDesign, Premiere Pro, After Effects,
+            Dreamweaver, Express), Figma, Blender (3D/CGI)
+          </p>
+          <p className="mt-1.5">
+            <span className={LABEL}>AI</span> — Claude, Adobe Firefly,
+            Midjourney, Runway, Higgsfield, Meshy (3D model generation)
+          </p>
         </Skill>
         <Skill title="Coding Tools">
           Agentic Full-Stack Development (Claude Code, OpenAI Codex), VS Code,
-          Xcode, Google Web Designer + Google Studio / Doubleclick, Nova
+          Xcode, Google Web Designer, Nova
+        </Skill>
+        <Skill title="Generative AI">
+          Prompt engineering, Multimodal AI, AI Image and Video Generation,
+          AI-assisted Creative Production, Rapid Prototyping, Presentation and
+          Proposal Decks
+        </Skill>
+        <Skill title="Applied AI">
+          Conversational AI, AI agent integration, Workflow automation, Model
+          evaluation, Prompt engineering
         </Skill>
         <Skill title="Coding Languages">
           <p>
@@ -232,11 +246,7 @@ function ResumeBody() {
         <Skill title="CMS Platforms">
           Sanity (Headless CMS), Drupal, WordPress, Shopify
         </Skill>
-        <Skill title="Project Management Tools">Slack, Linear, Asana</Skill>
-        <Skill title="Strategic">
-          Team Leadership, Project Management, Brand Audits, Media Analytics,
-          New Business Development
-        </Skill>
+        <Skill title="Management Tools">Slack, Linear, Asana</Skill>
       </Section>
 
       <Section title="Awards">
@@ -277,8 +287,13 @@ function ResumeBody() {
 
       <Section title="Education">
         <div>
-          <h4 className={ITEM}>BFA, Columbus College of Art and Design</h4>
-          <p className={`mt-1.5 ${LABEL}`}>1999 — 2003</p>
+          <h4 className={ITEM}>Columbus College of Art and Design</h4>
+          <p className="mt-1.5">
+            <span className={LABEL}>Bachelor of Fine Arts (BFA)</span>
+            <span className="ml-2 font-sans-copy text-sm text-black">
+              1999 — 2003
+            </span>
+          </p>
           <p className={`mt-2 ${BODY}`}>
             Major in Illustration, additional studies in Graphic Design, Fine
             Arts, Industrial Design
