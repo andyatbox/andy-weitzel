@@ -11,6 +11,8 @@ import type { ScrollEngine } from "@/lib/ScrollEngine";
 import type { ViewportState } from "@/lib/useViewport";
 import LogoMark from "./LogoMark";
 import NameWheel from "./NameWheel";
+import Pill from "./Pill";
+import FilterPanel from "./FilterPanel";
 import { railMetrics } from "@/lib/rail";
 
 interface MenuProps {
@@ -36,7 +38,23 @@ interface MenuProps {
   // Press-and-hold on the logo: the post-process effect for as long as it's
   // held (the only way to reach it on touch, which has no hover).
   onLogoHold: (held: boolean) => void;
+  // --- the filter panel, which slides in over this one -------------------
+  /** True while the rail shows the tags instead of the brand block + list. */
+  filtersOpen: boolean;
+  /** Every tag the portfolio in front of the visitor carries, in order. */
+  filterTags: string[];
+  selectedTags: string[];
+  onOpenFilters: () => void;
+  onCloseFilters: () => void;
+  onToggleTag: (tag: string) => void;
+  onResetTags: () => void;
 }
+
+// How long the rail takes to trade the brand block for the tag row. Matched
+// to the gallery's own morph into the grid (see GRID_EASE in Gallery) rather
+// than to the intro slide, so the two read as one movement.
+const FILTER_SLIDE_MS = 520;
+const FILTER_SLIDE_EASE = "cubic-bezier(0.7, 0, 0.2, 1)";
 
 // Logo gestures: held this long it's a hold, not a tap; moved this far it's
 // a drag (which scrolls the gallery, as anywhere else on the page).
@@ -86,20 +104,31 @@ function LogoButton({
       clearTimeout(s.timer);
       if (s.held) onHoldRef.current(false);
     },
-    []
+    [],
   );
 
   return (
     <button
       type="button"
       aria-label="Andy Weitzel — back to the start"
-      className="inline-block touch-manipulation select-none"
+      // `block`, not `inline-block`: an inline box carries a baseline gap of
+      // a few px under the mark, which is invisible on its own but throws
+      // off anything laid out against the logo's centre — Project Filter
+      // beside it sat three px low.
+      className="block touch-manipulation select-none"
       style={{ WebkitTouchCallout: "none" }}
       {...hoverFx}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         end(false);
-        const s = { id: e.pointerId, x: e.clientX, y: e.clientY, timer: undefined as ReturnType<typeof setTimeout> | undefined, held: false, void: false };
+        const s = {
+          id: e.pointerId,
+          x: e.clientX,
+          y: e.clientY,
+          timer: undefined as ReturnType<typeof setTimeout> | undefined,
+          held: false,
+          void: false,
+        };
         s.timer = setTimeout(() => {
           s.held = true;
           onHold(true);
@@ -132,7 +161,7 @@ function LogoButton({
       }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <LogoMark className="h-auto shrink-0 text-white" style={{ width }} />
+      <LogoMark className="block h-auto shrink-0 text-white" style={{ width }} />
     </button>
   );
 }
@@ -148,60 +177,6 @@ function place(k: number, progress: number, total: number) {
   p = ((p % total) + total) % total;
   if (p > total / 2) p -= total;
   return p;
-}
-
-function Pill({
-  active,
-  onClick,
-  href,
-  onHoverChange,
-  size,
-  pad,
-  children,
-}: {
-  active?: boolean;
-  onClick?: () => void;
-  href?: string;
-  onHoverChange?: (active: boolean) => void;
-  /** Type size in px; padding is derived from it so the pill scales whole. */
-  size: number;
-  /** Padding override as [y, x] in px, for a pill held to a fixed shape. */
-  pad?: [number, number];
-  children: React.ReactNode;
-}) {
-  const cls = `inline-flex items-center rounded-full border font-medium transition-colors ${
-    active
-      ? "border-white bg-white text-black"
-      : "border-white/30 text-white hover:border-white/70"
-  }`;
-  // Driven from `size` rather than breakpoint utilities: the list type beside
-  // these already rides the wide-display ramp (railMetrics.fontBump), and the
-  // Work pair pinned at text-base shrank against it on a very wide rail. A
-  // caller that wants the old fixed shape passes `pad` instead of inheriting
-  // the derived one.
-  const [padY, padX] = pad ?? [Math.round(size * 0.42), Math.round(size * 0.95)];
-  const style: React.CSSProperties = {
-    fontSize: size,
-    padding: `${padY}px ${padX}px`,
-  };
-  const hover = onHoverChange
-    ? {
-        onMouseEnter: () => onHoverChange(true),
-        onMouseLeave: () => onHoverChange(false),
-      }
-    : undefined;
-  if (href) {
-    return (
-      <a href={href} className={cls} style={style} {...hover}>
-        {children}
-      </a>
-    );
-  }
-  return (
-    <button type="button" onClick={onClick} className={cls} style={style} {...hover}>
-      {children}
-    </button>
-  );
 }
 
 /**
@@ -261,6 +236,13 @@ export default function Menu({
   onInfoHover,
   onHome,
   onLogoHold,
+  filtersOpen,
+  filterTags,
+  selectedTags,
+  onOpenFilters,
+  onCloseFilters,
+  onToggleTag,
+  onResetTags,
 }: MenuProps) {
   const hoverFx = {
     onMouseEnter: () => onInfoHover(true),
@@ -274,7 +256,8 @@ export default function Menu({
   // same amount and the content column keeps its width. See lib/rail.
   const rail = railMetrics(viewport.width, isLandscape);
   const railPad = (isLarge ? 28 : 20) + rail.inset;
-  const fontSize = (isXL ? 21 : isLarge ? 18 : isMedium ? 16 : 14) + rail.fontBump;
+  const fontSize =
+    (isXL ? 21 : isLarge ? 18 : isMedium ? 16 : 14) + rail.fontBump;
   const baseRow = Math.round(fontSize * 1.95);
   // Vertical breathing space added to each row's measured (possibly wrapped)
   // height in portrait, so multi-line items still separate cleanly.
@@ -308,7 +291,7 @@ export default function Menu({
   const regionBottom = 0;
   const regionHeight = Math.max(
     baseRow * 2,
-    viewport.height - regionTop - regionBottom
+    viewport.height - regionTop - regionBottom,
   );
   const centerY = regionTop + regionHeight / 2;
   // Space rows so the fade-out radius (FADE_ZERO steps) lands at the region
@@ -331,11 +314,13 @@ export default function Menu({
   const n = items.length;
   // Repeat the list enough that the wrap seam sits past the fade-out radius,
   // so items dissolve before they'd ever jump from one end to the other.
-  const reps = Math.max(1, Math.ceil((2 * FADE_ZERO + 1) / n));
+  // A filter can in principle leave nothing to list; the strip is then
+  // empty rather than a division by zero.
+  const reps = n === 0 ? 0 : Math.max(1, Math.ceil((2 * FADE_ZERO + 1) / n));
   const total = reps * n;
   const nodes = useMemo(
     () => Array.from({ length: total }, (_, k) => ({ key: k, item: k % n })),
-    [total, n]
+    [total, n],
   );
 
   const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -484,7 +469,17 @@ export default function Menu({
     // `regionHeight` is in here for the hit-testing line above: it can change
     // (the brand box growing or shrinking) while `rowHeight` sits still on
     // its `baseRow` floor, and a stale line would cut in the wrong place.
-  }, [engine, total, rowHeight, regionHeight, isLandscape, n, reps, baseRow, ROW_GAP]);
+  }, [
+    engine,
+    total,
+    rowHeight,
+    regionHeight,
+    isLandscape,
+    n,
+    reps,
+    baseRow,
+    ROW_GAP,
+  ]);
 
   // Initial inline placement so the first paint is already positioned.
   const progress0 = engine.current / (engine.spacing || 1);
@@ -492,11 +487,23 @@ export default function Menu({
   // Fluid sizes (clamp) scale continuously with the viewport so the brand
   // block stays proportioned instead of jumping at one breakpoint.
   const logoWidth = isLandscape
-    ? isMedium ? "clamp(78px, 6.9vw, 122px)" : "clamp(60px, 5.5vw, 94px)"
-    : isMedium ? "clamp(86px, 12.4vw, 124px)" : "clamp(66px, 13.3vw, 103px)";
+    ? isMedium
+      ? "clamp(78px, 6.9vw, 122px)"
+      : "clamp(60px, 5.5vw, 94px)"
+    : isMedium
+      ? "clamp(86px, 12.4vw, 124px)"
+      : "clamp(66px, 13.3vw, 103px)";
   const nameSize = isLandscape
-    ? isXL ? "clamp(30px, 2.6vw, 44px)" : isLarge ? "clamp(24px, 2.4vw, 34px)" : isMedium ? "clamp(20px, 2.1vw, 26px)" : "clamp(17px, 1.8vw, 22px)"
-    : isMedium ? "clamp(21px, 3.9vw, 29px)" : "clamp(19px, 4.2vw, 25px)";
+    ? isXL
+      ? "clamp(30px, 2.6vw, 44px)"
+      : isLarge
+        ? "clamp(24px, 2.4vw, 34px)"
+        : isMedium
+          ? "clamp(20px, 2.1vw, 26px)"
+          : "clamp(17px, 1.8vw, 22px)"
+    : isMedium
+      ? "clamp(21px, 3.9vw, 29px)"
+      : "clamp(19px, 4.2vw, 25px)";
   // How much room a phone held upright has to spend on the brand block, 0 to
   // 1. The column is half a narrow window, which is why these pills were held
   // at the list's own type size — but the longest label needs less of that
@@ -520,11 +527,82 @@ export default function Menu({
   // the derived padding would have grown along with the type. They ride the
   // phone ramp too, or the row below the portfolios would read as the smaller
   // of two sizes rather than as the quiet one.
-  const linkPillSize = isXL ? 16 : isLarge ? 14 : 12 + Math.round(4 * phoneRoom);
+  const linkPillSize = isXL
+    ? 16
+    : isLarge
+      ? 14
+      : 12 + Math.round(4 * phoneRoom);
   const linkPillPad: [number, number] = [
     4 + Math.round(2 * phoneRoom),
     (isXL ? 14 : 12) + Math.round(3 * phoneRoom),
   ];
+
+  const filterCount = selectedTags.length;
+  // The button that turns the strip into the grid. Small, and set apart from
+  // the pills: those four choose *what* you are looking at, this one changes
+  // how it is laid out, and a fifth pill in the same row kept reading as a
+  // third portfolio. The icon is the grid it opens — four cells in a cell's
+  // own proportion, not squares, so it reads as this layout rather than as a
+  // generic apps menu.
+  //
+  // It lights up on what is *applied*, not on whether the panel is open:
+  // once the panel is open this whole block has slid away, and the count is
+  // the only thing that still has to be readable from the gallery.
+  //
+  // No hover effect, unlike every other control in the rail: the psychedelic
+  // warp and the morph into the grid are both started by the same gesture,
+  // and the warp paints straight over the animation it triggered.
+  const filterBtnSize = isLandscape
+    ? Math.max(11, linkPillSize - 2)
+    : Math.max(11, linkPillSize - 1);
+  const filterButton = (
+    <button
+      type="button"
+      onClick={onOpenFilters}
+      aria-label={
+        filterCount > 0
+          ? `Project Filter — ${filterCount} applied`
+          : "Project Filter"
+      }
+      className={`inline-flex shrink-0 items-center rounded-full border font-medium transition-colors ${
+        filterCount > 0
+          ? "border-white bg-white text-black"
+          : "border-white/30 text-white hover:border-white/70"
+      }`}
+      style={{
+        fontSize: filterBtnSize,
+        gap: Math.round(filterBtnSize * 0.5),
+        padding: `${Math.round(filterBtnSize * 0.42)}px ${Math.round(filterBtnSize * 0.82)}px`,
+      }}
+    >
+      <svg
+        width={Math.round(filterBtnSize * 1.05)}
+        height={Math.round(filterBtnSize * 1.05)}
+        viewBox="0 0 16 16"
+        fill="currentColor"
+        aria-hidden="true"
+        className="shrink-0"
+      >
+        <rect x="0.8" y="2" width="6.4" height="5" rx="1.2" />
+        <rect x="8.8" y="2" width="6.4" height="5" rx="1.2" />
+        <rect x="0.8" y="9" width="6.4" height="5" rx="1.2" />
+        <rect x="8.8" y="9" width="6.4" height="5" rx="1.2" />
+      </svg>
+      <span className="whitespace-nowrap">Project Filter</span>
+      {filterCount > 0 && (
+        <span
+          className="inline-flex items-center justify-center rounded-full bg-black font-medium text-white"
+          style={{
+            fontSize: Math.round(filterBtnSize * 0.82),
+            minWidth: Math.round(filterBtnSize * 1.4),
+            height: Math.round(filterBtnSize * 1.4),
+          }}
+        >
+          {filterCount}
+        </span>
+      )}
+    </button>
+  );
 
   const introAnim = (delay: number): React.CSSProperties => ({
     opacity: intro ? 1 : 0,
@@ -572,8 +650,31 @@ export default function Menu({
   const brand = (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2.5">
-        <div style={introAnim(0)}>
-          <LogoButton width={logoWidth} hoverFx={hoverFx} onHome={onHome} onHold={onLogoHold} />
+        {/* Landscape puts Project Filter on the logo's own line, centred on
+            it and pulled out to the chevrons' inset so the rail has one
+            right edge from top to bottom. The negative margin is the
+            difference between the brand box's padding and that inset —
+            computed rather than guessed, since the inset ramps on wide
+            displays and the padding steps at 992px.
+
+            Portrait keeps it below with the pills: the brand column is half
+            a phone, and the logo plus a worded button do not fit on one line
+            there at any size worth reading. */}
+        <div
+          className="flex items-center justify-between gap-3"
+          style={{
+            marginRight: isLandscape ? chevInset - (isLarge ? 28 : 20) : 0,
+          }}
+        >
+          <div style={introAnim(0)}>
+            <LogoButton
+              width={logoWidth}
+              hoverFx={hoverFx}
+              onHome={onHome}
+              onHold={onLogoHold}
+            />
+          </div>
+          {isLandscape && <div style={introAnim(300)}>{filterButton}</div>}
         </div>
         <div className="leading-tight tracking-tighter" style={introAnim(160)}>
           <NameWheel className="font-medium" style={{ fontSize: nameSize }} />
@@ -597,6 +698,7 @@ export default function Menu({
             </Pill>
           ))}
         </div>
+        {!isLandscape && <div className="flex">{filterButton}</div>}
         <div className="mt-1 h-px w-full bg-white/15" />
         {links}
       </div>
@@ -710,48 +812,97 @@ export default function Menu({
     </div>
   );
 
+  // The two panels trade places in the same rectangle: the brand block and
+  // list leave the way the spec asks (left in landscape, down in portrait)
+  // and the tags arrive from the opposite edge, so the pair reads as one
+  // slide rather than as two things crossing. Both stay mounted — the rail
+  // is measured off the brand box, and unmounting it would collapse that
+  // measurement every time the filters open.
+  const slideOut = isLandscape ? "translateX(-100%)" : "translateY(100%)";
+  const slideIn = isLandscape ? "translateX(100%)" : "translateY(-100%)";
+  const slideTween = `transform ${FILTER_SLIDE_MS}ms ${FILTER_SLIDE_EASE}`;
+
   return (
-    <aside data-menu className="h-full w-full bg-black text-white">
-      {isLandscape ? (
-        // Single column: list fills the whole panel. The brand floats over the
-        // top on an opaque box (masking the top), and the list runs to
-        // the bottom edge, dissolving there.
-        <div className="relative h-full w-full overflow-hidden">
-          <div className="absolute inset-0" style={listLayer}>
-            {listStrip}
-          </div>
-          {stepper}
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
-            {/* paddingLeft matches the list's, so the brand block and the
-                titles below it share one left edge at every width. */}
-            <div
-              ref={brandBoxRef}
-              className="pointer-events-auto bg-black p-5 min-[992px]:p-7"
-              style={{ paddingLeft: railPad }}
-            >
-              {brand}
-            </div>
-          </div>
-        </div>
-      ) : (
-        // Two equal columns: brand/links and the menu list. Each column centers
-        // its content block horizontally (flex), content stays left-aligned.
-        // The list column's width is what makes long titles wrap.
-        <div className="flex h-full w-full">
-          <div
-            className="flex w-1/2 shrink-0 items-center justify-center px-2"
-            style={{ paddingLeft: viewport.width < 450 ? 18 : undefined }}
-          >
-            {brand}
-          </div>
-          <div className="relative h-full w-1/2 overflow-hidden">
+    <aside
+      data-menu
+      className="relative h-full w-full overflow-hidden bg-black text-white"
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: filtersOpen ? slideOut : "none",
+          transition: slideTween,
+          pointerEvents: filtersOpen ? "none" : "auto",
+        }}
+        aria-hidden={filtersOpen}
+      >
+        {isLandscape ? (
+          // Single column: list fills the whole panel. The brand floats over the
+          // top on an opaque box (masking the top), and the list runs to
+          // the bottom edge, dissolving there.
+          <div className="relative h-full w-full overflow-hidden">
             <div className="absolute inset-0" style={listLayer}>
               {listStrip}
             </div>
             {stepper}
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
+              {/* paddingLeft matches the list's, so the brand block and the
+                titles below it share one left edge at every width. */}
+              <div
+                ref={brandBoxRef}
+                className="pointer-events-auto bg-black p-5 min-[992px]:p-7"
+                style={{ paddingLeft: railPad }}
+              >
+                {brand}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        ) : (
+          // Two equal columns: brand/links and the menu list. Each column centers
+          // its content block horizontally (flex), content stays left-aligned.
+          // The list column's width is what makes long titles wrap.
+          <div className="flex h-full w-full">
+            <div
+              className="flex w-1/2 shrink-0 items-center justify-center px-2"
+              style={{ paddingLeft: viewport.width < 450 ? 18 : undefined }}
+            >
+              {brand}
+            </div>
+            <div className="relative h-full w-1/2 overflow-hidden">
+              <div className="absolute inset-0" style={listLayer}>
+                {listStrip}
+              </div>
+              {stepper}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: filtersOpen ? "none" : slideIn,
+          transition: slideTween,
+          pointerEvents: filtersOpen ? "auto" : "none",
+        }}
+        aria-hidden={!filtersOpen}
+      >
+        <FilterPanel
+          tags={filterTags}
+          selected={selectedTags}
+          onToggle={onToggleTag}
+          onReset={onResetTags}
+          onClose={onCloseFilters}
+          // Landscape has a full-height rail and can carry the portfolio
+          // pills' size; portrait has two fifths of a phone and a dozen-odd
+          // labels to fit in it, so the tags take the quiet row's size
+          // instead. At the portfolio pills' size they ran off the bottom,
+          // taking Reset and the close X with them.
+          pillSize={isLandscape ? workPillSize : linkPillSize + 2}
+          padLeft={isLandscape ? railPad : viewport.width < 450 ? 18 : 20}
+          closeSize={chevSize}
+        />
+      </div>
     </aside>
   );
 }

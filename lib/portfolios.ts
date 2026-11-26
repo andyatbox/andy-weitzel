@@ -25,6 +25,15 @@ export interface PortfolioItem {
   video?: string;
   /** Up to 3 gallery stills, cycled on the teaser when there's no video. */
   slides?: string[];
+  /**
+   * The same stills at cell size and only the first few, for the filter
+   * grid. A separate run rather than a reuse: a dozen cells each holding a
+   * project's full twenty stills at 1280 wide is a hundred megabytes of
+   * texture for pictures a third of the canvas across.
+   */
+  gridSlides?: string[];
+  /** Tag slugs from the CMS; the words for them live in lib/tags. */
+  tags?: string[];
 }
 
 export interface Portfolio {
@@ -53,7 +62,14 @@ interface RawProject {
   thumbnail: Parameters<typeof urlFor>[0];
   video?: string;
   slides?: RawStill[];
+  tags?: string[];
 }
+
+// What the filter grid's cells cycle: the opening few stills, at about the
+// size a cell is actually drawn. Deep enough to read as a slideshow, small
+// enough that a screenful of cells holding their own is a few megabytes.
+const GRID_STILLS = 4;
+const GRID_STILL_WIDTH = 480;
 
 /**
  * Every still in gallery order, with each `imagesSlide` group opened out into
@@ -63,7 +79,7 @@ interface RawProject {
  */
 function stillsFrom(slides: RawStill[] | undefined): RawImage[] {
   return (slides ?? []).flatMap((s) =>
-    s._type === "imagesSlide" ? s.images ?? [] : [s as RawImage]
+    s._type === "imagesSlide" ? (s.images ?? []) : [s as RawImage],
   );
 }
 
@@ -72,7 +88,7 @@ function stillsFrom(slides: RawStill[] | undefined): RawImage[] {
 // every gallery still, which the teaser cycles through instead when there's no
 // video — single images and whole multi-image uploads alike.
 const LIST_QUERY = `*[_type == "project" && defined(thumbnail)] | order(orderRank) {
-  _id, title, "slug": slug.current, category, thumbnail,
+  _id, title, "slug": slug.current, category, tags, thumbnail,
   "video": gallery[_type == "videoSlide"][0].videoUrl,
   "slides": gallery[_type == "image" || _type == "imagesSlide"]{ ..., images[] }
 }`;
@@ -97,6 +113,7 @@ export function usePortfolios(): Portfolios | null {
           title: row.title,
           slug: row.slug,
           video: row.video,
+          tags: row.tags,
           // Same 16:9 crop as the thumbnail, so cycling between them never
           // shifts the framing.
           // Same 16:9 crop as the thumbnail so cycling never shifts framing,
@@ -105,8 +122,23 @@ export function usePortfolios(): Portfolios | null {
           // the cap the teaser video already renders at, on a plane that is at
           // most window-sized.
           slides: stillsFrom(row.slides).map((img) =>
-            urlFor(img).width(1280).height(720).fit("crop").auto("format").url()
+            urlFor(img)
+              .width(1280)
+              .height(720)
+              .fit("crop")
+              .auto("format")
+              .url(),
           ),
+          gridSlides: stillsFrom(row.slides)
+            .slice(0, GRID_STILLS)
+            .map((img) =>
+              urlFor(img)
+                .width(GRID_STILL_WIDTH)
+                .height(Math.round((GRID_STILL_WIDTH * 9) / 16))
+                .fit("crop")
+                .auto("format")
+                .url(),
+            ),
           // Force a 16:9 crop (respecting the hotspot) so the WebGL cover logic
           // and procedural fallback stay consistent.
           image: urlFor(row.thumbnail)
@@ -201,7 +233,7 @@ function flattenGallery(doc: RawProjectContent): ProjectContent {
   return {
     ...doc,
     gallery: doc.gallery?.flatMap((slide) =>
-      slide._type === "imagesSlide" ? slide.images ?? [] : [slide]
+      slide._type === "imagesSlide" ? (slide.images ?? []) : [slide],
     ),
   };
 }

@@ -11,8 +11,16 @@ content is being finished — remove both before public launch.
 
 - **`components/PortfolioApp.tsx`** — root orchestrator. Owns portfolio
   switching, the open/close project animation state, the slide-reveal intro,
-  window-level scroll/drag input, the hover tooltip, and mounts everything
-  else.
+  window-level scroll/drag input, the hover tooltip, the tag filter, and
+  mounts everything else. Two lists live here: `allItems`, the whole
+  portfolio, and `items`, the part of it the tags let through. The filtered
+  one is what everything counts in — the engine's slots, the menu's rows,
+  prev/next, the bottom strip — while the gallery gets both, because a
+  teaser that has just been filtered out still has to be on screen long
+  enough to fade. The filter is deliberately not in the address: it is a way
+  of looking at a portfolio, not a place. Tags clear on a portfolio switch,
+  since they are scoped to what the portfolio in front of you carries and
+  keeping them could land on one where nothing matches.
 - **`components/AgentIntro.tsx`** — the landing gate: one centred block,
   left-aligned down a single edge — the AW monogram, the wordmark under it,
   a row of location and weather data graphics (`WeatherPanel.tsx`; data from
@@ -77,13 +85,31 @@ content is being finished — remove both before public launch.
   parallelogram clip (`.logo-slide` in globals.css). The slide is exactly five
   stripes (312.9721 units), so the last frame equals the first and the loop is
   seamless — keep that if the art changes.
+- **`components/FilterPanel.tsx`** — what takes the rail's place while the
+  filters are up: the tags as pills, with Reset and a close X under them.
+  The menu lays it out (pill sizes and left padding are passed in) because
+  the two panels occupy the same rectangle half a second apart and anything
+  measured twice drifts. The tag area shrinks and scrolls (`min-h-0`) rather
+  than growing, so the two buttons sit under the last pill on a rail with
+  room and stay on screen on a phone, where a dozen-odd tags do not fit;
+  pushed off the bottom is where they were when the row simply wrapped.
+  `data-filter-scroll` marks that scroller — the window swallows wheels *and*
+  pointer-downs to drive the gallery, so both handlers have to be told where
+  one belongs to the page. Escape closes the panel too.
+- **`components/Pill.tsx`** — the rail's pill button, shared by the menu and
+  the filter panel for the same reason.
 - **`components/Gallery.tsx`** — the R3F `<Canvas>` scene: infinite-scrolling
   image planes with bend distortion, additive-blended RGB shift, and a cursor
   swirl/chroma effect (desktop only; its numbers live in `lib/pointerFx.ts`,
   shared with the intro shape). Teasers show the project thumbnail; the
   active one swaps in a looping video (`lib/teaserVideo.ts`) or cycles the
   project's first gallery stills (`lib/teaserSlides.ts`), but only while the
-  gallery is fully at rest. There are no titles in the canvas — project names
+  gallery is fully at rest. It takes every item in the portfolio plus
+  `order`, the indices it should show, in sequence — the strip's order and
+  the grid's reading order alike — so the engine counts *slots* in `order`
+  rather than items, and anything the filter has dropped keeps its mesh and
+  its texture and simply fades. That is what lets a tag click reflow the grid
+  in place instead of rebuilding it. There are no titles in the canvas — project names
   live only in the DOM menu. A teaser's resting size comes from `restSize`:
   in landscape it fills the width the camera actually shows (a canvas-sized
   plane is drawn at `CAMERA_ZOOM`, leaving a tenth of the canvas blank each
@@ -99,9 +125,58 @@ content is being finished — remove both before public launch.
   `restSize` to the full canvas on both axes, and the resting value React
   writes drops to the canvas as soon as `opened` flips — an open project
   fills the window exactly.
+  The **grid** the filters put it in is the same planes on a second blend:
+  every position, size and texture crop lerps between the strip's and the
+  cell's. What drives it is a **clock in milliseconds**, not an eased
+  number, because the teasers leave one after another — each takes
+  `GRID_MOVE_MS` from its own start and starts `GRID_STEP_MS` behind the one
+  before it, so item 1 lands first. An exponential ease has no timeline to
+  offset along: its tail asymptotes, so the last item in the queue would
+  crawl. The step tightens on a long portfolio to hold the whole move under
+  `GRID_TOTAL_CAP`. Because of that queue two teasers are rarely the same
+  size on the same frame, so plane scale and texture crop are written per
+  item inside the placement loop rather than once above it.
+  Cells are laid out in what the lens covers (`W / CAMERA_ZOOM`), not in
+  canvas px, or the grid would leave the strip's side margins empty; they
+  keep the teasers' own 16:9 rather than the strip's squarer `MIN_ASPECT`,
+  since a row of near-squares reads as a contact sheet. `gridColumns` judges
+  2 or 3 by the *canvas's* width, not the window's — in landscape the rail
+  has already taken a quarter. Every row reserves a band under it for its
+  title, derived from the label's own type size rather than fixed, so
+  resizing the labels cannot quietly leave them overlapping the row
+  beneath — the band's room comes out of the pictures instead. The titles
+  carry the rail list's own weight rather than a caption's, because while
+  the grid is up the list has slid away and these are the only names on
+  screen. Cells ease
+  to their places separately from the scroll, so a tag click slides the
+  survivors into their new cells while a drag stays 1:1. A tap goes through
+  `hitRef`, a cell hit test published from the frame loop: the planes are
+  bent and swirled and the question is which cell, not which triangle. The
+  pointer swirl is off in the grid — it is sized against one teaser filling
+  the view and over a page of cells it smears.
 - **`components/Menu.tsx`** — the DOM nav/menu panel (logo, name, role
-  ticker, portfolio pills, then Reel, Resumé and Contact, then the
-  infinite scrolling item list). A quick tap/click
+  ticker, portfolio pills, then Reel, Resumé and Contact, then the infinite
+  scrolling item list), with **Project Filter** — the small grid-icon button
+  that turns the strip into the grid — set apart from all of them. In
+  landscape it rides the logo's own line, centred on the mark and pulled out
+  to the chevrons' inset so the rail reads with one right edge from top to
+  bottom; that pull is computed (`chevInset` minus the brand box's right
+  padding) because the inset ramps on wide displays while the padding steps
+  at 992px. The logo button is `block` rather than `inline-block` for the
+  same reason: an inline box's baseline gap sat the button three px low.
+  Portrait keeps it below the portfolio pills — the brand column is half a
+  phone, and a logo plus a worded button do not fit on one line there at any
+  size worth reading. It is deliberately not a fifth pill: the others choose
+  *what* you are looking at and this one changes how it is laid out, and in
+  the row it kept reading as a third portfolio. It lights up on what is
+  *applied*, not on whether the panel is open — once the panel is open this
+  whole block has slid away, and the count is the only thing that still has
+  to be readable. It is the one control in the rail with no hover effect:
+  the psychedelic warp and the morph into the grid are started by the same
+  gesture, and the warp paints over the animation it triggered. Opening the filters slides this block out (left in
+  landscape, down in portrait) and `FilterPanel` in from the opposite edge,
+  inside one clipped box; both stay mounted, since the rail's own metrics
+  are measured off the brand box. A quick tap/click
   on the logo returns to the landing (`returnToLanding` in PortfolioApp);
   holding it plays the psychedelic effect instead, and a drag does neither. Landscape and
   portrait are materially different layouts, not just a CSS breakpoint.
@@ -177,9 +252,55 @@ content is being finished — remove both before public launch.
   through `engine.release(fling)`. It's plain TS with no DOM, so tune it by
   feeding it input on a fake `performance.now()` and checking the
   frame-by-frame speed (it should only fall after its peak), not by eye.
+- **`lib/GridScroll.ts`** — the grid's scroll position. Deliberately not the
+  ScrollEngine: that engine's whole job is to land on an item — it plans a
+  curve to the nearest one and treats the list as endless — and a grid has a
+  first row, a last row and nothing to snap to. Teaching the engine about
+  bounds would mean touching the one file here where every past fix broke a
+  different gesture, so this is the small version: a target the input moves,
+  a current that chases it, hard ends. It takes the same wheel and drag
+  deltas in the same units, so the two feel like one scroll, and the strip's
+  engine is left exactly where it was for when the filters close.
+- **`lib/tags.ts`** — the tag slugs the CMS stores and the words a visitor
+  reads for them, since the dataset holds only the slugs. Keep it in step
+  with `tags` in the studio's `project` schema (the box-creative repo); an
+  unknown slug title-cases rather than disappearing. `tagsPresent` scopes the
+  filter row to the tags the portfolio in front of you actually carries — a
+  pill that can only ever empty the grid is worse than no pill — and
+  `matchesTags` is a **union**: any one of the selected tags is enough, so a
+  second pill adds work to the grid rather than cutting it down. An
+  intersection was tried and reverted, and the tagging is what rules it out —
+  most projects carry five or six of these, and the overlap of any two
+  specific ones is one or two projects when it isn't empty, so half the
+  second clicks left a single teaser or a blank grid. The row answers "show
+  me the AR work, and the illustration work", not "show me what is both".
+  Because nothing can empty the grid, every pill is always live; the
+  `tagCounts` / disabled-pill machinery that an intersection needed went with
+  it.
+- **`lib/gridMedia.ts`** — every teaser the grid is showing, playing at once.
+  The strip's `useTeaserVideo` owns one element and swaps its source, which
+  is right for one active teaser and wrong here, so this is a **pool**: a
+  fixed few elements assigned to cells and handed back as they scroll out,
+  never built per project. What makes it affordable is that a cell is a
+  third of the canvas, so these stream at 360 where the strip streams at
+  720 — about a seventh of the pixels a frame, so six together decode less
+  than two full-size ones. Crossing back to the single column tears the pool
+  down and the strip picks its item up at full size again: the resolution
+  follows the surface, not the project. Beyond the pool's six, and on touch,
+  a cell falls through to cycling its gallery stills — `gridSlides`, four
+  frames at cell size, because a dozen cells each holding a project's full
+  twenty at 1280 wide is a hundred megabytes of texture for a picture a
+  third of the canvas across. Touch devices never stream here at all: iOS
+  runs HLS through AVFoundation and several players at once is past what it
+  will do. Cells are adopted only once the grid has been still for a moment,
+  so a flick through four rows doesn't spin up twenty streams on the way,
+  and they are taken in reading order with whole cells before clipped ones —
+  sorting by distance from the middle of the view skipped the top row in
+  favour of the second.
 - **`lib/portfolios.ts`** — Sanity queries + types. Two portfolios
   (`interactive` / `branding`) map to Sanity category values `immersive-ux` /
-  `branding-print`; `advertising-rich-media` projects are dropped. Gallery
+  `branding-print`; `advertising-rich-media` projects are dropped. Each
+  project also carries `tags`, a list of slugs (see `lib/tags.ts`). Gallery
   `imagesSlide` entries (multi-image uploads) are flattened into single slides
   here, so nothing downstream knows about them. The ids are historical: the
   `interactive` portfolio is called **Experiential** and lives at
@@ -305,11 +426,27 @@ the chrome (white), not the light panels, which all set their own.
   `ShaderMaterial` yourself (or drive it through a ref) and write its
   uniforms directly — see `IntroCube`.
 
+- **`attachHls` has to say which path it took.** Callers that speed playback
+  up need to know whether they are on native HLS (iOS), which trick-plays
+  above 2x — keyframes only — where hls.js is unaffected. It cannot be read
+  off the element afterwards: hls.js points `src` at a MediaSource blob, so
+  an element with a `src` is evidence of neither. That is why `HlsHandle`
+  carries `native`; testing the element instead quietly ran the whole grid
+  at 2x while the strip ran at 3x.
 - **Teaser video is HLS-only.** Gumlet publishes no usable MP4 (every variant
   401/403s), so playback needs `hls.js` — except on WebKit, which renders an
   MSE blob as a black frame through WebGL and must use native HLS instead.
   Chrome answers `"maybe"` to the HLS mime type despite being unable to play
   it, so `canPlayType` can never be the first branch in that decision.
+- **Additive planes that overlap sum past white.** The channels add over a
+  black backing, which is exact while planes never overlap — and they never
+  do in the strip, or in the grid at rest. They do on the way between the
+  two, where a teaser crossing another left a hard white rectangle. The fix
+  is a brightness dip through the middle of the morph (`dip` in Gallery),
+  exactly 1 at both ends so it costs nothing at rest. Drawing each item's
+  black backing immediately before its own channels would occlude instead of
+  summing, but every backing shares a depth and a renderOrder, so that is a
+  change to the open/close animation as much as to this.
 - **A transparent source renders as a black teaser.** The gallery sums
   additively-blended R/G/B planes over the opaque black backing, so wherever
   an image is transparent the channels add nothing and the backing is what

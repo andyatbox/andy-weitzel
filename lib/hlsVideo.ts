@@ -97,6 +97,14 @@ export function retryOnNextGesture(video: HTMLVideoElement) {
 
 export interface HlsHandle {
   destroy: () => void;
+  /**
+   * True when this went down the native path (iOS). Callers that speed
+   * playback up need to know: native HLS is AVFoundation underneath and
+   * trick-plays above 2x, keyframes only, where hls.js is unaffected. It
+   * cannot be read off the element afterwards — hls.js sets `src` to a
+   * MediaSource blob, so an element with a `src` is not evidence of either.
+   */
+  native: boolean;
 }
 
 /**
@@ -162,7 +170,7 @@ export async function attachHls(
     });
     instance.loadSource(src);
     instance.attachMedia(video);
-    return instance;
+    return { destroy: () => instance.destroy(), native: false };
   }
 
   if (canNative) {
@@ -170,6 +178,7 @@ export async function attachHls(
     // off the I-frame playlists Gumlet publishes, so callers cap their rate.
     video.src = src;
     return {
+      native: true,
       destroy: () => {
         video.removeAttribute("src");
         video.load();

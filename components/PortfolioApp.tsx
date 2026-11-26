@@ -1,7 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CATEGORY, LABELS, PORTFOLIO_IDS, usePortfolios, type PortfolioId } from "@/lib/portfolios";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  CATEGORY,
+  LABELS,
+  PORTFOLIO_IDS,
+  usePortfolios,
+  type PortfolioId,
+} from "@/lib/portfolios";
 import {
   asPanel,
   currentRoute,
@@ -13,10 +26,13 @@ import {
 } from "@/lib/routes";
 import { isPageViewWorthy, pageView } from "@/lib/analytics";
 import { ScrollEngine } from "@/lib/ScrollEngine";
+import { GridScroll } from "@/lib/GridScroll";
+import { matchesTags, tagsPresent } from "@/lib/tags";
 import { useViewport } from "@/lib/useViewport";
 import Menu from "./Menu";
 import { railWidth } from "@/lib/rail";
-import Gallery from "./Gallery";
+import Gallery, { type GridLabelLayout } from "./Gallery";
+import GridLabels from "./GridLabels";
 import ProjectModal, { type ActiveProject } from "./project/ProjectModal";
 import ProjectStrip from "./project/ProjectStrip";
 import InfoModal, { type InfoKind } from "./InfoModal";
@@ -79,12 +95,12 @@ export default function PortfolioApp({
   const [initialPanel] = useState<Panel | null>(() =>
     typeof window === "undefined"
       ? null
-      : asPanel(new URLSearchParams(window.location.search).get("panel"))
+      : asPanel(new URLSearchParams(window.location.search).get("panel")),
   );
   const viewport = useViewport();
   const portfolios = usePortfolios();
   const [portfolio, setPortfolio] = useState<PortfolioId>(
-    initialPortfolio ?? "interactive"
+    initialPortfolio ?? "interactive",
   );
   const [opened, setOpened] = useState(deepProject);
   // True only once the teaser has finished growing to full screen; gates the
@@ -102,7 +118,7 @@ export default function PortfolioApp({
           title: prettySlug(initialSlug),
           category: CATEGORY[initialPortfolio],
         }
-      : null
+      : null,
   );
   const [intro, setIntro] = useState(deepProject);
   // Slide-reveal intro: the menu/gallery panel starts pushed off by the canvas
@@ -118,26 +134,46 @@ export default function PortfolioApp({
   // Resumé / Contact popup + the halftone trigger (hovering those buttons or
   // having their modal open).
   const [infoModal, setInfoModal] = useState<InfoKind | null>(
-    initialPanel === "resume" || initialPanel === "contact" ? initialPanel : null
+    initialPanel === "resume" || initialPanel === "contact"
+      ? initialPanel
+      : null,
   );
   const [reelOpen, setReelOpen] = useState(initialPanel === "reel");
   const [infoHover, setInfoHover] = useState(false);
+  // The filter view: the rail trades the brand block for the tag row and the
+  // strip of teasers becomes a grid. Deliberately not in the address — it is
+  // a way of looking at a portfolio, not a place, and a link to it would be
+  // a link to a page of someone else's choices.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   // Press-and-hold on the menu logo: the effect, on any device.
   const [logoHeld, setLogoHeld] = useState(false);
   // The gallery's WebGL canvas, sampled by the post-process distortion.
-  const [galleryCanvas, setGalleryCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [galleryCanvas, setGalleryCanvas] = useState<HTMLCanvasElement | null>(
+    null,
+  );
   const introFired = useRef(deepProject);
   const openedRef = useRef(deepProject);
   // True while a Resumé/Contact modal is open, so the global wheel/drag scroll
   // stands down and the modal can scroll natively.
   const infoOpenRef = useRef(initialPanel !== null);
-  const switchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const switchTimer2 = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const closeThenSwitchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const splashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const switchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const switchTimer2 = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const closeThenSwitchTimer = useRef<
+    ReturnType<typeof setTimeout> | undefined
+  >(undefined);
+  const splashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   // A step of a back/forward move that has to wait for the one before it to
   // finish animating (see applyRoute).
-  const routeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const routeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   // True until the splash is dismissed, so window-level scroll/drag and the
   // hover tooltip stand down while the gate is up.
   const splashOpenRef = useRef(!initialPortfolio);
@@ -149,11 +185,23 @@ export default function PortfolioApp({
     () =>
       typeof window !== "undefined" &&
       ((navigator.maxTouchPoints || 0) > 0 || "ontouchstart" in window),
-    []
+    [],
   );
   const engineRef = useRef<ScrollEngine | null>(null);
   if (!engineRef.current) engineRef.current = new ScrollEngine();
   const engine = engineRef.current;
+  // The grid's own scroll, kept apart from the engine so the strip is exactly
+  // where it was when the filters close. See lib/GridScroll.
+  const gridScrollRef = useRef<GridScroll | null>(null);
+  if (!gridScrollRef.current) gridScrollRef.current = new GridScroll();
+  const gridScroll = gridScrollRef.current;
+  // Read by the window-level pointer handlers, which are subscribed once and
+  // must not be torn down and rebuilt every time the filters open.
+  const gridOpenRef = useRef(false);
+  // Filled in by the gallery: viewport coords to a slot in the grid.
+  const hitRef = useRef<((x: number, y: number) => number | null) | null>(null);
+  // And where to draw each project's name under its cell.
+  const labelRef = useRef<GridLabelLayout | null>(null);
   const galleryRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   // Shared, mutable open/close progress (0=closed, 1=open). The layout effect
@@ -161,15 +209,41 @@ export default function PortfolioApp({
   // same value, so plane dims, zoom and gap animate together.
   // Open from the first frame when the address named a project, so the
   // teaser is full-screen on arrival instead of growing into it.
-  const animRef = useRef({ t: deepProject ? 1 : 0, w: 0, h: 0, animating: false });
+  const animRef = useRef({
+    t: deepProject ? 1 : 0,
+    w: 0,
+    h: 0,
+    animating: false,
+  });
   const anim = animRef.current;
 
-  const items = portfolios ? portfolios[portfolio].items : [];
+  // Everything in the portfolio, and the part of it the tags let through.
+  // The filtered list is what the whole app counts in — the engine's slots,
+  // the menu's rows, prev/next, the bottom strip — while the gallery keeps
+  // the full one, because a teaser that has just been filtered out still has
+  // to be on screen long enough to fade.
+  const allItems = useMemo(
+    () => (portfolios ? portfolios[portfolio].items : []),
+    [portfolios, portfolio],
+  );
+  const filterTags = useMemo(() => tagsPresent(allItems), [allItems]);
+  const order = useMemo(
+    () =>
+      allItems
+        .map((_, i) => i)
+        .filter((i) => matchesTags(allItems[i], selectedTags)),
+    [allItems, selectedTags],
+  );
+  const items = useMemo(() => order.map((i) => allItems[i]), [order, allItems]);
   // Mirror into refs so the open handler stays stable (items is a fresh array
   // each render — depending on it directly would re-subscribe the window
   // listeners every render and drop in-progress pointer state).
   const itemsRef = useRef(items);
   itemsRef.current = items;
+  // Which project the strip is sitting on, by id rather than by index, so a
+  // filter change can put it back on the same work instead of on whatever
+  // has inherited its number.
+  const activeIdRef = useRef<string | null>(null);
   const portfolioRef = useRef(portfolio);
   portfolioRef.current = portfolio;
   const activeProjectRef = useRef(activeProject);
@@ -229,7 +303,7 @@ export default function PortfolioApp({
       // selective — see isPageViewWorthy.
       if (isPageViewWorthy(prev, route)) pageView(url, title);
     },
-    [titleFor]
+    [titleFor],
   );
 
   /** Put the overlays where an address says they are. */
@@ -245,6 +319,12 @@ export default function PortfolioApp({
   const selectPortfolio = useCallback(
     (id: PortfolioId, after?: () => void) => {
       if (openedRef.current || id === portfolio || switchingRef.current) return;
+      // Tags belong to the portfolio that was on screen: they are scoped to
+      // what that one carries, so keeping them across a switch can land on a
+      // portfolio where none of them match and nothing at all is shown.
+      gridOpenRef.current = false;
+      setFiltersOpen(false);
+      setSelectedTags([]);
       go({ portfolio: id, slug: null });
       switchingRef.current = true;
       setSwitching(true); // dim the list so its swap isn't seen at the edge
@@ -274,14 +354,16 @@ export default function PortfolioApp({
             after?.();
           }, SLIDE_DUR);
         };
-        const urls = portfolios ? portfolios[id].items.map((it) => it.image) : [];
+        const urls = portfolios
+          ? portfolios[id].items.map((it) => it.image)
+          : [];
         void Promise.all(urls.map(preloadImage)).then(() =>
-          requestAnimationFrame(() => requestAnimationFrame(slideHome))
+          requestAnimationFrame(() => requestAnimationFrame(slideHome)),
         );
         switchTimer2.current = setTimeout(slideHome, SWITCH_LOAD_CAP);
       }, SLIDE_DUR);
     },
-    [engine, go, portfolio, portfolios]
+    [engine, go, portfolio, portfolios],
   );
 
   useEffect(
@@ -292,7 +374,7 @@ export default function PortfolioApp({
       clearTimeout(splashTimer.current);
       clearTimeout(routeTimer.current);
     },
-    []
+    [],
   );
 
   // Splash choice: set the portfolio the gallery will open in, fade the
@@ -309,15 +391,19 @@ export default function PortfolioApp({
       clearTimeout(splashTimer.current);
       splashTimer.current = setTimeout(() => setStarted(true), SPLASH_FADE);
     },
-    [engine, go, splashHiding]
+    [engine, go, splashHiding],
   );
 
   // The menu logo, tapped: back to the landing. The landing fades in over the
   // gallery; once it covers everything, the gallery's own intro is rearmed
   // out of sight, so choosing a portfolio again plays it as on first arrival.
   const returnToLanding = useCallback(() => {
-    if (openedRef.current || switchingRef.current || splashOpenRef.current) return;
+    if (openedRef.current || switchingRef.current || splashOpenRef.current)
+      return;
     go({ portfolio: null, slug: null, panel: null });
+    gridOpenRef.current = false;
+    setFiltersOpen(false);
+    setSelectedTags([]);
     splashOpenRef.current = true;
     setInfoHover(false);
     setLogoHeld(false);
@@ -326,7 +412,9 @@ export default function PortfolioApp({
     setSplashHiding(true);
     setStarted(false);
     clearTimeout(splashTimer.current);
-    requestAnimationFrame(() => requestAnimationFrame(() => setSplashHiding(false)));
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => setSplashHiding(false)),
+    );
     splashTimer.current = setTimeout(() => {
       introFired.current = false;
       setIntro(false);
@@ -335,12 +423,86 @@ export default function PortfolioApp({
     }, SPLASH_FADE + 50);
   }, [go]);
 
+  // --- the filter view ----------------------------------------------------
+  const closeFilters = useCallback(() => {
+    gridOpenRef.current = false;
+    setFiltersOpen(false);
+  }, []);
+  const openFilters = useCallback(() => {
+    if (openedRef.current || switchingRef.current || splashOpenRef.current)
+      return;
+    // Whatever the pointer was over when the rail slid away, it is not over
+    // it now — and a latched hover would leave the warp running over the
+    // grid for as long as the cursor sat still.
+    setInfoHover(false);
+    setLogoHeld(false);
+    gridScroll.reset();
+    gridOpenRef.current = true;
+    setFiltersOpen(true);
+  }, [gridScroll]);
+  const toggleTag = useCallback((tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+    );
+  }, []);
+  const resetTags = useCallback(() => setSelectedTags([]), []);
+
+  // Re-anchor the strip whenever the tags change what it shows. The engine
+  // counts slots, so a filter that removes three items ahead of the current
+  // one would otherwise leave it pointing at a different project — and
+  // possibly past the end. Invisible while the grid is up, which is the only
+  // time it can happen, and it decides where closing the panel lands.
+  //
+  // Keyed on the tags rather than on the list, and skipped on the first run:
+  // the list also changes when the dataset arrives and when the portfolio
+  // does, and an address that named a project has already put the strip on
+  // it by then — anchoring again would take it straight back to the first.
+  const tagKey = selectedTags.join("|");
+  const anchoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    const first = anchoredFor.current === null;
+    anchoredFor.current = tagKey;
+    if (first) return;
+    const list = itemsRef.current;
+    const id = activeIdRef.current;
+    const slot = id ? list.findIndex((it) => it.id === id) : -1;
+    engine.jumpToIndex(slot >= 0 ? slot : 0);
+    if (slot < 0) activeIdRef.current = list[0]?.id ?? null;
+    gridScroll.reset();
+  }, [tagKey, engine, gridScroll]);
+
+  // The title layer only exists while there is a grid, so its frame loop
+  // isn't running the rest of the time — but it has to outlive the close by
+  // the length of the morph, or the names would vanish before the teasers
+  // they belong to have left their cells.
+  const [gridMounted, setGridMounted] = useState(false);
+  useEffect(() => {
+    if (filtersOpen) {
+      setGridMounted(true);
+      return;
+    }
+    const t = setTimeout(() => setGridMounted(false), 1400);
+    return () => clearTimeout(t);
+  }, [filtersOpen]);
+
+  // Escape leaves the filter view. The close X is at the end of the tag row
+  // and a long enough list puts it below the fold on a phone, so the panel
+  // has to have a way out that cannot scroll away.
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeFilters();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [filtersOpen, closeFilters]);
+
   const selectItem = useCallback(
     (index: number) => {
       if (openedRef.current) return;
       engine.scrollToIndex(index);
     },
-    [engine]
+    [engine],
   );
 
   // Menu chevrons: move one teaser without any wheel/drag input.
@@ -349,7 +511,7 @@ export default function PortfolioApp({
       if (openedRef.current) return;
       engine.stepItems(delta);
     },
-    [engine]
+    [engine],
   );
 
   const openProject = useCallback(() => {
@@ -364,6 +526,20 @@ export default function PortfolioApp({
     setOpened(true);
     go({ slug: item.slug });
   }, [engine, go]);
+
+  // A tap on a grid cell. Be on that teaser first, then drop the grid and
+  // open it: the morph out and the project's own growth run on the same
+  // frames, so the cell appears to fly out of the grid and fill the window.
+  const openFromGrid = useCallback(
+    (slot: number) => {
+      if (!itemsRef.current[slot]) return;
+      engine.jumpToIndex(slot);
+      gridOpenRef.current = false;
+      setFiltersOpen(false);
+      openProject();
+    },
+    [engine, openProject],
+  );
 
   const closeProject = useCallback(() => {
     openedRef.current = false;
@@ -386,10 +562,10 @@ export default function PortfolioApp({
       clearTimeout(closeThenSwitchTimer.current);
       closeThenSwitchTimer.current = setTimeout(
         () => selectPortfolio(id, after),
-        PROJECT_CLOSE_MS
+        PROJECT_CLOSE_MS,
       );
     },
-    [closeProject, selectPortfolio]
+    [closeProject, selectPortfolio],
   );
 
   // Go to another project in the open project's portfolio. The modal fades
@@ -409,7 +585,7 @@ export default function PortfolioApp({
       engine.scrollToIndex(index);
       go({ slug: item.slug });
     },
-    [engine, go]
+    [engine, go],
   );
 
   // Prev/next (wraps at the ends).
@@ -421,7 +597,7 @@ export default function PortfolioApp({
       const idx = list.findIndex((it) => it.slug === cur.slug);
       goToProject(((idx < 0 ? 0 : idx) + dir + list.length) % list.length);
     },
-    [goToProject]
+    [goToProject],
   );
 
   const openInfo = useCallback(
@@ -430,7 +606,7 @@ export default function PortfolioApp({
       setInfoModal(kind);
       go({ panel: kind });
     },
-    [go]
+    [go],
   );
   const closeInfo = useCallback(() => {
     infoOpenRef.current = false;
@@ -490,7 +666,7 @@ export default function PortfolioApp({
         setOpened(true);
       }
     },
-    [engine, go]
+    [engine, go],
   );
 
   /**
@@ -522,14 +698,15 @@ export default function PortfolioApp({
         if (openAfter) {
           routeTimer.current = setTimeout(
             openAfter,
-            SPLASH_FADE + SLIDE_HOLD + SLIDE_DUR
+            SPLASH_FADE + SLIDE_HOLD + SLIDE_DUR,
           );
         }
         return;
       }
 
       if (route.portfolio !== portfolioRef.current) {
-        if (openedRef.current) switchPortfolioFromProject(route.portfolio, openAfter);
+        if (openedRef.current)
+          switchPortfolioFromProject(route.portfolio, openAfter);
         else selectPortfolio(route.portfolio, openAfter);
         return;
       }
@@ -545,7 +722,7 @@ export default function PortfolioApp({
       returnToLanding,
       selectPortfolio,
       switchPortfolioFromProject,
-    ]
+    ],
   );
 
   // Back and forward. That entry is already in the stack, so nothing here may
@@ -592,17 +769,32 @@ export default function PortfolioApp({
     const THRESHOLD = 4;
 
     const onWheel = (e: WheelEvent) => {
-      if (openedRef.current || infoOpenRef.current || splashOpenRef.current) return;
+      if (openedRef.current || infoOpenRef.current || splashOpenRef.current)
+        return;
+      // The window swallows wheels to drive the gallery, so the one place on
+      // the page with a scrollbar of its own — the tag list, when there are
+      // more tags than the rail is tall — has to be let through.
+      if ((e.target as Element | null)?.closest?.("[data-filter-scroll]"))
+        return;
       e.preventDefault();
       const delta =
-        e.deltaMode === 1 ? e.deltaY * 16
-        : e.deltaMode === 2 ? e.deltaY * window.innerHeight
-        : e.deltaY;
-      engine.input(delta);
+        e.deltaMode === 1
+          ? e.deltaY * 16
+          : e.deltaMode === 2
+            ? e.deltaY * window.innerHeight
+            : e.deltaY;
+      if (gridOpenRef.current) gridScroll.input(delta);
+      else engine.input(delta);
     };
 
     const onPointerDown = (e: PointerEvent) => {
-      if (openedRef.current || infoOpenRef.current || splashOpenRef.current) return;
+      if (openedRef.current || infoOpenRef.current || splashOpenRef.current)
+        return;
+      // A drag inside the tag list is that list's own scroll, not the
+      // gallery's — otherwise flicking through the tags takes the grid with
+      // it, which on touch is the only way to reach the ones further down.
+      if ((e.target as Element | null)?.closest?.("[data-filter-scroll]"))
+        return;
       active = true;
       dragging = false;
       axis = "y";
@@ -628,13 +820,17 @@ export default function PortfolioApp({
         dragging = true;
         // Lock to the dominant axis on touch; non-touch is always vertical.
         axis = isTouch && Math.abs(totalX) > Math.abs(totalY) ? "x" : "y";
-        engine.setInputHeld(true);
+        // The engine is only told a gesture is in hand when the gesture is
+        // actually its own: held with no release to balance it, it would
+        // still be waiting the next time the strip is scrolled.
+        if (!gridOpenRef.current) engine.setInputHeld(true);
         document.body.style.cursor = "grabbing";
         document.body.classList.add("cursor-drag");
       }
       // Drag up (y) or swipe left (x) advances; the strip follows the finger.
       const d = axis === "x" ? lastX - e.clientX : lastY - e.clientY;
-      engine.target += d * DRAG_MULTIPLIER;
+      if (gridOpenRef.current) gridScroll.input(d * DRAG_MULTIPLIER);
+      else engine.target += d * DRAG_MULTIPLIER;
       const now = performance.now();
       const dt = Math.max(1, now - lastTime);
       flingVelocity = (d / dt) * 16.7;
@@ -648,12 +844,20 @@ export default function PortfolioApp({
       active = false;
       if (dragging) {
         dragging = false;
-        // Land in one motion, carrying the fling's momentum.
-        engine.release(flingVelocity * FLING_MULTIPLIER);
+        // Land in one motion, carrying the fling's momentum. The grid has
+        // nothing to land on, so its fling is simply distance.
+        if (gridOpenRef.current) gridScroll.release(flingVelocity);
+        else engine.release(flingVelocity * FLING_MULTIPLIER);
         document.body.style.cursor = "";
         document.body.classList.remove("cursor-drag");
       } else if (allowOpen && downOnGallery && !openedRef.current) {
-        openProject();
+        if (gridOpenRef.current) {
+          // In the grid a tap means the cell under it, not the centre one.
+          const slot = hitRef.current?.(lastX, lastY);
+          if (slot != null) openFromGrid(slot);
+        } else {
+          openProject();
+        }
       }
     };
     const onPointerUp = () => finish(true);
@@ -673,7 +877,7 @@ export default function PortfolioApp({
       document.body.style.cursor = "";
       document.body.classList.remove("cursor-drag");
     };
-  }, [engine, openProject, isTouch]);
+  }, [engine, gridScroll, openProject, openFromGrid, isTouch]);
 
   const ready = !!viewport && !!portfolios;
 
@@ -725,7 +929,10 @@ export default function PortfolioApp({
       openedRef.current ||
       infoOpenRef.current ||
       splashOpenRef.current ||
-      switchingRef.current;
+      switchingRef.current ||
+      // The grid has no one active teaser, so a pill naming one would name
+      // the wrong project wherever the cursor happened to be.
+      gridOpenRef.current;
 
     const paint = () => {
       if (suppressed()) {
@@ -953,6 +1160,13 @@ export default function PortfolioApp({
             onInfoHover={setInfoHover}
             onHome={returnToLanding}
             onLogoHold={setLogoHeld}
+            filtersOpen={filtersOpen}
+            filterTags={filterTags}
+            selectedTags={selectedTags}
+            onOpenFilters={openFilters}
+            onCloseFilters={closeFilters}
+            onToggleTag={toggleTag}
+            onResetTags={resetTags}
           />
         </div>
 
@@ -961,23 +1175,38 @@ export default function PortfolioApp({
         <div
           ref={galleryRef}
           className="absolute touch-none overflow-hidden bg-[#070707]"
-          style={{ opacity: intro ? 1 : 0, transition: "opacity 0.45s ease 60ms" }}
+          style={{
+            opacity: intro ? 1 : 0,
+            transition: "opacity 0.45s ease 60ms",
+          }}
         >
           <div
             className="h-full w-full"
-            style={{ opacity: switching ? 0 : 1, transition: "opacity 0.15s ease" }}
+            style={{
+              opacity: switching ? 0 : 1,
+              transition: "opacity 0.15s ease",
+            }}
           >
             <Gallery
-              items={items}
+              items={allItems}
+              order={order}
               portfolio={portfolio}
               isLandscape={isLandscape}
               engine={engine}
               opened={opened}
               anim={anim}
-              // Dormant behind the splash and during a portfolio swap, so no
-              // teaser video streams while the gallery is covered.
-              visible={started && !switching}
-              onIndexChange={() => repaintTip.current?.()}
+              // Dormant behind the splash, during a portfolio swap, and in
+              // the grid — a page of cells has no one active teaser, and
+              // nothing should stream while the gallery is covered.
+              visible={started && !switching && !filtersOpen}
+              gridOpen={filtersOpen}
+              gridScroll={gridScroll}
+              hitRef={hitRef}
+              labelRef={labelRef}
+              onIndexChange={(slot) => {
+                activeIdRef.current = itemsRef.current[slot]?.id ?? null;
+                repaintTip.current?.();
+              }}
               onReady={setGalleryCanvas}
             />
           </div>
@@ -987,6 +1216,11 @@ export default function PortfolioApp({
               psychedelic recolor). Ramps in on Resumé/Contact hover or while
               their modal is open; only runs its shader loop while active. */}
           <PsychedelicFX active={halftone} source={galleryCanvas} />
+
+          {/* The project names under the grid's cells — DOM over the canvas,
+              positioned from the scene. Last inside the gallery box, so it
+              paints over both the teasers and the post-process. */}
+          {gridMounted && <GridLabels items={allItems} layout={labelRef} />}
         </div>
       </div>
 
@@ -1067,10 +1301,12 @@ export default function PortfolioApp({
           pointerEvents: opened && items.length > 1 ? "auto" : "none",
         }}
       >
-        {([
-          { dir: -1, label: "Previous Project", points: "18 15 12 9 6 15" },
-          { dir: 1, label: "Next Project", points: "6 9 12 15 18 9" },
-        ] as const).map(({ dir, label, points }) => (
+        {(
+          [
+            { dir: -1, label: "Previous Project", points: "18 15 12 9 6 15" },
+            { dir: 1, label: "Next Project", points: "6 9 12 15 18 9" },
+          ] as const
+        ).map(({ dir, label, points }) => (
           <button
             key={dir}
             type="button"
@@ -1106,7 +1342,11 @@ export default function PortfolioApp({
           the bottom, the open one centred (z-50, beside the nav). */}
       <ProjectStrip
         items={items}
-        activeIndex={activeProject ? items.findIndex((it) => it.slug === activeProject.slug) : -1}
+        activeIndex={
+          activeProject
+            ? items.findIndex((it) => it.slug === activeProject.slug)
+            : -1
+        }
         visible={opened && stripUp && items.length > 1}
         isLandscape={isLandscape}
         width={width}
